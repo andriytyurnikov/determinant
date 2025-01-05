@@ -1,9 +1,17 @@
 const std = @import("std");
 
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
+pub const cpu = @import("cpu.zig");
+pub const instruction = @import("instruction.zig");
+pub const decoder = @import("decoder.zig");
 
-test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+// Convenience aliases
+pub const Cpu = cpu.Cpu;
+pub const Instruction = instruction.Instruction;
+pub const Opcode = instruction.Opcode;
+pub const Format = instruction.Format;
+pub const decode = decoder.decode;
+pub const DecodeError = decoder.DecodeError;
+
+test {
+    std.testing.refAllDecls(@This());
 }
