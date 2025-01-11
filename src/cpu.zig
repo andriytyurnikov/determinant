@@ -2,12 +2,6 @@ const std = @import("std");
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
-pub const CpuError = error{
-    MisalignedPC,
-    PCOutOfBounds,
-    AddressOutOfBounds,
-};
-
 pub const Cpu = struct {
     pc: u32,
     regs: [32]u32,

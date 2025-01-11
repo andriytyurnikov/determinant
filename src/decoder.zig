@@ -53,15 +53,6 @@ fn immI(raw: u32) i32 {
 }
 
 fn immS(raw: u32) i32 {
-    const bits: i32 = @bitCast(raw);
-    const upper: i32 = bits >> 20; // sign-extended [31:20], but we want [31:25] in [11:5]
-    // More precisely: imm[11:5] = inst[31:25], imm[4:0] = inst[11:7]
-    const hi: u32 = raw & 0xFE000000; // inst[31:25]
-    const lo: u32 = (raw >> 7) & 0x1F; // inst[11:7]
-    const combined: u32 = hi | (lo << 20); // shift lo into bits [24:20] doesn't work...
-    // Let's do it properly with sign extension:
-    _ = upper;
-    _ = combined;
     const imm_11_5: u32 = (raw >> 25) & 0x7F;
     const imm_4_0: u32 = (raw >> 7) & 0x1F;
     const imm_raw: u32 = (imm_11_5 << 5) | imm_4_0;
@@ -198,14 +189,11 @@ fn decodeJalr(raw: u32) DecodeError!Instruction {
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {
-    if (rd(raw) != 0 or funct3(raw) != 0 or rs1(raw) != 0) return error.IllegalInstruction;
-    const bit20 = (raw >> 20) & 1;
-    const op: Opcode = switch (bit20) {
-        0 => .ECALL,
-        1 => .EBREAK,
-        else => unreachable,
+    return switch (raw) {
+        0x00000073 => .{ .op = .ECALL, .raw = raw },
+        0x00100073 => .{ .op = .EBREAK, .raw = raw },
+        else => error.IllegalInstruction,
     };
-    return .{ .op = op, .raw = raw };
 }
 
 // --- Helper to assemble instruction words for tests ---
