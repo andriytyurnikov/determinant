@@ -6,6 +6,7 @@ pub const decoder = @import("decoder.zig");
 
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
+pub const StepResult = cpu.StepResult;
 pub const Instruction = instruction.Instruction;
 pub const Opcode = instruction.Opcode;
 pub const Format = instruction.Format;

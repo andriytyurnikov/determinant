@@ -6,22 +6,29 @@ pub fn main() !void {
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    try stdout.print("Determinant — RV32I Decoder Demo\n\n", .{});
+    try stdout.print("Determinant — RV32I Executor Demo\n\n", .{});
 
     // Hardcoded 5-instruction RV32I program:
-    //   ADDI x1, x0, 5      — x1 = 5
+    //   ADDI x1, x0, 100    — x1 = 100
     //   ADDI x2, x0, 10     — x2 = 10
-    //   ADD  x3, x1, x2     — x3 = x1 + x2
-    //   SW   x3, 0(x1)      — mem[x1] = x3
+    //   ADD  x3, x1, x2     — x3 = x1 + x2 = 110
+    //   SW   x3, 0(x1)      — mem[100] = 110
     //   ECALL                — system call
     const program = [_]u32{
-        0x00500093, // ADDI x1, x0, 5
+        0x06400093, // ADDI x1, x0, 100
         0x00A00113, // ADDI x2, x0, 10
         0x002081B3, // ADD  x3, x1, x2
         0x0030A023, // SW   x3, 0(x1)
         0x00000073, // ECALL
     };
 
+    // Load program into VM
+    var vm = det.Cpu.init();
+    const program_bytes = std.mem.sliceAsBytes(&program);
+    try vm.loadProgram(program_bytes, 0);
+
+    // Decode and display instructions
+    try stdout.print("Program:\n", .{});
     for (program, 0..) |word, i| {
         const addr = i * 4;
         if (det.decode(word)) |inst| {
@@ -33,7 +40,27 @@ pub fn main() !void {
         }
     }
 
-    try stdout.print("\nDecoded {d} instructions.\n", .{program.len});
+    // Execute
+    try stdout.print("\nExecuting...\n", .{});
+    var result: det.StepResult = .Continue;
+    while (result == .Continue) {
+        result = try vm.step();
+    }
+
+    // Print result
+    try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count });
+    try stdout.print("\nRegisters:\n", .{});
+    for (0..32) |i| {
+        const val = vm.readReg(@intCast(i));
+        if (val != 0) {
+            try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
+        }
+    }
+
+    // Show memory at store target
+    const mem_val = std.mem.readInt(u32, vm.memory[100..104], .little);
+    try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
+
     try stdout.flush();
 }
 
