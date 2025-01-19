@@ -42,10 +42,7 @@ pub fn main() !void {
 
     // Execute
     try stdout.print("\nExecuting...\n", .{});
-    var result: det.StepResult = .Continue;
-    while (result == .Continue) {
-        result = try vm.step();
-    }
+    const result = try vm.run(0);
 
     // Print result
     try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count });

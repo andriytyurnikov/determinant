@@ -95,6 +95,17 @@ pub const Cpu = struct {
 
     // --- Executor ---
 
+    /// Run until ECALL, EBREAK, or max_cycles is reached. Returns the StepResult that stopped execution.
+    /// If max_cycles is 0, runs without a cycle limit.
+    pub fn run(self: *Cpu, max_cycles: u64) !StepResult {
+        var result: StepResult = .Continue;
+        while (result == .Continue) {
+            if (max_cycles > 0 and self.cycle_count >= max_cycles) return result;
+            result = try self.step();
+        }
+        return result;
+    }
+
     /// Fetch, decode, and execute one instruction. Advances PC and increments cycle_count.
     pub fn step(self: *Cpu) !StepResult {
         const raw = try self.fetch();
