@@ -3,6 +3,12 @@ const std = @import("std");
 pub const cpu = @import("cpu.zig");
 pub const instruction = @import("instruction.zig");
 pub const decoder = @import("decoder.zig");
+pub const syscall = @import("syscall.zig");
+
+// Convenience aliases — syscall
+pub const SyscallResult = syscall.SyscallResult;
+pub const handleSyscall = syscall.handleSyscall;
+pub const runWithSyscalls = syscall.runWithSyscalls;
 
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
