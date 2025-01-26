@@ -6,51 +6,6 @@ pub fn main() !void {
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var args = std.process.args();
-    _ = args.next(); // skip program name
-    const file_path = args.next();
-
-    if (file_path) |path| {
-        runBinary(path, stdout) catch |err| {
-            try stdout.flush();
-            var stderr_buffer: [4096]u8 = undefined;
-            var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
-            const stderr = &stderr_writer.interface;
-            try stderr.print("determinant: error: {s}\n", .{@errorName(err)});
-            try stderr.flush();
-            std.process.exit(1);
-        };
-        try stdout.flush();
-    } else {
-        try runDemo(stdout);
-        try stdout.flush();
-    }
-}
-
-fn runBinary(path: []const u8, stdout: anytype) !void {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-
-    const stat = try file.stat();
-    const size: usize = @intCast(stat.size);
-
-    if (size == 0) return error.EmptyFile;
-    if (size > det.cpu.MEMORY_SIZE) return error.FileTooLarge;
-
-    var vm = det.Cpu.init();
-    const bytes_read = try file.readAll(vm.memory[0..size]);
-    if (bytes_read != size) return error.IncompleteRead;
-
-    const exit_code = try det.runWithSyscalls(&vm, 0, stdout);
-    if (exit_code) |code| {
-        if (code != 0) {
-            try stdout.flush();
-            std.process.exit(@truncate(code));
-        }
-    }
-}
-
-fn runDemo(stdout: anytype) !void {
     try stdout.print("Determinant — RV32I Executor Demo\n\n", .{});
 
     // Hardcoded 5-instruction RV32I program:
@@ -102,6 +57,8 @@ fn runDemo(stdout: anytype) !void {
     // Show memory at store target
     const mem_val = std.mem.readInt(u32, vm.memory[100..104], .little);
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
+
+    try stdout.flush();
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
