@@ -282,6 +282,27 @@ test "decode EBREAK" {
     try std.testing.expectEqual(Opcode.EBREAK, inst.op);
 }
 
+test "decode R-type M-extension MUL MULH MULHSU MULHU DIV DIVU REM REMU" {
+    const cases = .{
+        .{ @as(u3, 0b000), @as(u7, 0b0000001), Opcode.MUL },
+        .{ @as(u3, 0b001), @as(u7, 0b0000001), Opcode.MULH },
+        .{ @as(u3, 0b010), @as(u7, 0b0000001), Opcode.MULHSU },
+        .{ @as(u3, 0b011), @as(u7, 0b0000001), Opcode.MULHU },
+        .{ @as(u3, 0b100), @as(u7, 0b0000001), Opcode.DIV },
+        .{ @as(u3, 0b101), @as(u7, 0b0000001), Opcode.DIVU },
+        .{ @as(u3, 0b110), @as(u7, 0b0000001), Opcode.REM },
+        .{ @as(u3, 0b111), @as(u7, 0b0000001), Opcode.REMU },
+    };
+    inline for (cases) |c| {
+        const raw = encodeR(0b0110011, c[0], c[1], 4, 5, 6);
+        const inst = try decode(raw);
+        try std.testing.expectEqual(c[2], inst.op);
+        try std.testing.expectEqual(@as(u5, 4), inst.rd);
+        try std.testing.expectEqual(@as(u5, 5), inst.rs1);
+        try std.testing.expectEqual(@as(u5, 6), inst.rs2);
+    }
+}
+
 test "illegal instruction returns error" {
     // All zeros is not a valid RISC-V instruction (opcode 0b0000000)
     try std.testing.expectError(error.IllegalInstruction, decode(0));

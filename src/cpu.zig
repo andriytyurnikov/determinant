@@ -131,6 +131,56 @@ pub const Cpu = struct {
             .OR => self.writeReg(inst.rd, rs1_val | rs2_val),
             .AND => self.writeReg(inst.rd, rs1_val & rs2_val),
 
+            // R-type M-extension (multiply/divide)
+            .MUL => self.writeReg(inst.rd, rs1_val *% rs2_val),
+            .MULH => {
+                const a: i64 = @as(i32, @bitCast(rs1_val));
+                const b: i64 = @as(i32, @bitCast(rs2_val));
+                const result_val: u64 = @bitCast(a * b);
+                self.writeReg(inst.rd, @truncate(result_val >> 32));
+            },
+            .MULHSU => {
+                const a: i64 = @as(i32, @bitCast(rs1_val));
+                const b: i64 = @as(u32, rs2_val);
+                const result_val: u64 = @bitCast(a * b);
+                self.writeReg(inst.rd, @truncate(result_val >> 32));
+            },
+            .MULHU => {
+                const a: u64 = rs1_val;
+                const b: u64 = rs2_val;
+                self.writeReg(inst.rd, @truncate((a * b) >> 32));
+            },
+            .DIV => {
+                const a: i32 = @bitCast(rs1_val);
+                const b: i32 = @bitCast(rs2_val);
+                const res: i32 = if (b == 0)
+                    -1
+                else if (a == std.math.minInt(i32) and b == -1)
+                    std.math.minInt(i32)
+                else
+                    @truncate(@divTrunc(a, b));
+                self.writeReg(inst.rd, @bitCast(res));
+            },
+            .DIVU => {
+                const res: u32 = if (rs2_val == 0) 0xFFFFFFFF else rs1_val / rs2_val;
+                self.writeReg(inst.rd, res);
+            },
+            .REM => {
+                const a: i32 = @bitCast(rs1_val);
+                const b: i32 = @bitCast(rs2_val);
+                const res: i32 = if (b == 0)
+                    a
+                else if (a == std.math.minInt(i32) and b == -1)
+                    0
+                else
+                    @truncate(@rem(a, b));
+                self.writeReg(inst.rd, @bitCast(res));
+            },
+            .REMU => {
+                const res: u32 = if (rs2_val == 0) rs1_val else rs1_val % rs2_val;
+                self.writeReg(inst.rd, res);
+            },
+
             // I-type ALU
             .ADDI => self.writeReg(inst.rd, rs1_val +% imm_u),
             .SLTI => self.writeReg(inst.rd, if (@as(i32, @bitCast(rs1_val)) < inst.imm) 1 else 0),

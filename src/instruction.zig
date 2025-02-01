@@ -24,6 +24,16 @@ pub const Opcode = enum {
     OR,
     AND,
 
+    // R-type M-extension (multiply/divide)
+    MUL,
+    MULH,
+    MULHSU,
+    MULHU,
+    DIV,
+    DIVU,
+    REM,
+    REMU,
+
     // I-type ALU
     ADDI,
     SLTI,
@@ -69,7 +79,9 @@ pub const Opcode = enum {
 
     pub fn format(self: Opcode) Format {
         return switch (self) {
-            .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
+            .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND,
+            .MUL, .MULH, .MULHSU, .MULHU, .DIV, .DIVU, .REM, .REMU,
+            => .R,
             .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
             .LB, .LH, .LW, .LBU, .LHU => .I,
             .JALR => .I,
