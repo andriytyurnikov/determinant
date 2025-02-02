@@ -2,6 +2,7 @@ const std = @import("std");
 const instruction = @import("instruction.zig");
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
+const rv32m = @import("rv32m.zig");
 
 pub const DecodeError = error{IllegalInstruction};
 
@@ -94,49 +95,25 @@ fn immJ(raw: u32) i32 {
 fn decodeR(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
+
+    // M-extension: funct7 = 0b0000001
+    if (f7 == 0b0000001) {
+        return .{ .op = rv32m.decodeR(f3), .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    }
+
     const op: Opcode = switch (f3) {
-        0b000 => switch (f7) {
-            0b0000000 => .ADD,
-            0b0100000 => .SUB,
-            0b0000001 => .MUL,
-            else => return error.IllegalInstruction,
-        },
-        0b001 => switch (f7) {
-            0b0000000 => .SLL,
-            0b0000001 => .MULH,
-            else => return error.IllegalInstruction,
-        },
-        0b010 => switch (f7) {
-            0b0000000 => .SLT,
-            0b0000001 => .MULHSU,
-            else => return error.IllegalInstruction,
-        },
-        0b011 => switch (f7) {
-            0b0000000 => .SLTU,
-            0b0000001 => .MULHU,
-            else => return error.IllegalInstruction,
-        },
-        0b100 => switch (f7) {
-            0b0000000 => .XOR,
-            0b0000001 => .DIV,
-            else => return error.IllegalInstruction,
-        },
+        0b000 => if (f7 == 0b0000000) .ADD else if (f7 == 0b0100000) .SUB else return error.IllegalInstruction,
+        0b001 => if (f7 == 0b0000000) .SLL else return error.IllegalInstruction,
+        0b010 => if (f7 == 0b0000000) .SLT else return error.IllegalInstruction,
+        0b011 => if (f7 == 0b0000000) .SLTU else return error.IllegalInstruction,
+        0b100 => if (f7 == 0b0000000) .XOR else return error.IllegalInstruction,
         0b101 => switch (f7) {
             0b0000000 => .SRL,
             0b0100000 => .SRA,
-            0b0000001 => .DIVU,
             else => return error.IllegalInstruction,
         },
-        0b110 => switch (f7) {
-            0b0000000 => .OR,
-            0b0000001 => .REM,
-            else => return error.IllegalInstruction,
-        },
-        0b111 => switch (f7) {
-            0b0000000 => .AND,
-            0b0000001 => .REMU,
-            else => return error.IllegalInstruction,
-        },
+        0b110 => if (f7 == 0b0000000) .OR else return error.IllegalInstruction,
+        0b111 => if (f7 == 0b0000000) .AND else return error.IllegalInstruction,
     };
     return .{ .op = op, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
