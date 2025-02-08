@@ -5,8 +5,6 @@ const decoder = @import("decoder.zig");
 const decode = decoder.decode;
 const cpu_mod = @import("cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const StepResult = cpu_mod.StepResult;
-const rv32m = @import("rv32m.zig");
 
 // --- Helpers ---
 
