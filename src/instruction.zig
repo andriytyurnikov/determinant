@@ -1,6 +1,9 @@
 const std = @import("std");
 
-/// RV32I instruction formats.
+pub const rv32i = @import("instruction/rv32i.zig");
+pub const rv32m = @import("instruction/rv32m.zig");
+
+/// RV32 instruction formats.
 pub const Format = enum {
     R,
     I,
@@ -10,91 +13,37 @@ pub const Format = enum {
     J,
 };
 
-/// RV32I opcodes.
-pub const Opcode = enum {
-    // R-type ALU
-    ADD,
-    SUB,
-    SLL,
-    SLT,
-    SLTU,
-    XOR,
-    SRL,
-    SRA,
-    OR,
-    AND,
-
-    // R-type M-extension (multiply/divide)
-    MUL,
-    MULH,
-    MULHSU,
-    MULHU,
-    DIV,
-    DIVU,
-    REM,
-    REMU,
-
-    // I-type ALU
-    ADDI,
-    SLTI,
-    SLTIU,
-    XORI,
-    ORI,
-    ANDI,
-    SLLI,
-    SRLI,
-    SRAI,
-
-    // Loads (I-type)
-    LB,
-    LH,
-    LW,
-    LBU,
-    LHU,
-
-    // Stores (S-type)
-    SB,
-    SH,
-    SW,
-
-    // Branches (B-type)
-    BEQ,
-    BNE,
-    BLT,
-    BGE,
-    BLTU,
-    BGEU,
-
-    // Upper immediates (U-type)
-    LUI,
-    AUIPC,
-
-    // Jumps
-    JAL, // J-type
-    JALR, // I-type
-
-    // System
-    ECALL,
-    EBREAK,
+/// Tagged union opcode spanning all supported ISA extensions.
+pub const Opcode = union(enum) {
+    i: rv32i.Opcode,
+    m: rv32m.Opcode,
 
     pub fn format(self: Opcode) Format {
         return switch (self) {
-            .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND,
-            .MUL, .MULH, .MULHSU, .MULHU, .DIV, .DIVU, .REM, .REMU,
-            => .R,
-            .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
-            .LB, .LH, .LW, .LBU, .LHU => .I,
-            .JALR => .I,
-            .ECALL, .EBREAK => .I,
-            .SB, .SH, .SW => .S,
-            .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
-            .LUI, .AUIPC => .U,
-            .JAL => .J,
+            .m => .R,
+            .i => |op| switch (op) {
+                .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
+                .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
+                .LB, .LH, .LW, .LBU, .LHU => .I,
+                .JALR => .I,
+                .ECALL, .EBREAK => .I,
+                .SB, .SH, .SW => .S,
+                .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
+                .LUI, .AUIPC => .U,
+                .JAL => .J,
+            },
+        };
+    }
+
+    pub fn name(self: Opcode) []const u8 {
+        return switch (self) {
+            .i => |op| @tagName(op),
+            .m => |op| @tagName(op),
         };
     }
 };
 
-/// Decoded RV32I instruction.
+/// Decoded RV32 instruction.
 pub const Instruction = struct {
     op: Opcode,
     rd: u5 = 0,
@@ -105,13 +54,20 @@ pub const Instruction = struct {
 };
 
 test "opcode format mapping" {
-    try std.testing.expectEqual(Format.R, Opcode.ADD.format());
-    try std.testing.expectEqual(Format.I, Opcode.ADDI.format());
-    try std.testing.expectEqual(Format.I, Opcode.LW.format());
-    try std.testing.expectEqual(Format.S, Opcode.SW.format());
-    try std.testing.expectEqual(Format.B, Opcode.BEQ.format());
-    try std.testing.expectEqual(Format.U, Opcode.LUI.format());
-    try std.testing.expectEqual(Format.J, Opcode.JAL.format());
-    try std.testing.expectEqual(Format.I, Opcode.JALR.format());
-    try std.testing.expectEqual(Format.I, Opcode.ECALL.format());
+    try std.testing.expectEqual(Format.R, (Opcode{ .i = .ADD }).format());
+    try std.testing.expectEqual(Format.I, (Opcode{ .i = .ADDI }).format());
+    try std.testing.expectEqual(Format.I, (Opcode{ .i = .LW }).format());
+    try std.testing.expectEqual(Format.S, (Opcode{ .i = .SW }).format());
+    try std.testing.expectEqual(Format.B, (Opcode{ .i = .BEQ }).format());
+    try std.testing.expectEqual(Format.U, (Opcode{ .i = .LUI }).format());
+    try std.testing.expectEqual(Format.J, (Opcode{ .i = .JAL }).format());
+    try std.testing.expectEqual(Format.I, (Opcode{ .i = .JALR }).format());
+    try std.testing.expectEqual(Format.I, (Opcode{ .i = .ECALL }).format());
+    try std.testing.expectEqual(Format.R, (Opcode{ .m = .MUL }).format());
+    try std.testing.expectEqual(Format.R, (Opcode{ .m = .DIV }).format());
+}
+
+test "opcode name" {
+    try std.testing.expectEqualStrings("ADD", (Opcode{ .i = .ADD }).name());
+    try std.testing.expectEqualStrings("MUL", (Opcode{ .m = .MUL }).name());
 }

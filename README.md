@@ -47,15 +47,19 @@ zig build test
 
 ```
 src/
-  root.zig          — library root, re-exports all submodules and convenience aliases
-  instruction.zig   — Opcode enum (all RV32I instructions), Format enum (R/I/S/B/U/J), Instruction struct
-  decoder.zig       — decode(u32) → Instruction with full RV32I decoding and immediate extraction
-  decoder_test.zig  — decoder tests and encoder helpers
-  cpu.zig           — Cpu struct: registers (x0-x31), PC, 1 MB memory, step/run executor, memory helpers
-  cpu_test.zig      — CPU tests (register, memory, step, run)
-  main.zig          — CLI entry point, imports the library as @import("determinant")
-build.zig           — build system configuration (library module, executable, test and run steps)
-build.zig.zon       — package metadata (name, version, dependencies, fingerprint)
+  root.zig              — library root, re-exports all submodules and convenience aliases
+  instruction.zig       — tagged union Opcode (i: rv32i.Opcode | m: rv32m.Opcode), Format, Instruction
+  instruction/
+    rv32i.zig           — RV32I base integer opcodes (39 variants) and decode helpers
+    rv32i_test.zig      — RV32I decode + execute tests
+    rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute()
+    rv32m_test.zig      — RV32M decode + execute tests
+  decoder.zig           — pure routing: bit extraction + dispatch to extension decoders
+  cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
+  cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
+  main.zig              — CLI entry point, imports the library as @import("determinant")
+build.zig               — build system configuration (library module, executable, test and run steps)
+build.zig.zon           — package metadata (name, version, dependencies, fingerprint)
 ```
 
 ## Public API
@@ -72,7 +76,7 @@ The library is available via `@import("determinant")`.
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`
-- **`Opcode`** — enum of all RV32I opcodes, with `format()` method
+- **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`decode(u32)`** — decode a 32-bit instruction word, returns `Instruction` or `DecodeError`
 - **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`

@@ -1,9 +1,9 @@
 const std = @import("std");
-const instruction = @import("instruction.zig");
+const instruction = @import("../instruction.zig");
 const Opcode = instruction.Opcode;
-const decoder = @import("decoder.zig");
+const decoder = @import("../decoder.zig");
 const decode = decoder.decode;
-const cpu_mod = @import("cpu.zig");
+const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 
 // --- Helpers ---
@@ -25,14 +25,14 @@ fn loadInst(cpu: *Cpu, word: u32) void {
 
 test "decode R-type M-extension MUL MULH MULHSU MULHU DIV DIVU REM REMU" {
     const cases = .{
-        .{ @as(u3, 0b000), @as(u7, 0b0000001), Opcode.MUL },
-        .{ @as(u3, 0b001), @as(u7, 0b0000001), Opcode.MULH },
-        .{ @as(u3, 0b010), @as(u7, 0b0000001), Opcode.MULHSU },
-        .{ @as(u3, 0b011), @as(u7, 0b0000001), Opcode.MULHU },
-        .{ @as(u3, 0b100), @as(u7, 0b0000001), Opcode.DIV },
-        .{ @as(u3, 0b101), @as(u7, 0b0000001), Opcode.DIVU },
-        .{ @as(u3, 0b110), @as(u7, 0b0000001), Opcode.REM },
-        .{ @as(u3, 0b111), @as(u7, 0b0000001), Opcode.REMU },
+        .{ @as(u3, 0b000), @as(u7, 0b0000001), Opcode{ .m = .MUL } },
+        .{ @as(u3, 0b001), @as(u7, 0b0000001), Opcode{ .m = .MULH } },
+        .{ @as(u3, 0b010), @as(u7, 0b0000001), Opcode{ .m = .MULHSU } },
+        .{ @as(u3, 0b011), @as(u7, 0b0000001), Opcode{ .m = .MULHU } },
+        .{ @as(u3, 0b100), @as(u7, 0b0000001), Opcode{ .m = .DIV } },
+        .{ @as(u3, 0b101), @as(u7, 0b0000001), Opcode{ .m = .DIVU } },
+        .{ @as(u3, 0b110), @as(u7, 0b0000001), Opcode{ .m = .REM } },
+        .{ @as(u3, 0b111), @as(u7, 0b0000001), Opcode{ .m = .REMU } },
     };
     inline for (cases) |c| {
         const raw = encodeR(c[0], c[1], 4, 5, 6);

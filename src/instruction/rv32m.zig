@@ -1,6 +1,16 @@
 const std = @import("std");
-const instruction = @import("instruction.zig");
-const Opcode = instruction.Opcode;
+
+/// RV32M multiply/divide extension opcodes (8 variants).
+pub const Opcode = enum {
+    MUL,
+    MULH,
+    MULHSU,
+    MULHU,
+    DIV,
+    DIVU,
+    REM,
+    REMU,
+};
 
 /// Decode an M-extension R-type instruction from funct3.
 /// All 8 funct3 values are valid when funct7 = 0b0000001.
@@ -62,7 +72,6 @@ pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
             break :blk @bitCast(res);
         },
         .REMU => if (rs2_val == 0) rs1_val else rs1_val % rs2_val,
-        else => unreachable,
     };
 }
 

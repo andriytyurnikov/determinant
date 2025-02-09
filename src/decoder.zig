@@ -1,8 +1,9 @@
 const std = @import("std");
 const instruction = @import("instruction.zig");
+const rv32i = instruction.rv32i;
+const rv32m = instruction.rv32m;
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
-const rv32m = @import("rv32m.zig");
 
 pub const DecodeError = error{IllegalInstruction};
 
@@ -15,8 +16,8 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b0000011 => decodeLoad(raw),
         0b0100011 => decodeS(raw),
         0b1100011 => decodeB(raw),
-        0b0110111 => decodeU(raw, .LUI),
-        0b0010111 => decodeU(raw, .AUIPC),
+        0b0110111 => decodeU(raw, .{ .i = .LUI }),
+        0b0010111 => decodeU(raw, .{ .i = .AUIPC }),
         0b1101111 => decodeJ(raw),
         0b1100111 => decodeJalr(raw),
         0b1110011 => decodeSystem(raw),
@@ -98,84 +99,38 @@ fn decodeR(raw: u32) DecodeError!Instruction {
 
     // M-extension: funct7 = 0b0000001
     if (f7 == 0b0000001) {
-        return .{ .op = rv32m.decodeR(f3), .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+        return .{ .op = .{ .m = rv32m.decodeR(f3) }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
-    const op: Opcode = switch (f3) {
-        0b000 => if (f7 == 0b0000000) .ADD else if (f7 == 0b0100000) .SUB else return error.IllegalInstruction,
-        0b001 => if (f7 == 0b0000000) .SLL else return error.IllegalInstruction,
-        0b010 => if (f7 == 0b0000000) .SLT else return error.IllegalInstruction,
-        0b011 => if (f7 == 0b0000000) .SLTU else return error.IllegalInstruction,
-        0b100 => if (f7 == 0b0000000) .XOR else return error.IllegalInstruction,
-        0b101 => switch (f7) {
-            0b0000000 => .SRL,
-            0b0100000 => .SRA,
-            else => return error.IllegalInstruction,
-        },
-        0b110 => if (f7 == 0b0000000) .OR else return error.IllegalInstruction,
-        0b111 => if (f7 == 0b0000000) .AND else return error.IllegalInstruction,
-    };
-    return .{ .op = op, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    const i_op = rv32i.decodeR(f3, f7) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
 
 fn decodeIAlu(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
-    const op: Opcode = switch (f3) {
-        0b000 => .ADDI,
-        0b010 => .SLTI,
-        0b011 => .SLTIU,
-        0b100 => .XORI,
-        0b110 => .ORI,
-        0b111 => .ANDI,
-        0b001 => if (f7 == 0b0000000) .SLLI else return error.IllegalInstruction,
-        0b101 => switch (f7) {
-            0b0000000 => .SRLI,
-            0b0100000 => .SRAI,
-            else => return error.IllegalInstruction,
-        },
-    };
+    const i_op = rv32i.decodeIAlu(f3, f7) orelse return error.IllegalInstruction;
     // For shift instructions, immediate is the shamt (rs2 field = bits [24:20])
     const imm_val: i32 = if (f3 == 0b001 or f3 == 0b101)
         @as(i32, @intCast(rs2(raw)))
     else
         immI(raw);
-    return .{ .op = op, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
+    return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
 }
 
 fn decodeLoad(raw: u32) DecodeError!Instruction {
-    const op: Opcode = switch (funct3(raw)) {
-        0b000 => .LB,
-        0b001 => .LH,
-        0b010 => .LW,
-        0b100 => .LBU,
-        0b101 => .LHU,
-        else => return error.IllegalInstruction,
-    };
-    return .{ .op = op, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
+    const i_op = rv32i.decodeLoad(funct3(raw)) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
 }
 
 fn decodeS(raw: u32) DecodeError!Instruction {
-    const op: Opcode = switch (funct3(raw)) {
-        0b000 => .SB,
-        0b001 => .SH,
-        0b010 => .SW,
-        else => return error.IllegalInstruction,
-    };
-    return .{ .op = op, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immS(raw), .raw = raw };
+    const i_op = rv32i.decodeStore(funct3(raw)) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .i = i_op }, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immS(raw), .raw = raw };
 }
 
 fn decodeB(raw: u32) DecodeError!Instruction {
-    const op: Opcode = switch (funct3(raw)) {
-        0b000 => .BEQ,
-        0b001 => .BNE,
-        0b100 => .BLT,
-        0b101 => .BGE,
-        0b110 => .BLTU,
-        0b111 => .BGEU,
-        else => return error.IllegalInstruction,
-    };
-    return .{ .op = op, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immB(raw), .raw = raw };
+    const i_op = rv32i.decodeBranch(funct3(raw)) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .i = i_op }, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immB(raw), .raw = raw };
 }
 
 fn decodeU(raw: u32, op: Opcode) DecodeError!Instruction {
@@ -183,22 +138,18 @@ fn decodeU(raw: u32, op: Opcode) DecodeError!Instruction {
 }
 
 fn decodeJ(raw: u32) DecodeError!Instruction {
-    return .{ .op = .JAL, .rd = rd(raw), .imm = immJ(raw), .raw = raw };
+    return .{ .op = .{ .i = .JAL }, .rd = rd(raw), .imm = immJ(raw), .raw = raw };
 }
 
 fn decodeJalr(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b000) return error.IllegalInstruction;
-    return .{ .op = .JALR, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
+    return .{ .op = .{ .i = .JALR }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {
     return switch (raw) {
-        0x00000073 => .{ .op = .ECALL, .raw = raw },
-        0x00100073 => .{ .op = .EBREAK, .raw = raw },
+        0x00000073 => .{ .op = .{ .i = .ECALL }, .raw = raw },
+        0x00100073 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
         else => error.IllegalInstruction,
     };
-}
-
-test {
-    _ = @import("decoder_test.zig");
 }

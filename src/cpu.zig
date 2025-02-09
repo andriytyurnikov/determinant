@@ -1,8 +1,7 @@
 const std = @import("std");
 const decoder = @import("decoder.zig");
 const instruction = @import("instruction.zig");
-const Opcode = instruction.Opcode;
-const rv32m = @import("rv32m.zig");
+const rv32m = instruction.rv32m;
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
@@ -120,111 +119,111 @@ pub const Cpu = struct {
         var next_pc: u32 = self.pc +% 4;
 
         switch (inst.op) {
-            // R-type ALU
-            .ADD => self.writeReg(inst.rd, rs1_val +% rs2_val),
-            .SUB => self.writeReg(inst.rd, rs1_val -% rs2_val),
-            .SLL => self.writeReg(inst.rd, rs1_val << @truncate(rs2_val & 0x1F)),
-            .SLT => self.writeReg(inst.rd, if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) 1 else 0),
-            .SLTU => self.writeReg(inst.rd, if (rs1_val < rs2_val) 1 else 0),
-            .XOR => self.writeReg(inst.rd, rs1_val ^ rs2_val),
-            .SRL => self.writeReg(inst.rd, rs1_val >> @truncate(rs2_val & 0x1F)),
-            .SRA => self.writeReg(inst.rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(rs2_val & 0x1F))),
-            .OR => self.writeReg(inst.rd, rs1_val | rs2_val),
-            .AND => self.writeReg(inst.rd, rs1_val & rs2_val),
+            .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
+            .i => |i_op| switch (i_op) {
+                // R-type ALU
+                .ADD => self.writeReg(inst.rd, rs1_val +% rs2_val),
+                .SUB => self.writeReg(inst.rd, rs1_val -% rs2_val),
+                .SLL => self.writeReg(inst.rd, rs1_val << @truncate(rs2_val & 0x1F)),
+                .SLT => self.writeReg(inst.rd, if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) 1 else 0),
+                .SLTU => self.writeReg(inst.rd, if (rs1_val < rs2_val) 1 else 0),
+                .XOR => self.writeReg(inst.rd, rs1_val ^ rs2_val),
+                .SRL => self.writeReg(inst.rd, rs1_val >> @truncate(rs2_val & 0x1F)),
+                .SRA => self.writeReg(inst.rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(rs2_val & 0x1F))),
+                .OR => self.writeReg(inst.rd, rs1_val | rs2_val),
+                .AND => self.writeReg(inst.rd, rs1_val & rs2_val),
 
-            // R-type M-extension (multiply/divide)
-            .MUL, .MULH, .MULHSU, .MULHU, .DIV, .DIVU, .REM, .REMU => self.writeReg(inst.rd, rv32m.execute(inst.op, rs1_val, rs2_val)),
+                // I-type ALU
+                .ADDI => self.writeReg(inst.rd, rs1_val +% imm_u),
+                .SLTI => self.writeReg(inst.rd, if (@as(i32, @bitCast(rs1_val)) < inst.imm) 1 else 0),
+                .SLTIU => self.writeReg(inst.rd, if (rs1_val < imm_u) 1 else 0),
+                .XORI => self.writeReg(inst.rd, rs1_val ^ imm_u),
+                .ORI => self.writeReg(inst.rd, rs1_val | imm_u),
+                .ANDI => self.writeReg(inst.rd, rs1_val & imm_u),
+                .SLLI => self.writeReg(inst.rd, rs1_val << @truncate(imm_u & 0x1F)),
+                .SRLI => self.writeReg(inst.rd, rs1_val >> @truncate(imm_u & 0x1F)),
+                .SRAI => self.writeReg(inst.rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(imm_u & 0x1F))),
 
-            // I-type ALU
-            .ADDI => self.writeReg(inst.rd, rs1_val +% imm_u),
-            .SLTI => self.writeReg(inst.rd, if (@as(i32, @bitCast(rs1_val)) < inst.imm) 1 else 0),
-            .SLTIU => self.writeReg(inst.rd, if (rs1_val < imm_u) 1 else 0),
-            .XORI => self.writeReg(inst.rd, rs1_val ^ imm_u),
-            .ORI => self.writeReg(inst.rd, rs1_val | imm_u),
-            .ANDI => self.writeReg(inst.rd, rs1_val & imm_u),
-            .SLLI => self.writeReg(inst.rd, rs1_val << @truncate(imm_u & 0x1F)),
-            .SRLI => self.writeReg(inst.rd, rs1_val >> @truncate(imm_u & 0x1F)),
-            .SRAI => self.writeReg(inst.rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(imm_u & 0x1F))),
+                // Loads
+                .LB => {
+                    const addr = rs1_val +% imm_u;
+                    const byte = try self.readByte(addr);
+                    self.writeReg(inst.rd, @bitCast(@as(i32, @as(i8, @bitCast(byte)))));
+                },
+                .LH => {
+                    const addr = rs1_val +% imm_u;
+                    const half = try self.readHalfword(addr);
+                    self.writeReg(inst.rd, @bitCast(@as(i32, @as(i16, @bitCast(half)))));
+                },
+                .LW => {
+                    const addr = rs1_val +% imm_u;
+                    const word = try self.readWord(addr);
+                    self.writeReg(inst.rd, word);
+                },
+                .LBU => {
+                    const addr = rs1_val +% imm_u;
+                    const byte = try self.readByte(addr);
+                    self.writeReg(inst.rd, @as(u32, byte));
+                },
+                .LHU => {
+                    const addr = rs1_val +% imm_u;
+                    const half = try self.readHalfword(addr);
+                    self.writeReg(inst.rd, @as(u32, half));
+                },
 
-            // Loads
-            .LB => {
-                const addr = rs1_val +% imm_u;
-                const byte = try self.readByte(addr);
-                self.writeReg(inst.rd, @bitCast(@as(i32, @as(i8, @bitCast(byte)))));
-            },
-            .LH => {
-                const addr = rs1_val +% imm_u;
-                const half = try self.readHalfword(addr);
-                self.writeReg(inst.rd, @bitCast(@as(i32, @as(i16, @bitCast(half)))));
-            },
-            .LW => {
-                const addr = rs1_val +% imm_u;
-                const word = try self.readWord(addr);
-                self.writeReg(inst.rd, word);
-            },
-            .LBU => {
-                const addr = rs1_val +% imm_u;
-                const byte = try self.readByte(addr);
-                self.writeReg(inst.rd, @as(u32, byte));
-            },
-            .LHU => {
-                const addr = rs1_val +% imm_u;
-                const half = try self.readHalfword(addr);
-                self.writeReg(inst.rd, @as(u32, half));
-            },
+                // Stores
+                .SB => {
+                    const addr = rs1_val +% imm_u;
+                    try self.writeByte(addr, @truncate(rs2_val));
+                },
+                .SH => {
+                    const addr = rs1_val +% imm_u;
+                    try self.writeHalfword(addr, @truncate(rs2_val));
+                },
+                .SW => {
+                    const addr = rs1_val +% imm_u;
+                    try self.writeWord(addr, rs2_val);
+                },
 
-            // Stores
-            .SB => {
-                const addr = rs1_val +% imm_u;
-                try self.writeByte(addr, @truncate(rs2_val));
-            },
-            .SH => {
-                const addr = rs1_val +% imm_u;
-                try self.writeHalfword(addr, @truncate(rs2_val));
-            },
-            .SW => {
-                const addr = rs1_val +% imm_u;
-                try self.writeWord(addr, rs2_val);
-            },
+                // Branches
+                .BEQ => {
+                    if (rs1_val == rs2_val) next_pc = self.pc +% imm_u;
+                },
+                .BNE => {
+                    if (rs1_val != rs2_val) next_pc = self.pc +% imm_u;
+                },
+                .BLT => {
+                    if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) next_pc = self.pc +% imm_u;
+                },
+                .BGE => {
+                    if (@as(i32, @bitCast(rs1_val)) >= @as(i32, @bitCast(rs2_val))) next_pc = self.pc +% imm_u;
+                },
+                .BLTU => {
+                    if (rs1_val < rs2_val) next_pc = self.pc +% imm_u;
+                },
+                .BGEU => {
+                    if (rs1_val >= rs2_val) next_pc = self.pc +% imm_u;
+                },
 
-            // Branches
-            .BEQ => {
-                if (rs1_val == rs2_val) next_pc = self.pc +% imm_u;
-            },
-            .BNE => {
-                if (rs1_val != rs2_val) next_pc = self.pc +% imm_u;
-            },
-            .BLT => {
-                if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) next_pc = self.pc +% imm_u;
-            },
-            .BGE => {
-                if (@as(i32, @bitCast(rs1_val)) >= @as(i32, @bitCast(rs2_val))) next_pc = self.pc +% imm_u;
-            },
-            .BLTU => {
-                if (rs1_val < rs2_val) next_pc = self.pc +% imm_u;
-            },
-            .BGEU => {
-                if (rs1_val >= rs2_val) next_pc = self.pc +% imm_u;
-            },
+                // Upper immediates
+                .LUI => self.writeReg(inst.rd, imm_u),
+                .AUIPC => self.writeReg(inst.rd, self.pc +% imm_u),
 
-            // Upper immediates
-            .LUI => self.writeReg(inst.rd, imm_u),
-            .AUIPC => self.writeReg(inst.rd, self.pc +% imm_u),
+                // Jumps
+                .JAL => {
+                    self.writeReg(inst.rd, self.pc + 4);
+                    next_pc = self.pc +% imm_u;
+                },
+                .JALR => {
+                    const return_addr = self.pc + 4;
+                    next_pc = (rs1_val +% imm_u) & 0xFFFFFFFE;
+                    self.writeReg(inst.rd, return_addr);
+                },
 
-            // Jumps
-            .JAL => {
-                self.writeReg(inst.rd, self.pc + 4);
-                next_pc = self.pc +% imm_u;
+                // System
+                .ECALL => result = .Ecall,
+                .EBREAK => result = .Ebreak,
             },
-            .JALR => {
-                const return_addr = self.pc + 4;
-                next_pc = (rs1_val +% imm_u) & 0xFFFFFFFE;
-                self.writeReg(inst.rd, return_addr);
-            },
-
-            // System
-            .ECALL => result = .Ecall,
-            .EBREAK => result = .Ebreak,
         }
 
         self.pc = next_pc;
