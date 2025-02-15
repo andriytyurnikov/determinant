@@ -2,13 +2,19 @@ const std = @import("std");
 const instruction = @import("instruction.zig");
 const rv32i = instruction.rv32i;
 const rv32m = instruction.rv32m;
+const rv32c = @import("instruction/rv32c.zig");
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
 
 pub const DecodeError = error{IllegalInstruction};
 
-/// Decode a 32-bit RISC-V instruction word into an Instruction.
+/// Decode a RISC-V instruction word into an Instruction.
+/// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
 pub fn decode(raw: u32) DecodeError!Instruction {
+    // Compressed instruction: low 2 bits != 11
+    if ((raw & 0b11) != 0b11) {
+        return rv32c.expand(@truncate(raw));
+    }
     const opcode_bits: u7 = @truncate(raw);
     return switch (opcode_bits) {
         0b0110011 => decodeR(raw),

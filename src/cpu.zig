@@ -38,11 +38,15 @@ pub const Cpu = struct {
         self.regs[reg] = value;
     }
 
-    /// Fetch the 32-bit instruction at PC (little-endian).
+    /// Fetch the instruction at PC (little-endian). Returns a 16-bit compressed
+    /// instruction zero-extended to u32 when bits [1:0] != 0b11, or a full 32-bit word.
     pub fn fetch(self: *const Cpu) !u32 {
-        if (self.pc % 4 != 0) return error.MisalignedPC;
-        if (self.pc > MEMORY_SIZE - 4) return error.PCOutOfBounds;
+        if (self.pc % 2 != 0) return error.MisalignedPC;
+        if (self.pc > MEMORY_SIZE - 2) return error.PCOutOfBounds;
         const addr: usize = self.pc;
+        const low: u16 = std.mem.readInt(u16, self.memory[addr..][0..2], .little);
+        if ((low & 0b11) != 0b11) return @as(u32, low);
+        if (self.pc > MEMORY_SIZE - 4) return error.PCOutOfBounds;
         return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
     }
 
@@ -110,13 +114,14 @@ pub const Cpu = struct {
     pub fn step(self: *Cpu) !StepResult {
         const raw = try self.fetch();
         const inst = try decoder.decode(raw);
+        const inst_size: u32 = if ((raw & 0b11) != 0b11) 2 else 4;
 
         const imm_u: u32 = @bitCast(inst.imm);
         const rs1_val = self.readReg(inst.rs1);
         const rs2_val = self.readReg(inst.rs2);
 
         var result: StepResult = .Continue;
-        var next_pc: u32 = self.pc +% 4;
+        var next_pc: u32 = self.pc +% inst_size;
 
         switch (inst.op) {
             .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
@@ -211,11 +216,11 @@ pub const Cpu = struct {
 
                 // Jumps
                 .JAL => {
-                    self.writeReg(inst.rd, self.pc + 4);
+                    self.writeReg(inst.rd, self.pc +% inst_size);
                     next_pc = self.pc +% imm_u;
                 },
                 .JALR => {
-                    const return_addr = self.pc + 4;
+                    const return_addr = self.pc +% inst_size;
                     next_pc = (rs1_val +% imm_u) & 0xFFFFFFFE;
                     self.writeReg(inst.rd, return_addr);
                 },

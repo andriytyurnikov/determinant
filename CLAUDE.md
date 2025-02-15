@@ -21,5 +21,6 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - ISA extensions live in `src/instruction/` — each owns its own `Opcode` enum and decode/execute logic
 - `instruction.zig` composes extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode }`
 - Extension files (`rv32i.zig`, `rv32m.zig`) do NOT import `instruction.zig` — no circular deps
+- `rv32c.zig` imports `instruction.zig` (consumes types) — it expands 16-bit compressed to existing RV32I `Instruction`s
 - No allocators in core VM — deterministic by construction
 - FENCE is intentionally omitted (single-hart VM)

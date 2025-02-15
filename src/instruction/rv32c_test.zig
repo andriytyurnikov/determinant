@@ -1,0 +1,531 @@
+const std = @import("std");
+const rv32c = @import("rv32c.zig");
+const instruction = @import("../instruction.zig");
+const Instruction = instruction.Instruction;
+const Opcode = instruction.Opcode;
+const decoder = @import("../decoder.zig");
+const cpu_mod = @import("../cpu.zig");
+const Cpu = cpu_mod.Cpu;
+
+fn expectExpand(half: u16, expected_op: Opcode, expected_rd: u5, expected_rs1: u5, expected_rs2: u5, expected_imm: i32) !void {
+    const inst = try rv32c.expand(half);
+    try std.testing.expectEqual(expected_op, inst.op);
+    try std.testing.expectEqual(expected_rd, inst.rd);
+    try std.testing.expectEqual(expected_rs1, inst.rs1);
+    try std.testing.expectEqual(expected_rs2, inst.rs2);
+    try std.testing.expectEqual(expected_imm, inst.imm);
+    try std.testing.expectEqual(@as(u32, half), inst.raw);
+}
+
+// ============================================================
+// Quadrant 0 tests
+// ============================================================
+
+test "C.ADDI4SPN: addi rd', x2, nzuimm" {
+    // C.ADDI4SPN x8, x2, 8
+    // nzuimm=8 → nzuimm[3]=1 → bit[5]=1
+    // rd'=0 → bits[4:2]=000, op=00, funct3=000
+    // Encoding: 000 0 0000 1 000 00 = 0x0020
+    // nzuimm[3] at bit[5]: bit5=1 → 0x0020
+    // Let me construct: funct3=000(bits15:13), nzuimm bits in [12:5], rd' in [4:2], op=00 in [1:0]
+    // nzuimm=8: bit3=1 → need bit[5]=1 in encoding
+    // All other nzuimm bits 0
+    // rd'=0 (x8)
+    // = 0b000_00000_10_000_00 = 0x0020
+    try expectExpand(0x0020, .{ .i = .ADDI }, 8, 2, 0, 8);
+}
+
+test "C.ADDI4SPN: nzuimm=0 is illegal" {
+    // funct3=000, all imm bits zero, rd'=0, op=00
+    // = 0x0000
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x0000));
+}
+
+test "C.LW: lw rd', offset(rs1')" {
+    // C.LW x8, 0(x8)
+    // funct3=010, rs1'=0(x8), rd'=0(x8), all offset bits=0
+    // = 0b010_000_000_00_000_00 = 0x4000
+    try expectExpand(0x4000, .{ .i = .LW }, 8, 8, 0, 0);
+}
+
+test "C.LW with offset" {
+    // C.LW x9, 4(x10)
+    // offset=4: offset[2]=1 → bit[6]=1
+    // rs1'=2(x10) → bits[9:7]=010, rd'=1(x9) → bits[4:2]=001
+    // funct3=010
+    // = 0b010_010_000_01_001_00 = 0x4144 → wait, let me be more careful
+    // bit[15:13]=010, bit[12:10]=010 (rs1'=2), bit[9:7]=... wait
+    // Actually: bits[12:10] are part of offset and rs1' is in bits[9:7]
+    // Format: [15:13]=funct3, [12:10]=offset[5:3], [9:7]=rs1', [6]=offset[2], [5]=offset[6], [4:2]=rd', [1:0]=op
+    // offset=4: bit[2]=1 → bit[6]=1, rest=0
+    // rs1'=2 (x10) → bits[9:7]=010
+    // rd'=1 (x9) → bits[4:2]=001
+    // = 0b010_000_010_1_0_001_00 = 0x4144
+    try expectExpand(0x4144, .{ .i = .LW }, 9, 10, 0, 4);
+}
+
+test "C.SW: sw rs2', offset(rs1')" {
+    // C.SW x8, 0(x8)
+    // funct3=110, rs1'=0(x8), rs2'=0(x8), offset=0
+    // = 0b110_000_000_00_000_00 = 0xC000
+    try expectExpand(0xC000, .{ .i = .SW }, 0, 8, 8, 0);
+}
+
+// ============================================================
+// Quadrant 1 tests
+// ============================================================
+
+test "C.NOP" {
+    // C.NOP: funct3=000, rd=0, imm=0, op=01
+    // = 0b000_0_00000_00000_01 = 0x0001
+    try expectExpand(0x0001, .{ .i = .ADDI }, 0, 0, 0, 0);
+}
+
+test "C.ADDI: addi rd, rd, nzimm" {
+    // C.ADDI x1, x1, 1
+    // funct3=000, bit[12]=0 (imm[5]=0), rd=1 in bits[11:7], bits[6:2]=00001 (imm[4:0]=1), op=01
+    // = 0b000_0_00001_00001_01 = 0x0085
+    try expectExpand(0x0085, .{ .i = .ADDI }, 1, 1, 0, 1);
+}
+
+test "C.ADDI negative" {
+    // C.ADDI x1, x1, -1
+    // imm = -1 = 0b111111 (6-bit signed)
+    // bit[12]=1 (imm[5]), bits[6:2]=11111 (imm[4:0])
+    // rd=1 → bits[11:7]=00001
+    // funct3=000, op=01
+    // = 0b000_1_00001_11111_01 = 0x10FD
+    try expectExpand(0x10FD, .{ .i = .ADDI }, 1, 1, 0, -1);
+}
+
+test "C.JAL: jal x1, offset" {
+    // C.JAL with offset=0: all bits zero except funct3=001 and op=01
+    // = 0b001_00000000000_01 = 0x2001
+    try expectExpand(0x2001, .{ .i = .JAL }, 1, 0, 0, 0);
+}
+
+test "C.LI: addi rd, x0, imm" {
+    // C.LI x1, 5
+    // funct3=010, bit[12]=0, rd=1 → bits[11:7]=00001, bits[6:2]=00101, op=01
+    // = 0b010_0_00001_00101_01 = 0x4095
+    try expectExpand(0x4095, .{ .i = .ADDI }, 1, 0, 0, 5);
+}
+
+test "C.LI negative" {
+    // C.LI x1, -1
+    // funct3=010, bit[12]=1, rd=1, bits[6:2]=11111, op=01
+    // = 0b010_1_00001_11111_01 = 0x50FD
+    try expectExpand(0x50FD, .{ .i = .ADDI }, 1, 0, 0, -1);
+}
+
+test "C.ADDI16SP: addi x2, x2, nzimm" {
+    // C.ADDI16SP x2, 16
+    // nzimm=16 → nzimm[4]=1
+    // bit[12]=sign(0), bits[6:2] encode rest
+    // nzimm[4] comes from bit[6]
+    // bit[6]=1 → 0x0040 at that position
+    // funct3=011, rd=2, op=01
+    // = 0b011_0_00010_01000_01 = 0x6141 → let me compute:
+    // funct3=011 → bits[15:13] = 011
+    // bit[12] = 0 (sign)
+    // bits[11:7] = 00010 (rd=2)
+    // bits[6:2] = 01000: bit[6]=0, bit[5]=1, bit[4]=0, bit[3]=0, bit[2]=0
+    // Wait, nzimm[4] from bit[6], nzimm[6] from bit[5], nzimm[8:7] from bits[4:3], nzimm[5] from bit[2]
+    // nzimm=16: bit4=1 → bit[6]=1
+    // bits[6:2] = 10000
+    // = 0b011_0_00010_10000_01 = 0x6141
+    try expectExpand(0x6141, .{ .i = .ADDI }, 2, 2, 0, 16);
+}
+
+test "C.ADDI16SP negative" {
+    // C.ADDI16SP x2, -16
+    // nzimm=-16 in 10-bit = 0b1111110000
+    // imm[9]=1 → bit[12]=1
+    // imm[4]=1 → bit[6]=1
+    // imm[6]=1 → bit[5]=1
+    // imm[8:7]=11 → bits[4:3]=11
+    // imm[5]=1 → bit[2]=1
+    // bits[6:2]=11111
+    // = 0b011_1_00010_11111_01 = 0x717D
+    try expectExpand(0x717D, .{ .i = .ADDI }, 2, 2, 0, -16);
+}
+
+test "C.ADDI16SP: nzimm=0 is illegal" {
+    // funct3=011, rd=2, all imm=0, op=01
+    // = 0b011_0_00010_00000_01 = 0x6101
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6101));
+}
+
+test "C.LUI: lui rd, nzimm" {
+    // C.LUI x1, imm=0x1000 (nzimm[17:12] with bit[16:12]=1 and sign=0)
+    // This means the 6-bit field is 0b000001
+    // bit[12]=0, bits[6:2]=00001
+    // funct3=011, rd=1, op=01
+    // = 0b011_0_00001_00001_01 = 0x6085
+    // The resulting immediate should be 0x1000 = 4096
+    try expectExpand(0x6085, .{ .i = .LUI }, 1, 0, 0, 4096);
+}
+
+test "C.LUI negative" {
+    // C.LUI x1, nzimm with sign bit set → upper immediate is negative
+    // 6-bit field = 0b111111 → as i6 = -1, then (-1) << 12 = -4096 = 0xFFFFF000
+    // bit[12]=1, bits[6:2]=11111
+    // funct3=011, rd=1, op=01
+    // = 0b011_1_00001_11111_01 = 0x70FD
+    try expectExpand(0x70FD, .{ .i = .LUI }, 1, 0, 0, @bitCast(@as(u32, 0xFFFFF000)));
+}
+
+test "C.LUI: nzimm=0 is illegal" {
+    // funct3=011, rd=1 (not 2, so not ADDI16SP), all imm=0, op=01
+    // = 0b011_0_00001_00000_01 = 0x6081
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6081));
+}
+
+test "C.SRLI" {
+    // C.SRLI x8, x8, 1
+    // funct3=100, funct2=00 (bits[11:10]), bit[12]=0 (shamt[5]), rd'=0(x8) bits[9:7], bits[6:2]=00001 (shamt[4:0]=1), op=01
+    // = 0b100_0_00_000_00001_01 = 0x8005
+    try expectExpand(0x8005, .{ .i = .SRLI }, 8, 8, 0, 1);
+}
+
+test "C.SRLI: shamt[5]=1 illegal on RV32" {
+    // bit[12]=1 → shamt[5]=1
+    // = 0b100_1_00_000_00001_01 = 0x9005
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x9005));
+}
+
+test "C.SRAI" {
+    // C.SRAI x8, x8, 1
+    // funct3=100, funct2=01 (bits[11:10]), bit[12]=0, rd'=0(x8), bits[6:2]=00001, op=01
+    // = 0b100_0_01_000_00001_01 = 0x8405
+    try expectExpand(0x8405, .{ .i = .SRAI }, 8, 8, 0, 1);
+}
+
+test "C.ANDI" {
+    // C.ANDI x8, x8, 3
+    // funct3=100, funct2=10 (bits[11:10]), bit[12]=0, rd'=0(x8), bits[6:2]=00011, op=01
+    // = 0b100_0_10_000_00011_01 = 0x880D
+    try expectExpand(0x880D, .{ .i = .ANDI }, 8, 8, 0, 3);
+}
+
+test "C.ANDI negative" {
+    // C.ANDI x8, x8, -1
+    // funct3=100, funct2=10, bit[12]=1 (sign), rd'=0(x8), bits[6:2]=11111, op=01
+    // = 0b100_1_10_000_11111_01 = 0x987D
+    try expectExpand(0x987D, .{ .i = .ANDI }, 8, 8, 0, -1);
+}
+
+test "C.SUB" {
+    // C.SUB x8, x8, x9
+    // funct3=100, bit[12]=0, funct2=11 (bits[11:10]), rd'/rs1'=0(x8) bits[9:7], funct2b=00 (bits[6:5]), rs2'=1(x9) bits[4:2], op=01
+    // = 0b100_0_11_000_00_001_01 = 0x8C05
+    try expectExpand(0x8C05, .{ .i = .SUB }, 8, 8, 9, 0);
+}
+
+test "C.XOR" {
+    // C.XOR x8, x8, x9
+    // Same as SUB but funct2b=01 (bits[6:5])
+    // = 0b100_0_11_000_01_001_01 = 0x8C25
+    try expectExpand(0x8C25, .{ .i = .XOR }, 8, 8, 9, 0);
+}
+
+test "C.OR" {
+    // C.OR x8, x8, x9
+    // funct2b=10
+    // = 0b100_0_11_000_10_001_01 = 0x8C45
+    try expectExpand(0x8C45, .{ .i = .OR }, 8, 8, 9, 0);
+}
+
+test "C.AND" {
+    // C.AND x8, x8, x9
+    // funct2b=11
+    // = 0b100_0_11_000_11_001_01 = 0x8C65
+    try expectExpand(0x8C65, .{ .i = .AND }, 8, 8, 9, 0);
+}
+
+test "C.J: jal x0, offset" {
+    // C.J with offset=0
+    // funct3=101, all offset bits=0, op=01
+    // = 0b101_00000000000_01 = 0xA001
+    try expectExpand(0xA001, .{ .i = .JAL }, 0, 0, 0, 0);
+}
+
+test "C.BEQZ: beq rs1', x0, offset" {
+    // C.BEQZ x8, 0
+    // funct3=110, rs1'=0(x8), all offset=0, op=01
+    // = 0b110_000_000_00000_01 = 0xC001
+    try expectExpand(0xC001, .{ .i = .BEQ }, 0, 8, 0, 0);
+}
+
+test "C.BNEZ: bne rs1', x0, offset" {
+    // C.BNEZ x8, 0
+    // funct3=111, rs1'=0(x8), all offset=0, op=01
+    // = 0b111_000_000_00000_01 = 0xE001
+    try expectExpand(0xE001, .{ .i = .BNE }, 0, 8, 0, 0);
+}
+
+// ============================================================
+// Quadrant 2 tests
+// ============================================================
+
+test "C.SLLI" {
+    // C.SLLI x1, x1, 1
+    // funct3=000, bit[12]=0, rd=1 bits[11:7], bits[6:2]=00001, op=10
+    // = 0b000_0_00001_00001_10 = 0x0086
+    try expectExpand(0x0086, .{ .i = .SLLI }, 1, 1, 0, 1);
+}
+
+test "C.SLLI: shamt[5]=1 illegal on RV32" {
+    // bit[12]=1, rd=1, bits[6:2]=00001, op=10
+    // = 0b000_1_00001_00001_10 = 0x1086
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x1086));
+}
+
+test "C.LWSP: lw rd, offset(x2)" {
+    // C.LWSP x1, 0(x2)
+    // funct3=010, bit[12]=0, rd=1, bits[6:2]=00000, op=10
+    // = 0b010_0_00001_00000_10 = 0x4082
+    try expectExpand(0x4082, .{ .i = .LW }, 1, 2, 0, 0);
+}
+
+test "C.LWSP with offset" {
+    // C.LWSP x1, 4(x2)
+    // offset=4: offset[2]=1 → bit[4]=1
+    // funct3=010, bit[12]=0, rd=1, bits[6:2]=00100, op=10
+    // = 0b010_0_00001_00100_10 = 0x4092
+    try expectExpand(0x4092, .{ .i = .LW }, 1, 2, 0, 4);
+}
+
+test "C.LWSP: rd=0 is illegal" {
+    // funct3=010, rd=0, op=10
+    // = 0b010_0_00000_00000_10 = 0x4002
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x4002));
+}
+
+test "C.JR: jalr x0, 0(rs1)" {
+    // C.JR x1
+    // funct3=100, bit[12]=0, rd/rs1=1, rs2=0, op=10
+    // = 0b100_0_00001_00000_10 = 0x8082
+    try expectExpand(0x8082, .{ .i = .JALR }, 0, 1, 0, 0);
+}
+
+test "C.JR: rs1=0 is illegal" {
+    // funct3=100, bit[12]=0, rd/rs1=0, rs2=0, op=10
+    // = 0b100_0_00000_00000_10 = 0x8002
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x8002));
+}
+
+test "C.MV: add rd, x0, rs2" {
+    // C.MV x1, x2
+    // funct3=100, bit[12]=0, rd=1, rs2=2, op=10
+    // = 0b100_0_00001_00010_10 = 0x808A
+    try expectExpand(0x808A, .{ .i = .ADD }, 1, 0, 2, 0);
+}
+
+test "C.EBREAK" {
+    // funct3=100, bit[12]=1, rd=0, rs2=0, op=10
+    // = 0b100_1_00000_00000_10 = 0x9002
+    try expectExpand(0x9002, .{ .i = .EBREAK }, 0, 0, 0, 0);
+}
+
+test "C.JALR: jalr x1, 0(rs1)" {
+    // C.JALR x1
+    // funct3=100, bit[12]=1, rd/rs1=1, rs2=0, op=10
+    // = 0b100_1_00001_00000_10 = 0x9082
+    try expectExpand(0x9082, .{ .i = .JALR }, 1, 1, 0, 0);
+}
+
+test "C.ADD: add rd, rd, rs2" {
+    // C.ADD x1, x2
+    // funct3=100, bit[12]=1, rd=1, rs2=2, op=10
+    // = 0b100_1_00001_00010_10 = 0x908A
+    try expectExpand(0x908A, .{ .i = .ADD }, 1, 1, 2, 0);
+}
+
+test "C.SWSP: sw rs2, offset(x2)" {
+    // C.SWSP x1, 0(x2)
+    // funct3=110, bits[12:7]=000000 (offset), rs2=1 bits[6:2], op=10
+    // = 0b110_000000_00001_10 = 0xC006
+    try expectExpand(0xC006, .{ .i = .SW }, 0, 2, 1, 0);
+}
+
+test "C.SWSP with offset" {
+    // C.SWSP x1, 4(x2)
+    // offset=4: offset[2]=1 → bit[9]=1
+    // funct3=110, bits[12:7]=000100, rs2=1, op=10
+    // = 0b110_000100_00001_10 = 0xC206
+    try expectExpand(0xC206, .{ .i = .SW }, 0, 2, 1, 4);
+}
+
+// ============================================================
+// Decoder routing test
+// ============================================================
+
+test "decoder routes 16-bit instructions" {
+    // C.NOP = 0x0001, low 2 bits = 01 (not 11) → should route to rv32c
+    const inst = try decoder.decode(0x0001);
+    try std.testing.expectEqual(Opcode{ .i = .ADDI }, inst.op);
+    try std.testing.expectEqual(@as(u5, 0), inst.rd);
+}
+
+// ============================================================
+// CPU step tests for compressed instructions
+// ============================================================
+
+test "CPU step: C.LI sets register, PC advances by 2" {
+    var cpu = Cpu.init();
+    // C.LI x1, 5 = 0x4095
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x4095, .little);
+    // NOP at offset 2 to avoid illegal instruction
+    std.mem.writeInt(u32, cpu.memory[2..6], 0x00000013, .little);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 5), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc);
+}
+
+test "CPU step: C.ADDI modifies register" {
+    var cpu = Cpu.init();
+    // First set x1=10 via C.LI x1, 10
+    // C.LI x1, 10: funct3=010, bit12=0, rd=1, bits[6:2]=01010, op=01
+    // = 0b010_0_00001_01010_01 = 0x40A9
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x40A9, .little);
+    // C.ADDI x1, 3: funct3=000, bit12=0, rd=1, bits[6:2]=00011, op=01
+    // = 0b000_0_00001_00011_01 = 0x008D
+    std.mem.writeInt(u16, cpu.memory[2..4], 0x008D, .little);
+    // ECALL at offset 4
+    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+
+    _ = try cpu.step();
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 13), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}
+
+test "CPU step: C.JAL links PC+2" {
+    var cpu = Cpu.init();
+    // C.JAL offset=4: jump to pc+4=4
+    // offset=4: offset[2]=1, offset[1]=0
+    // CJ encoding: [12]→[11], [11]→[4], [10:9]→[9:8], [8]→[10], [7]→[6], [6]→[7], [5:3]→[3:1], [2]→[5]
+    // offset=4 = 0b000000000100
+    // offset[2]=1 → need to find which bit in half encodes offset[2]
+    // offset[3:1] come from bits[5:3], so offset[2] → offset val bit 2 is at position... wait
+    // offset[3:1] from bits[5:3]: this means bit[3]→offset[1], bit[4]→offset[2], bit[5]→offset[3]
+    // offset=4: offset[2]=1 → bit[4]=1
+    // All other offset bits zero, funct3=001, op=01
+    // = 0b001_0_0000_0_0_0_10_0_01 = 0x2011
+    // Let me compute more carefully: bits = 0b001_00000_0_10_00_01
+    // bit15:13=001, bit12=0, bit11=0, bit10:9=00, bit8=0, bit7=0, bit6=0, bit5:3=010 (offset[3:1]), bit2=0 (offset[5]), bit1:0=01
+    // Wait, bit[5:3] encode offset[3:1]. offset=4 means offset[2]=1.
+    // offset[3:1] = 010 (that's offset bit3=0, bit2=1, bit1=0) → bits[5:3]=010
+    // = 0b001_0_0000_0_0_0_010_0_01
+    // bit15=0,bit14=0,bit13=1,bit12=0,bit11=0,bit10=0,bit9=0,bit8=0,bit7=0,bit6=0,bit5=0,bit4=1,bit3=0,bit2=0,bit1=0,bit0=1
+    // = 0x2011
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x2011, .little);
+    // ECALL at target (offset 4)
+    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+
+    _ = try cpu.step();
+    // JAL links ra with PC+2 (compressed instruction)
+    try std.testing.expectEqual(@as(u32, 2), cpu.readReg(1)); // ra = old_pc + 2
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc); // jumped to pc+4
+}
+
+test "CPU step: mixed 16-bit and 32-bit sequence" {
+    var cpu = Cpu.init();
+    // C.LI x1, 7 at offset 0 (2 bytes)
+    // funct3=010, bit12=0, rd=1, bits[6:2]=00111, op=01
+    // = 0b010_0_00001_00111_01 = 0x409D
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x409D, .little);
+    // ADDI x2, x0, 3 = 0x00300113 at offset 2 (4 bytes)
+    std.mem.writeInt(u32, cpu.memory[2..6], 0x00300113, .little);
+    // C.ADD x1, x2 at offset 6 (2 bytes): add x1, x1, x2
+    // funct3=100, bit12=1, rd=1, rs2=2, op=10
+    // = 0b100_1_00001_00010_10 = 0x908A
+    std.mem.writeInt(u16, cpu.memory[6..8], 0x908A, .little);
+    // ECALL at offset 8
+    std.mem.writeInt(u32, cpu.memory[8..12], 0x00000073, .little);
+
+    _ = try cpu.step(); // C.LI x1, 7 → pc=2
+    try std.testing.expectEqual(@as(u32, 7), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc);
+
+    _ = try cpu.step(); // ADDI x2, x0, 3 → pc=6
+    try std.testing.expectEqual(@as(u32, 3), cpu.readReg(2));
+    try std.testing.expectEqual(@as(u32, 6), cpu.pc);
+
+    _ = try cpu.step(); // C.ADD x1, x2 → x1=10, pc=8
+    try std.testing.expectEqual(@as(u32, 10), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+
+    const result = try cpu.step(); // ECALL → pc=12
+    try std.testing.expectEqual(cpu_mod.StepResult.Ecall, result);
+}
+
+test "CPU step: C.JALR links PC+2" {
+    var cpu = Cpu.init();
+    // Set x1 = 8 via C.LI
+    // C.LI x1, 8: funct3=010, bit12=0, rd=1, bits[6:2]=01000, op=01
+    // = 0b010_0_00001_01000_01 = 0x40A1
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x40A1, .little);
+    // C.JALR x1 at offset 2: jalr ra, 0(x1)
+    // = 0x9082
+    std.mem.writeInt(u16, cpu.memory[2..4], 0x9082, .little);
+    // ECALL at offset 8 (the jump target)
+    std.mem.writeInt(u32, cpu.memory[8..12], 0x00000073, .little);
+
+    _ = try cpu.step(); // C.LI x1, 8 → pc=2
+    _ = try cpu.step(); // C.JALR x1 → pc=8, ra=4
+
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(1)); // ra = old_pc(2) + 2
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}
+
+test "CPU step: C.LW and C.SW" {
+    var cpu = Cpu.init();
+    // Set x2 (sp) = 256 via 32-bit ADDI
+    // ADDI x2, x0, 256 = 0x10000113
+    std.mem.writeInt(u32, cpu.memory[0..4], 0x10000113, .little);
+    // Set x8 = 42 via C.LI x8, 0
+    // Actually, we need full reg x8, so use 32-bit: ADDI x8, x0, 42 = 0x02A00413
+    std.mem.writeInt(u32, cpu.memory[4..8], 0x02A00413, .little);
+    // C.SWSP x8, 0(x2): sw x8, 0(x2)
+    // funct3=110, offset=0 → bits[12:7]=000000, rs2=8 → bits[6:2]=01000, op=10
+    // = 0b110_000000_01000_10 = 0xC022
+    std.mem.writeInt(u16, cpu.memory[8..10], 0xC022, .little);
+    // C.LWSP x9, 0(x2): lw x9, 0(x2)
+    // funct3=010, bit12=0, rd=9, bits[6:2]=00000, op=10
+    // = 0b010_0_01001_00000_10 = 0x4482
+    std.mem.writeInt(u16, cpu.memory[10..12], 0x4482, .little);
+    // ECALL
+    std.mem.writeInt(u32, cpu.memory[12..16], 0x00000073, .little);
+
+    _ = try cpu.step(); // ADDI x2, x0, 256
+    _ = try cpu.step(); // ADDI x8, x0, 42
+    _ = try cpu.step(); // C.SWSP x8, 0(x2) → mem[256]=42
+    _ = try cpu.step(); // C.LWSP x9, 0(x2) → x9=42
+
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(9));
+    try std.testing.expectEqual(@as(u32, 42), try cpu.readWord(256));
+}
+
+test "CPU step: C.BEQZ taken" {
+    var cpu = Cpu.init();
+    // x8 = 0 by default
+    // C.BEQZ x8, 4: beq x8, x0, 4
+    // offset=4: offset[2]=1 → bit[4] in CB-format
+    // CB: [12]→[8], [11:10]→[4:3], [6:5]→[7:6], [4:3]→[2:1], [2]→[5]
+    // offset=4: bit[2]=1 → bits[4:3] encode offset[2:1], offset[2]=1 → bit[4]=1, offset[1]=0 → bit[3]=0
+    // funct3=110, bit[12]=0, bits[11:10]=00, rs1'=0(x8), bit[6:5]=00, bit[4]=1, bit[3]=0, bit[2]=0, op=01
+    // = 0b110_000_000_00_010_01 = 0xC009
+    // Wait: bit4=1,bit3=0 → bits[4:3] = 10
+    // = 0b110_0_00_000_00_100_01
+    // bits: 15=1,14=1,13=0,12=0,11=0,10=0,9=0,8=0,7=0,6=0,5=0,4=1,3=0,2=0,1=0,0=1
+    // = 0xC011
+    std.mem.writeInt(u16, cpu.memory[0..2], 0xC011, .little);
+    // ECALL at offset 4
+    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}

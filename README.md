@@ -54,6 +54,8 @@ src/
     rv32i_test.zig      — RV32I decode + execute tests
     rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute()
     rv32m_test.zig      — RV32M decode + execute tests
+    rv32c.zig           — RV32C compressed instruction expansion (16-bit → Instruction)
+    rv32c_test.zig      — RV32C expansion + CPU step tests
   decoder.zig           — pure routing: bit extraction + dispatch to extension decoders
   cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
   cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
@@ -78,7 +80,7 @@ The library is available via `@import("determinant")`.
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
-- **`decode(u32)`** — decode a 32-bit instruction word, returns `Instruction` or `DecodeError`
+- **`decode(u32)`** — decode an instruction word (16-bit compressed or 32-bit), returns `Instruction` or `DecodeError`
 - **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`
 
 ## Conventions
@@ -89,3 +91,4 @@ The library is available via `@import("determinant")`.
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
 - No allocators in core VM — deterministic by construction
 - FENCE is intentionally omitted (single-hart VM)
+- RV32C compressed instructions expand to equivalent RV32I instructions — no new opcodes

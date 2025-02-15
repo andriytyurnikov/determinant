@@ -28,16 +28,33 @@ test "register read/write" {
 
 test "fetch from memory" {
     var cpu = Cpu.init();
-    // Write a little-endian u32 at address 0
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x12345678, .little);
+    // Write a little-endian u32 at address 0 (bits[1:0]=11 so it's treated as 32-bit)
+    std.mem.writeInt(u32, cpu.memory[0..4], 0x1234567F, .little);
     const inst = try cpu.fetch();
-    try std.testing.expectEqual(@as(u32, 0x12345678), inst);
+    try std.testing.expectEqual(@as(u32, 0x1234567F), inst);
 }
 
 test "fetch misaligned PC" {
     var cpu = Cpu.init();
-    cpu.pc = 2;
+    cpu.pc = 1; // odd address is misaligned (2-byte alignment required)
     try std.testing.expectError(error.MisalignedPC, cpu.fetch());
+}
+
+test "fetch at 2-byte-aligned address" {
+    var cpu = Cpu.init();
+    // Write a 32-bit instruction at address 2 (2-byte aligned but not 4-byte)
+    std.mem.writeInt(u32, cpu.memory[2..6], 0x00000013, .little);
+    cpu.pc = 2;
+    const raw = try cpu.fetch();
+    try std.testing.expectEqual(@as(u32, 0x00000013), raw);
+}
+
+test "fetch compressed instruction returns zero-extended u16" {
+    var cpu = Cpu.init();
+    // C.NOP = 0x0001 (low 2 bits = 01, not 11 → compressed)
+    std.mem.writeInt(u16, cpu.memory[0..2], 0x0001, .little);
+    const raw = try cpu.fetch();
+    try std.testing.expectEqual(@as(u32, 0x0001), raw);
 }
 
 test "fetch PC out of bounds" {

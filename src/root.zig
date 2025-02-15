@@ -5,6 +5,7 @@ pub const instruction = @import("instruction.zig");
 pub const decoder = @import("decoder.zig");
 pub const rv32i = instruction.rv32i;
 pub const rv32m = instruction.rv32m;
+pub const rv32c = @import("instruction/rv32c.zig");
 
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
