@@ -71,7 +71,7 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
                 .ECALL, .EBREAK => try stdout.print("{s}", .{op_name}),
                 else => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
             },
-            .m => unreachable,
+            .m, .a => unreachable,
         },
         .S => try stdout.print("{s} x{d}, {d}(x{d})", .{ op_name, inst.rs2, inst.imm, inst.rs1 }),
         .B => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rs1, inst.rs2, inst.imm }),

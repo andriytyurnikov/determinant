@@ -2,6 +2,7 @@ const std = @import("std");
 const instruction = @import("instruction.zig");
 const rv32i = instruction.rv32i;
 const rv32m = instruction.rv32m;
+const rv32a = instruction.rv32a;
 const rv32c = @import("instruction/rv32c.zig");
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
@@ -26,6 +27,7 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b0010111 => decodeU(raw, .{ .i = .AUIPC }),
         0b1101111 => decodeJ(raw),
         0b1100111 => decodeJalr(raw),
+        0b0101111 => decodeAtomic(raw),
         0b1110011 => decodeSystem(raw),
         else => error.IllegalInstruction,
     };
@@ -150,6 +152,12 @@ fn decodeJ(raw: u32) DecodeError!Instruction {
 fn decodeJalr(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b000) return error.IllegalInstruction;
     return .{ .op = .{ .i = .JALR }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
+}
+
+fn decodeAtomic(raw: u32) DecodeError!Instruction {
+    if (funct3(raw) != 0b010) return error.IllegalInstruction;
+    const a_op = rv32a.decodeR(funct7(raw)) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .a = a_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {

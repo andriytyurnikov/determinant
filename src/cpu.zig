@@ -2,6 +2,7 @@ const std = @import("std");
 const decoder = @import("decoder.zig");
 const instruction = @import("instruction.zig");
 const rv32m = instruction.rv32m;
+const rv32a = instruction.rv32a;
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
@@ -16,6 +17,8 @@ pub const Cpu = struct {
     regs: [32]u32,
     memory: [MEMORY_SIZE]u8,
     cycle_count: u64,
+    reservation_set: bool,
+    reservation_addr: u32,
 
     pub fn init() Cpu {
         return .{
@@ -23,6 +26,8 @@ pub const Cpu = struct {
             .regs = [_]u32{0} ** 32,
             .memory = [_]u8{0} ** MEMORY_SIZE,
             .cycle_count = 0,
+            .reservation_set = false,
+            .reservation_addr = 0,
         };
     }
 
@@ -125,6 +130,7 @@ pub const Cpu = struct {
 
         switch (inst.op) {
             .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
+            .a => |a_op| try self.executeAtomic(a_op, inst.rd, rs1_val, rs2_val),
             .i => |i_op| switch (i_op) {
                 // R-type ALU
                 .ADD => self.writeReg(inst.rd, rs1_val +% rs2_val),
@@ -180,14 +186,17 @@ pub const Cpu = struct {
                 .SB => {
                     const addr = rs1_val +% imm_u;
                     try self.writeByte(addr, @truncate(rs2_val));
+                    self.invalidateReservation(addr);
                 },
                 .SH => {
                     const addr = rs1_val +% imm_u;
                     try self.writeHalfword(addr, @truncate(rs2_val));
+                    self.invalidateReservation(addr);
                 },
                 .SW => {
                     const addr = rs1_val +% imm_u;
                     try self.writeWord(addr, rs2_val);
+                    self.invalidateReservation(addr);
                 },
 
                 // Branches
@@ -234,6 +243,60 @@ pub const Cpu = struct {
         self.pc = next_pc;
         self.cycle_count += 1;
         return result;
+    }
+
+    // --- Atomic helpers ---
+
+    fn invalidateReservation(self: *Cpu, addr: u32) void {
+        if (self.reservation_set and (addr & 0xFFFFFFFC) == self.reservation_addr) {
+            self.reservation_set = false;
+        }
+    }
+
+    fn executeAtomic(self: *Cpu, op: rv32a.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32) !void {
+        const addr = rs1_val;
+        switch (op) {
+            .LR_W => {
+                const val = try self.readWord(addr);
+                self.writeReg(rd_reg, val);
+                self.reservation_set = true;
+                self.reservation_addr = addr;
+            },
+            .SC_W => {
+                if (self.reservation_set and self.reservation_addr == addr) {
+                    try self.writeWord(addr, rs2_val);
+                    self.writeReg(rd_reg, 0); // success
+                    self.reservation_set = false;
+                } else {
+                    self.writeReg(rd_reg, 1); // failure
+                }
+            },
+            inline .AMOSWAP_W, .AMOADD_W, .AMOXOR_W, .AMOAND_W, .AMOOR_W, .AMOMIN_W, .AMOMAX_W, .AMOMINU_W, .AMOMAXU_W => |amo_op| {
+                const old = try self.readWord(addr);
+                const new_val: u32 = switch (amo_op) {
+                    .AMOSWAP_W => rs2_val,
+                    .AMOADD_W => old +% rs2_val,
+                    .AMOXOR_W => old ^ rs2_val,
+                    .AMOAND_W => old & rs2_val,
+                    .AMOOR_W => old | rs2_val,
+                    .AMOMIN_W => blk: {
+                        const a: i32 = @bitCast(old);
+                        const b: i32 = @bitCast(rs2_val);
+                        break :blk @bitCast(@min(a, b));
+                    },
+                    .AMOMAX_W => blk: {
+                        const a: i32 = @bitCast(old);
+                        const b: i32 = @bitCast(rs2_val);
+                        break :blk @bitCast(@max(a, b));
+                    },
+                    .AMOMINU_W => @min(old, rs2_val),
+                    .AMOMAXU_W => @max(old, rs2_val),
+                    else => unreachable,
+                };
+                try self.writeWord(addr, new_val);
+                self.writeReg(rd_reg, old);
+            },
+        }
     }
 };
 
