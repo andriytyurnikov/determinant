@@ -127,6 +127,27 @@ test "step: SC.W succeeds after LR.W to same address" {
     try std.testing.expect(!cpu.reservation_set);
 }
 
+test "step: SC.W failure clears reservation" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0xDEADBEEF);
+    cpu.writeReg(1, addr);
+
+    // LR.W x3, (x1)
+    loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expect(cpu.reservation_set);
+
+    // SC.W x4, x2, (x5) — different address → failure
+    cpu.writeReg(5, 0x200);
+    cpu.writeReg(2, 0xCAFEBABE);
+    cpu.pc = 4;
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], encodeAtomic(0b00011, 4, 5, 2), .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
+    try std.testing.expect(!cpu.reservation_set); // reservation cleared even on failure
+}
+
 test "step: SC.W fails without prior LR.W" {
     var cpu = Cpu.init();
     const addr: u32 = 0x100;

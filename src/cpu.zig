@@ -266,10 +266,10 @@ pub const Cpu = struct {
                 if (self.reservation_set and self.reservation_addr == addr) {
                     try self.writeWord(addr, rs2_val);
                     self.writeReg(rd_reg, 0); // success
-                    self.reservation_set = false;
                 } else {
                     self.writeReg(rd_reg, 1); // failure
                 }
+                self.reservation_set = false;
             },
             inline .AMOSWAP_W, .AMOADD_W, .AMOXOR_W, .AMOAND_W, .AMOOR_W, .AMOMIN_W, .AMOMAX_W, .AMOMINU_W, .AMOMAXU_W => |amo_op| {
                 const old = try self.readWord(addr);
