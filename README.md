@@ -48,7 +48,7 @@ zig build test
 ```
 src/
   root.zig              — library root, re-exports all submodules and convenience aliases
-  instruction.zig       — tagged union Opcode (i: rv32i.Opcode | m: rv32m.Opcode | a: rv32a.Opcode), Format, Instruction
+  instruction.zig       — tagged union Opcode (i: rv32i.Opcode | m: rv32m.Opcode | a: rv32a.Opcode | csr: zicsr.Opcode), Format, Instruction
   instruction/
     rv32i.zig           — RV32I base integer opcodes (39 variants) and decode helpers
     rv32i_test.zig      — RV32I decode + execute tests
@@ -58,6 +58,8 @@ src/
     rv32a_test.zig      — RV32A decode + execute tests
     rv32c.zig           — RV32C compressed instruction expansion (16-bit → Instruction)
     rv32c_test.zig      — RV32C expansion + CPU step tests
+    zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem()
+    zicsr_test.zig      — Zicsr decode + execute tests
   decoder.zig           — pure routing: bit extraction + dispatch to extension decoders
   cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
   cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
@@ -80,7 +82,7 @@ The library is available via `@import("determinant")`.
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`
-- **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`), with `format()` and `name()` methods
+- **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`decode(u32)`** — decode an instruction word (16-bit compressed or 32-bit), returns `Instruction` or `DecodeError`
 - **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`

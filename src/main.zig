@@ -71,6 +71,13 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
                 .ECALL, .EBREAK => try stdout.print("{s}", .{op_name}),
                 else => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
             },
+            .csr => |csr_op| {
+                const csr_addr: u12 = @truncate(@as(u32, @bitCast(inst.imm)));
+                switch (csr_op) {
+                    .CSRRW, .CSRRS, .CSRRC => try stdout.print("{s} x{d}, 0x{X:0>3}, x{d}", .{ op_name, inst.rd, csr_addr, inst.rs1 }),
+                    .CSRRWI, .CSRRSI, .CSRRCI => try stdout.print("{s} x{d}, 0x{X:0>3}, {d}", .{ op_name, inst.rd, csr_addr, inst.rs1 }),
+                }
+            },
             .m, .a => unreachable,
         },
         .S => try stdout.print("{s} x{d}, {d}(x{d})", .{ op_name, inst.rs2, inst.imm, inst.rs1 }),

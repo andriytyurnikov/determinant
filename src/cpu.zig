@@ -3,6 +3,7 @@ const decoder = @import("decoder.zig");
 const instruction = @import("instruction.zig");
 const rv32m = instruction.rv32m;
 const rv32a = instruction.rv32a;
+const zicsr = instruction.zicsr;
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
@@ -12,6 +13,10 @@ pub const StepResult = enum {
     Ebreak,
 };
 
+pub const Csr = struct {
+    mscratch: u32 = 0,
+};
+
 pub const Cpu = struct {
     pc: u32,
     regs: [32]u32,
@@ -19,6 +24,7 @@ pub const Cpu = struct {
     cycle_count: u64,
     reservation_set: bool,
     reservation_addr: u32,
+    csrs: Csr,
 
     pub fn init() Cpu {
         return .{
@@ -28,6 +34,7 @@ pub const Cpu = struct {
             .cycle_count = 0,
             .reservation_set = false,
             .reservation_addr = 0,
+            .csrs = .{},
         };
     }
 
@@ -131,6 +138,7 @@ pub const Cpu = struct {
         switch (inst.op) {
             .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
             .a => |a_op| try self.executeAtomic(a_op, inst.rd, rs1_val, rs2_val),
+            .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, inst.imm),
             .i => |i_op| switch (i_op) {
                 // R-type ALU
                 .ADD => self.writeReg(inst.rd, rs1_val +% rs2_val),
@@ -295,6 +303,81 @@ pub const Cpu = struct {
                 };
                 try self.writeWord(addr, new_val);
                 self.writeReg(rd_reg, old);
+            },
+        }
+    }
+
+    // --- CSR helpers ---
+
+    fn readCsr(self: *const Cpu, addr: u12) !u32 {
+        return switch (addr) {
+            0xC00, 0xC02 => @truncate(self.cycle_count), // cycle, instret (low 32)
+            0xC80, 0xC82 => @truncate(self.cycle_count >> 32), // cycleh, instreth (high 32)
+            0x340 => self.csrs.mscratch,
+            else => error.IllegalInstruction,
+        };
+    }
+
+    fn writeCsr(self: *Cpu, addr: u12, value: u32) !void {
+        // Bits [11:10] == 0b11 means read-only per RISC-V spec
+        if ((addr >> 10) & 0b11 == 0b11) return error.IllegalInstruction;
+        switch (addr) {
+            0x340 => self.csrs.mscratch = value,
+            else => return error.IllegalInstruction,
+        }
+    }
+
+    fn executeCsr(self: *Cpu, op: zicsr.Opcode, rd_reg: u5, rs1_field: u5, imm: i32) !void {
+        const csr_addr: u12 = @truncate(@as(u32, @bitCast(imm)));
+
+        switch (op) {
+            .CSRRW => {
+                const rs1_val = self.readReg(rs1_field);
+                if (rd_reg != 0) {
+                    const old = try self.readCsr(csr_addr);
+                    self.writeReg(rd_reg, old);
+                }
+                try self.writeCsr(csr_addr, rs1_val);
+            },
+            .CSRRS => {
+                const old = try self.readCsr(csr_addr);
+                self.writeReg(rd_reg, old);
+                if (rs1_field != 0) {
+                    const rs1_val = self.readReg(rs1_field);
+                    try self.writeCsr(csr_addr, old | rs1_val);
+                }
+            },
+            .CSRRC => {
+                const old = try self.readCsr(csr_addr);
+                self.writeReg(rd_reg, old);
+                if (rs1_field != 0) {
+                    const rs1_val = self.readReg(rs1_field);
+                    try self.writeCsr(csr_addr, old & ~rs1_val);
+                }
+            },
+            .CSRRWI => {
+                const zimm: u32 = @intCast(rs1_field);
+                if (rd_reg != 0) {
+                    const old = try self.readCsr(csr_addr);
+                    self.writeReg(rd_reg, old);
+                }
+                try self.writeCsr(csr_addr, zimm);
+            },
+            .CSRRSI => {
+                const zimm: u32 = @intCast(rs1_field);
+                const old = try self.readCsr(csr_addr);
+                self.writeReg(rd_reg, old);
+                if (zimm != 0) {
+                    try self.writeCsr(csr_addr, old | zimm);
+                }
+            },
+            .CSRRCI => {
+                const zimm: u32 = @intCast(rs1_field);
+                const old = try self.readCsr(csr_addr);
+                self.writeReg(rd_reg, old);
+                if (zimm != 0) {
+                    try self.writeCsr(csr_addr, old & ~zimm);
+                }
             },
         }
     }

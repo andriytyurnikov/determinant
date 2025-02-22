@@ -3,6 +3,7 @@ const std = @import("std");
 pub const rv32i = @import("instruction/rv32i.zig");
 pub const rv32m = @import("instruction/rv32m.zig");
 pub const rv32a = @import("instruction/rv32a.zig");
+pub const zicsr = @import("instruction/zicsr.zig");
 
 /// RV32 instruction formats.
 pub const Format = enum {
@@ -19,10 +20,12 @@ pub const Opcode = union(enum) {
     i: rv32i.Opcode,
     m: rv32m.Opcode,
     a: rv32a.Opcode,
+    csr: zicsr.Opcode,
 
     pub fn format(self: Opcode) Format {
         return switch (self) {
             .m, .a => .R,
+            .csr => .I,
             .i => |op| switch (op) {
                 .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
                 .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
@@ -42,6 +45,7 @@ pub const Opcode = union(enum) {
             .i => |op| @tagName(op),
             .m => |op| @tagName(op),
             .a => |op| @tagName(op),
+            .csr => |op| @tagName(op),
         };
     }
 };

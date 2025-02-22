@@ -3,6 +3,7 @@ const instruction = @import("instruction.zig");
 const rv32i = instruction.rv32i;
 const rv32m = instruction.rv32m;
 const rv32a = instruction.rv32a;
+const zicsr = instruction.zicsr;
 const rv32c = @import("instruction/rv32c.zig");
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
@@ -161,9 +162,15 @@ fn decodeAtomic(raw: u32) DecodeError!Instruction {
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {
-    return switch (raw) {
-        0x00000073 => .{ .op = .{ .i = .ECALL }, .raw = raw },
-        0x00100073 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
-        else => error.IllegalInstruction,
-    };
+    const f3 = funct3(raw);
+    if (f3 == 0b000) {
+        // ECALL / EBREAK
+        return switch (raw) {
+            0x00000073 => .{ .op = .{ .i = .ECALL }, .raw = raw },
+            0x00100073 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
+            else => error.IllegalInstruction,
+        };
+    }
+    const csr_op = zicsr.decodeSystem(f3) orelse return error.IllegalInstruction;
+    return .{ .op = .{ .csr = csr_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
 }
