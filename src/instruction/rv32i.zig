@@ -1,6 +1,8 @@
 /// RV32I base integer instruction set opcodes and decode helpers.
 /// This module does NOT import instruction.zig — it is imported BY it.
 
+const Format = @import("format.zig").Format;
+
 /// RV32I opcodes (39 variants).
 pub const Opcode = enum {
     // R-type ALU
@@ -57,6 +59,20 @@ pub const Opcode = enum {
     // System
     ECALL,
     EBREAK,
+
+    pub fn format(self: Opcode) Format {
+        return switch (self) {
+            .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
+            .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
+            .LB, .LH, .LW, .LBU, .LHU => .I,
+            .JALR => .I,
+            .ECALL, .EBREAK => .I,
+            .SB, .SH, .SW => .S,
+            .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
+            .LUI, .AUIPC => .U,
+            .JAL => .J,
+        };
+    }
 };
 
 /// Decode an R-type base integer instruction from funct3 and funct7.

@@ -6,6 +6,7 @@ const decode = decoder.decode;
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 const StepResult = cpu_mod.StepResult;
+const h = @import("test_helpers.zig");
 
 // --- Helper to assemble instruction words for tests ---
 
@@ -76,9 +77,7 @@ fn encodeJ(rd_v: u5, imm_val: i21) u32 {
         (bit_20 << 31);
 }
 
-fn loadInst(cpu: *Cpu, word: u32) void {
-    std.mem.writeInt(u32, cpu.memory[cpu.pc..][0..4], word, .little);
-}
+const loadInst = h.loadInst;
 
 // === Decode tests (from decoder_test.zig) ===
 

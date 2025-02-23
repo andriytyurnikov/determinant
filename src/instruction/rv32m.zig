@@ -1,4 +1,5 @@
 const std = @import("std");
+const Format = @import("format.zig").Format;
 
 /// RV32M multiply/divide extension opcodes (8 variants).
 pub const Opcode = enum {
@@ -10,6 +11,11 @@ pub const Opcode = enum {
     DIVU,
     REM,
     REMU,
+
+    pub fn format(self: Opcode) Format {
+        _ = self;
+        return .R;
+    }
 };
 
 /// Decode an M-extension R-type instruction from funct3.

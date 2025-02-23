@@ -1,3 +1,5 @@
+const Format = @import("format.zig").Format;
+
 /// RV32A atomic extension opcodes (11 variants).
 pub const Opcode = enum {
     LR_W,
@@ -11,6 +13,11 @@ pub const Opcode = enum {
     AMOMAX_W,
     AMOMINU_W,
     AMOMAXU_W,
+
+    pub fn format(self: Opcode) Format {
+        _ = self;
+        return .R;
+    }
 };
 
 /// Decode an A-extension R-type instruction from funct7.

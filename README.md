@@ -48,18 +48,20 @@ zig build test
 ```
 src/
   root.zig              — library root, re-exports all submodules and convenience aliases
-  instruction.zig       — tagged union Opcode (i: rv32i.Opcode | m: rv32m.Opcode | a: rv32a.Opcode | csr: zicsr.Opcode), Format, Instruction
+  instruction.zig       — tagged union Opcode (i: rv32i.Opcode | m: rv32m.Opcode | a: rv32a.Opcode | csr: zicsr.Opcode), Format re-export, Instruction
   instruction/
-    rv32i.zig           — RV32I base integer opcodes (39 variants) and decode helpers
+    format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
+    rv32i.zig           — RV32I base integer opcodes (39 variants), decode helpers, format()
     rv32i_test.zig      — RV32I decode + execute tests
-    rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute()
+    rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
     rv32m_test.zig      — RV32M decode + execute tests
-    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR()
+    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), format()
     rv32a_test.zig      — RV32A decode + execute tests
     rv32c.zig           — RV32C compressed instruction expansion (16-bit → Instruction)
     rv32c_test.zig      — RV32C expansion + CPU step tests
-    zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem()
+    zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem(), format(), Csr struct with read/write
     zicsr_test.zig      — Zicsr decode + execute tests
+    test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt)
   decoder.zig           — pure routing: bit extraction + dispatch to extension decoders
   cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
   cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)

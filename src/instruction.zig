@@ -5,15 +5,7 @@ pub const rv32m = @import("instruction/rv32m.zig");
 pub const rv32a = @import("instruction/rv32a.zig");
 pub const zicsr = @import("instruction/zicsr.zig");
 
-/// RV32 instruction formats.
-pub const Format = enum {
-    R,
-    I,
-    S,
-    B,
-    U,
-    J,
-};
+pub const Format = @import("instruction/format.zig").Format;
 
 /// Tagged union opcode spanning all supported ISA extensions.
 pub const Opcode = union(enum) {
@@ -24,19 +16,7 @@ pub const Opcode = union(enum) {
 
     pub fn format(self: Opcode) Format {
         return switch (self) {
-            .m, .a => .R,
-            .csr => .I,
-            .i => |op| switch (op) {
-                .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
-                .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
-                .LB, .LH, .LW, .LBU, .LHU => .I,
-                .JALR => .I,
-                .ECALL, .EBREAK => .I,
-                .SB, .SH, .SW => .S,
-                .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
-                .LUI, .AUIPC => .U,
-                .JAL => .J,
-            },
+            inline else => |op| op.format(),
         };
     }
 

@@ -5,6 +5,7 @@ const decoder = @import("../decoder.zig");
 const decode = decoder.decode;
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
+const h = @import("test_helpers.zig");
 
 // --- Helpers ---
 
@@ -17,9 +18,7 @@ fn encodeR(f3: u3, f7: u7, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
         (@as(u32, f7) << 25);
 }
 
-fn loadInst(cpu: *Cpu, word: u32) void {
-    std.mem.writeInt(u32, cpu.memory[cpu.pc..][0..4], word, .little);
-}
+const loadInst = h.loadInst;
 
 // --- Decode tests ---
 

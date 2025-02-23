@@ -6,6 +6,7 @@ const decoder = @import("../decoder.zig");
 const decode = decoder.decode;
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
+const h = @import("test_helpers.zig");
 
 // --- Helpers ---
 
@@ -21,19 +22,9 @@ fn encodeAtomic(funct5: u5, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
         (@as(u32, f7) << 25);
 }
 
-fn loadInst(cpu: *Cpu, word: u32) void {
-    std.mem.writeInt(u32, cpu.memory[cpu.pc..][0..4], word, .little);
-}
-
-fn storeWordAt(cpu: *Cpu, addr: u32, val: u32) void {
-    const a: usize = addr;
-    std.mem.writeInt(u32, cpu.memory[a..][0..4], val, .little);
-}
-
-fn readWordAt(cpu: *const Cpu, addr: u32) u32 {
-    const a: usize = addr;
-    return std.mem.readInt(u32, cpu.memory[a..][0..4], .little);
-}
+const loadInst = h.loadInst;
+const storeWordAt = h.storeWordAt;
+const readWordAt = h.readWordAt;
 
 // --- Decode tests ---
 
