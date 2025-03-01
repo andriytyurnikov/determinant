@@ -6,6 +6,7 @@ const Opcode = instruction.Opcode;
 const decoder = @import("../decoder.zig");
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
+const h = @import("test_helpers.zig");
 
 fn expectExpand(half: u16, expected_op: Opcode, expected_rd: u5, expected_rs1: u5, expected_rs2: u5, expected_imm: i32) !void {
     const inst = try rv32c.expand(half);
@@ -375,9 +376,9 @@ test "decoder routes 16-bit instructions" {
 test "CPU step: C.LI sets register, PC advances by 2" {
     var cpu = Cpu.init();
     // C.LI x1, 5 = 0x4095
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x4095, .little);
+    h.storeHalfAt(&cpu, 0, 0x4095);
     // NOP at offset 2 to avoid illegal instruction
-    std.mem.writeInt(u32, cpu.memory[2..6], 0x00000013, .little);
+    h.storeWordAt(&cpu, 2, 0x00000013);
 
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 5), cpu.readReg(1));
@@ -389,12 +390,12 @@ test "CPU step: C.ADDI modifies register" {
     // First set x1=10 via C.LI x1, 10
     // C.LI x1, 10: funct3=010, bit12=0, rd=1, bits[6:2]=01010, op=01
     // = 0b010_0_00001_01010_01 = 0x40A9
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x40A9, .little);
+    h.storeHalfAt(&cpu, 0, 0x40A9);
     // C.ADDI x1, 3: funct3=000, bit12=0, rd=1, bits[6:2]=00011, op=01
     // = 0b000_0_00001_00011_01 = 0x008D
-    std.mem.writeInt(u16, cpu.memory[2..4], 0x008D, .little);
+    h.storeHalfAt(&cpu, 2, 0x008D);
     // ECALL at offset 4
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+    h.storeWordAt(&cpu, 4, 0x00000073);
 
     _ = try cpu.step();
     _ = try cpu.step();
@@ -421,9 +422,9 @@ test "CPU step: C.JAL links PC+2" {
     // = 0b001_0_0000_0_0_0_010_0_01
     // bit15=0,bit14=0,bit13=1,bit12=0,bit11=0,bit10=0,bit9=0,bit8=0,bit7=0,bit6=0,bit5=0,bit4=1,bit3=0,bit2=0,bit1=0,bit0=1
     // = 0x2011
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x2011, .little);
+    h.storeHalfAt(&cpu, 0, 0x2011);
     // ECALL at target (offset 4)
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+    h.storeWordAt(&cpu, 4, 0x00000073);
 
     _ = try cpu.step();
     // JAL links ra with PC+2 (compressed instruction)
@@ -436,15 +437,15 @@ test "CPU step: mixed 16-bit and 32-bit sequence" {
     // C.LI x1, 7 at offset 0 (2 bytes)
     // funct3=010, bit12=0, rd=1, bits[6:2]=00111, op=01
     // = 0b010_0_00001_00111_01 = 0x409D
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x409D, .little);
+    h.storeHalfAt(&cpu, 0, 0x409D);
     // ADDI x2, x0, 3 = 0x00300113 at offset 2 (4 bytes)
-    std.mem.writeInt(u32, cpu.memory[2..6], 0x00300113, .little);
+    h.storeWordAt(&cpu, 2, 0x00300113);
     // C.ADD x1, x2 at offset 6 (2 bytes): add x1, x1, x2
     // funct3=100, bit12=1, rd=1, rs2=2, op=10
     // = 0b100_1_00001_00010_10 = 0x908A
-    std.mem.writeInt(u16, cpu.memory[6..8], 0x908A, .little);
+    h.storeHalfAt(&cpu, 6, 0x908A);
     // ECALL at offset 8
-    std.mem.writeInt(u32, cpu.memory[8..12], 0x00000073, .little);
+    h.storeWordAt(&cpu, 8, 0x00000073);
 
     _ = try cpu.step(); // C.LI x1, 7 → pc=2
     try std.testing.expectEqual(@as(u32, 7), cpu.readReg(1));
@@ -467,12 +468,12 @@ test "CPU step: C.JALR links PC+2" {
     // Set x1 = 8 via C.LI
     // C.LI x1, 8: funct3=010, bit12=0, rd=1, bits[6:2]=01000, op=01
     // = 0b010_0_00001_01000_01 = 0x40A1
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x40A1, .little);
+    h.storeHalfAt(&cpu, 0, 0x40A1);
     // C.JALR x1 at offset 2: jalr ra, 0(x1)
     // = 0x9082
-    std.mem.writeInt(u16, cpu.memory[2..4], 0x9082, .little);
+    h.storeHalfAt(&cpu, 2, 0x9082);
     // ECALL at offset 8 (the jump target)
-    std.mem.writeInt(u32, cpu.memory[8..12], 0x00000073, .little);
+    h.storeWordAt(&cpu, 8, 0x00000073);
 
     _ = try cpu.step(); // C.LI x1, 8 → pc=2
     _ = try cpu.step(); // C.JALR x1 → pc=8, ra=4
@@ -485,20 +486,20 @@ test "CPU step: C.LW and C.SW" {
     var cpu = Cpu.init();
     // Set x2 (sp) = 256 via 32-bit ADDI
     // ADDI x2, x0, 256 = 0x10000113
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x10000113, .little);
+    h.storeWordAt(&cpu, 0, 0x10000113);
     // Set x8 = 42 via C.LI x8, 0
     // Actually, we need full reg x8, so use 32-bit: ADDI x8, x0, 42 = 0x02A00413
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x02A00413, .little);
+    h.storeWordAt(&cpu, 4, 0x02A00413);
     // C.SWSP x8, 0(x2): sw x8, 0(x2)
     // funct3=110, offset=0 → bits[12:7]=000000, rs2=8 → bits[6:2]=01000, op=10
     // = 0b110_000000_01000_10 = 0xC022
-    std.mem.writeInt(u16, cpu.memory[8..10], 0xC022, .little);
+    h.storeHalfAt(&cpu, 8, 0xC022);
     // C.LWSP x9, 0(x2): lw x9, 0(x2)
     // funct3=010, bit12=0, rd=9, bits[6:2]=00000, op=10
     // = 0b010_0_01001_00000_10 = 0x4482
-    std.mem.writeInt(u16, cpu.memory[10..12], 0x4482, .little);
+    h.storeHalfAt(&cpu, 10, 0x4482);
     // ECALL
-    std.mem.writeInt(u32, cpu.memory[12..16], 0x00000073, .little);
+    h.storeWordAt(&cpu, 12, 0x00000073);
 
     _ = try cpu.step(); // ADDI x2, x0, 256
     _ = try cpu.step(); // ADDI x8, x0, 42
@@ -522,9 +523,9 @@ test "CPU step: C.BEQZ taken" {
     // = 0b110_0_00_000_00_100_01
     // bits: 15=1,14=1,13=0,12=0,11=0,10=0,9=0,8=0,7=0,6=0,5=0,4=1,3=0,2=0,1=0,0=1
     // = 0xC011
-    std.mem.writeInt(u16, cpu.memory[0..2], 0xC011, .little);
+    h.storeHalfAt(&cpu, 0, 0xC011);
     // ECALL at offset 4
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+    h.storeWordAt(&cpu, 4, 0x00000073);
 
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);

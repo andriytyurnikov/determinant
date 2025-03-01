@@ -41,6 +41,23 @@ pub fn decodeR(f7: u7) ?Opcode {
     };
 }
 
+/// Compute the result of an AMO operation given the old memory value and rs2.
+/// Only valid for AMO opcodes (not LR_W/SC_W).
+pub fn computeAmo(op: Opcode, old: u32, rs2_val: u32) u32 {
+    return switch (op) {
+        .AMOSWAP_W => rs2_val,
+        .AMOADD_W => old +% rs2_val,
+        .AMOXOR_W => old ^ rs2_val,
+        .AMOAND_W => old & rs2_val,
+        .AMOOR_W => old | rs2_val,
+        .AMOMIN_W => @bitCast(@min(@as(i32, @bitCast(old)), @as(i32, @bitCast(rs2_val)))),
+        .AMOMAX_W => @bitCast(@max(@as(i32, @bitCast(old)), @as(i32, @bitCast(rs2_val)))),
+        .AMOMINU_W => @min(old, rs2_val),
+        .AMOMAXU_W => @max(old, rs2_val),
+        .LR_W, .SC_W => unreachable,
+    };
+}
+
 test {
     _ = @import("rv32a_test.zig");
 }

@@ -283,29 +283,9 @@ pub const Cpu = struct {
                 }
                 self.reservation_set = false;
             },
-            inline .AMOSWAP_W, .AMOADD_W, .AMOXOR_W, .AMOAND_W, .AMOOR_W, .AMOMIN_W, .AMOMAX_W, .AMOMINU_W, .AMOMAXU_W => |amo_op| {
+            else => {
                 const old = try self.readWord(addr);
-                const new_val: u32 = switch (amo_op) {
-                    .AMOSWAP_W => rs2_val,
-                    .AMOADD_W => old +% rs2_val,
-                    .AMOXOR_W => old ^ rs2_val,
-                    .AMOAND_W => old & rs2_val,
-                    .AMOOR_W => old | rs2_val,
-                    .AMOMIN_W => blk: {
-                        const a: i32 = @bitCast(old);
-                        const b: i32 = @bitCast(rs2_val);
-                        break :blk @bitCast(@min(a, b));
-                    },
-                    .AMOMAX_W => blk: {
-                        const a: i32 = @bitCast(old);
-                        const b: i32 = @bitCast(rs2_val);
-                        break :blk @bitCast(@max(a, b));
-                    },
-                    .AMOMINU_W => @min(old, rs2_val),
-                    .AMOMAXU_W => @max(old, rs2_val),
-                    else => unreachable,
-                };
-                try self.writeWord(addr, new_val);
+                try self.writeWord(addr, rv32a.computeAmo(op, old, rs2_val));
                 self.writeReg(rd_reg, old);
             },
         }
@@ -315,56 +295,13 @@ pub const Cpu = struct {
 
     fn executeCsr(self: *Cpu, op: zicsr.Opcode, rd_reg: u5, rs1_field: u5, imm: i32) !void {
         const csr_addr: u12 = @truncate(@as(u32, @bitCast(imm)));
-
-        switch (op) {
-            .CSRRW => {
-                const rs1_val = self.readReg(rs1_field);
-                if (rd_reg != 0) {
-                    const old = try self.csrs.read(self.cycle_count, csr_addr);
-                    self.writeReg(rd_reg, old);
-                }
-                try self.csrs.write(csr_addr, rs1_val);
-            },
-            .CSRRS => {
-                const old = try self.csrs.read(self.cycle_count, csr_addr);
-                self.writeReg(rd_reg, old);
-                if (rs1_field != 0) {
-                    const rs1_val = self.readReg(rs1_field);
-                    try self.csrs.write(csr_addr, old | rs1_val);
-                }
-            },
-            .CSRRC => {
-                const old = try self.csrs.read(self.cycle_count, csr_addr);
-                self.writeReg(rd_reg, old);
-                if (rs1_field != 0) {
-                    const rs1_val = self.readReg(rs1_field);
-                    try self.csrs.write(csr_addr, old & ~rs1_val);
-                }
-            },
-            .CSRRWI => {
-                const zimm: u32 = @intCast(rs1_field);
-                if (rd_reg != 0) {
-                    const old = try self.csrs.read(self.cycle_count, csr_addr);
-                    self.writeReg(rd_reg, old);
-                }
-                try self.csrs.write(csr_addr, zimm);
-            },
-            .CSRRSI => {
-                const zimm: u32 = @intCast(rs1_field);
-                const old = try self.csrs.read(self.cycle_count, csr_addr);
-                self.writeReg(rd_reg, old);
-                if (zimm != 0) {
-                    try self.csrs.write(csr_addr, old | zimm);
-                }
-            },
-            .CSRRCI => {
-                const zimm: u32 = @intCast(rs1_field);
-                const old = try self.csrs.read(self.cycle_count, csr_addr);
-                self.writeReg(rd_reg, old);
-                if (zimm != 0) {
-                    try self.csrs.write(csr_addr, old & ~zimm);
-                }
-            },
+        const src_val: u32 = switch (op) {
+            .CSRRW, .CSRRS, .CSRRC => self.readReg(rs1_field),
+            .CSRRWI, .CSRRSI, .CSRRCI => @intCast(rs1_field),
+        };
+        const result = try self.csrs.execute(op, self.cycle_count, csr_addr, src_val, rd_reg != 0, rs1_field != 0);
+        if (result.rd_val) |val| {
+            self.writeReg(rd_reg, val);
         }
     }
 };

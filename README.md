@@ -55,13 +55,13 @@ src/
     rv32i_test.zig      — RV32I decode + execute tests
     rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
     rv32m_test.zig      — RV32M decode + execute tests
-    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), format()
+    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), computeAmo(), format()
     rv32a_test.zig      — RV32A decode + execute tests
     rv32c.zig           — RV32C compressed instruction expansion (16-bit → Instruction)
     rv32c_test.zig      — RV32C expansion + CPU step tests
-    zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem(), format(), Csr struct with read/write
+    zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem(), format(), Csr struct with read/write/execute
     zicsr_test.zig      — Zicsr decode + execute tests
-    test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt)
+    test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
   decoder.zig           — pure routing: bit extraction + dispatch to extension decoders
   cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
   cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)

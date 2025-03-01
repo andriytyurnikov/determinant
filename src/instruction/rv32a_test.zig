@@ -8,20 +8,7 @@ const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 const h = @import("test_helpers.zig");
 
-// --- Helpers ---
-
-/// Encode an A-extension R-type instruction word.
-/// opcode = 0b0101111, funct3 = 0b010 (word), funct5 in high bits of funct7.
-fn encodeAtomic(funct5: u5, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
-    const f7: u7 = @as(u7, funct5) << 2; // aq=0, rl=0
-    return @as(u32, 0b0101111) |
-        (@as(u32, rd_v) << 7) |
-        (@as(u32, 0b010) << 12) |
-        (@as(u32, rs1_v) << 15) |
-        (@as(u32, rs2_v) << 20) |
-        (@as(u32, f7) << 25);
-}
-
+const encodeAtomic = h.encodeAtomic;
 const loadInst = h.loadInst;
 const storeWordAt = h.storeWordAt;
 const readWordAt = h.readWordAt;

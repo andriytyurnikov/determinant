@@ -32,8 +32,42 @@ pub fn decodeSystem(f3: u3) ?Opcode {
     };
 }
 
+pub const CsrResult = struct {
+    rd_val: ?u32 = null,
+};
+
 pub const Csr = struct {
     mscratch: u32 = 0,
+
+    /// Execute a CSR instruction. `src_val` is the register value or zimm.
+    /// `src_nonzero` indicates whether the rs1 field (register number or zimm) is nonzero,
+    /// per the RISC-V spec — this controls whether CSRRS/CSRRC attempt a write.
+    pub fn execute(self: *Csr, op: Opcode, cycle_count: u64, csr_addr: u12, src_val: u32, rd_nonzero: bool, src_nonzero: bool) !CsrResult {
+        return switch (op) {
+            .CSRRW, .CSRRWI => blk: {
+                var result = CsrResult{};
+                if (rd_nonzero) {
+                    result.rd_val = try self.read(cycle_count, csr_addr);
+                }
+                try self.write(csr_addr, src_val);
+                break :blk result;
+            },
+            .CSRRS, .CSRRSI => blk: {
+                const old = try self.read(cycle_count, csr_addr);
+                if (src_nonzero) {
+                    try self.write(csr_addr, old | src_val);
+                }
+                break :blk .{ .rd_val = old };
+            },
+            .CSRRC, .CSRRCI => blk: {
+                const old = try self.read(cycle_count, csr_addr);
+                if (src_nonzero) {
+                    try self.write(csr_addr, old & ~src_val);
+                }
+                break :blk .{ .rd_val = old };
+            },
+        };
+    }
 
     pub fn read(self: *const Csr, cycle_count: u64, addr: u12) !u32 {
         return switch (addr) {

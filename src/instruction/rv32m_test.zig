@@ -7,18 +7,11 @@ const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 const h = @import("test_helpers.zig");
 
-// --- Helpers ---
+const loadInst = h.loadInst;
 
 fn encodeR(f3: u3, f7: u7, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
-    return @as(u32, 0b0110011) |
-        (@as(u32, rd_v) << 7) |
-        (@as(u32, f3) << 12) |
-        (@as(u32, rs1_v) << 15) |
-        (@as(u32, rs2_v) << 20) |
-        (@as(u32, f7) << 25);
+    return h.encodeR(0b0110011, f3, f7, rd_v, rs1_v, rs2_v);
 }
-
-const loadInst = h.loadInst;
 
 // --- Decode tests ---
 

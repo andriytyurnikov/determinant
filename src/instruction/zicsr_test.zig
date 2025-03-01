@@ -8,20 +8,7 @@ const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 const h = @import("test_helpers.zig");
 
-// --- Encoding helpers ---
-
-/// Encode a CSR instruction (SYSTEM opcode = 0b1110011, I-type).
-/// csr_addr is the 12-bit CSR address, placed in imm[31:20].
-/// For register variants (CSRRW/CSRRS/CSRRC), rs1_v is the source register.
-/// For immediate variants (CSRRWI/CSRRSI/CSRRCI), rs1_v holds the 5-bit zimm.
-fn encodeCsr(f3: u3, rd_v: u5, rs1_v: u5, csr_addr: u12) u32 {
-    return @as(u32, 0b1110011) |
-        (@as(u32, rd_v) << 7) |
-        (@as(u32, f3) << 12) |
-        (@as(u32, rs1_v) << 15) |
-        (@as(u32, csr_addr) << 20);
-}
-
+const encodeCsr = h.encodeCsr;
 const loadInst = h.loadInst;
 
 // --- Decode tests ---
