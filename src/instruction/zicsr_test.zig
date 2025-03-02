@@ -1,7 +1,6 @@
 const std = @import("std");
 const instruction = @import("../instruction.zig");
 const Opcode = instruction.Opcode;
-const zicsr = instruction.zicsr;
 const decoder = @import("../decoder.zig");
 const decode = decoder.decode;
 const cpu_mod = @import("../cpu.zig");
