@@ -133,10 +133,10 @@ pub const Cpu = struct {
 
         switch (inst.op) {
             .i => |i_op| {
-                result = try self.executeBase(i_op, inst, rs1_val, rs2_val, inst_size, &next_pc);
+                result = try self.executeI(i_op, inst, rs1_val, rs2_val, inst_size, &next_pc);
             },
             .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
-            .a => |a_op| try self.executeAtomic(a_op, inst.rd, rs1_val, rs2_val),
+            .a => |a_op| try self.executeA(a_op, inst.rd, rs1_val, rs2_val),
             .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, inst.imm),
         }
 
@@ -145,7 +145,7 @@ pub const Cpu = struct {
         return result;
     }
 
-    fn executeBase(self: *Cpu, op: rv32i.Opcode, inst: instruction.Instruction, rs1_val: u32, rs2_val: u32, inst_size: u32, next_pc: *u32) !StepResult {
+    fn executeI(self: *Cpu, op: rv32i.Opcode, inst: instruction.Instruction, rs1_val: u32, rs2_val: u32, inst_size: u32, next_pc: *u32) !StepResult {
         const imm_u: u32 = @bitCast(inst.imm);
         switch (op) {
             // R-type ALU
@@ -257,7 +257,7 @@ pub const Cpu = struct {
         return .Continue;
     }
 
-    // --- Atomic helpers ---
+    // --- RV32A helpers ---
 
     fn invalidateReservation(self: *Cpu, addr: u32) void {
         if (self.reservation_set and (addr & 0xFFFFFFFC) == self.reservation_addr) {
@@ -265,7 +265,7 @@ pub const Cpu = struct {
         }
     }
 
-    fn executeAtomic(self: *Cpu, op: rv32a.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32) !void {
+    fn executeA(self: *Cpu, op: rv32a.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32) !void {
         const addr = rs1_val;
         switch (op) {
             .LR_W => {
@@ -291,7 +291,7 @@ pub const Cpu = struct {
         }
     }
 
-    // --- CSR helpers ---
+    // --- Zicsr helpers ---
 
     fn executeCsr(self: *Cpu, op: zicsr.Opcode, rd_reg: u5, rs1_field: u5, imm: i32) !void {
         const csr_addr: u12 = @truncate(@as(u32, @bitCast(imm)));

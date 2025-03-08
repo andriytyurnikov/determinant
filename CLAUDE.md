@@ -23,7 +23,8 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - `Format` enum lives in `format.zig` — extensions import it to provide their `format()` method; `instruction.zig` re-exports it
 - Extension files (`rv32i.zig`, `rv32m.zig`, `rv32a.zig`, `zicsr.zig`) do NOT import `instruction.zig` — no circular deps
 - CSR storage (`Csr` struct with `read`/`write`) lives in `zicsr.zig`, not `cpu.zig`
-- Each extension's execution is delegated: `executeBase()` (RV32I), `rv32m.execute()`, `rv32a.computeAmo()`, `zicsr.Csr.execute()`
+- Each extension's execution is delegated: `executeI()` (RV32I), `rv32m.execute()`, `rv32a.computeAmo()`, `zicsr.Csr.execute()`
+- CPU dispatch methods named after tagged union fields: `executeI`, `executeA`, `executeCsr`; RV32M is inline (pure function)
 - LR_W/SC_W orchestration stays in cpu.zig (needs reservation state + memory access); AMO computation is in `rv32a.zig`
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
 - `rv32c.zig` imports `instruction.zig` (consumes types) — it expands 16-bit compressed to existing RV32I `Instruction`s; imported directly by `root.zig` (not via `instruction.zig`) to avoid circular dependency
