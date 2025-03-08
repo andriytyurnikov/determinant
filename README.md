@@ -57,7 +57,7 @@ src/
     rv32m_test.zig      — RV32M decode + execute tests
     rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), computeAmo(), format()
     rv32a_test.zig      — RV32A decode + execute tests
-    rv32c.zig           — RV32C compressed instruction expansion (16-bit → Instruction)
+    rv32c.zig           — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Instruction)
     rv32c_test.zig      — RV32C expansion + CPU step tests
     zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem(), format(), Csr struct with read/write/execute
     zicsr_test.zig      — Zicsr decode + execute tests
@@ -97,4 +97,4 @@ The library is available via `@import("determinant")`.
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
 - No allocators in core VM — deterministic by construction
 - FENCE is intentionally omitted (single-hart VM)
-- RV32C compressed instructions expand to equivalent RV32I instructions — no new opcodes
+- RV32C compressed instructions expand to equivalent RV32I instructions — `rv32c.Opcode` is for decode/display only (not in the `Opcode` tagged union)

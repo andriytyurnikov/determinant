@@ -62,7 +62,11 @@ pub fn main() !void {
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
-    const op_name = inst.op.name();
+    // Detect compressed instructions: low 2 bits of raw != 0b11
+    const op_name = if ((inst.raw & 0b11) != 0b11)
+        (det.rv32c.decode(@truncate(inst.raw)) catch unreachable).name()
+    else
+        inst.op.name();
     switch (inst.op) {
         .i => |i_op| switch (i_op) {
             .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),

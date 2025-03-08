@@ -27,6 +27,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - LR_W/SC_W orchestration stays in cpu.zig (needs reservation state + memory access); AMO computation is in `rv32a.zig`
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
 - `rv32c.zig` imports `instruction.zig` (consumes types) — it expands 16-bit compressed to existing RV32I `Instruction`s; imported directly by `root.zig` (not via `instruction.zig`) to avoid circular dependency
+- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instruction.Opcode` tagged union (no execution path, no format); `decode()` maps bits→Opcode, `expand()` calls `decode()` then flat-switches to build `Instruction`
 - Decode return types: `rv32m.decodeR()` returns non-optional `Opcode` (all funct3 values valid); other decoders return `?Opcode` (some inputs invalid)
 - No allocators in core VM — deterministic by construction
 - FENCE is intentionally omitted (single-hart VM)
