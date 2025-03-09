@@ -60,6 +60,10 @@ pub const Opcode = enum {
     ECALL,
     EBREAK,
 
+    pub fn name(self: Opcode) []const u8 {
+        return @tagName(self);
+    }
+
     pub fn format(self: Opcode) Format {
         return switch (self) {
             .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
@@ -79,7 +83,11 @@ pub const Opcode = enum {
 /// Returns null for illegal funct3/funct7 combinations.
 pub fn decodeR(f3: u3, f7: u7) ?Opcode {
     return switch (f3) {
-        0b000 => if (f7 == 0b0000000) .ADD else if (f7 == 0b0100000) .SUB else null,
+        0b000 => switch (f7) {
+            0b0000000 => .ADD,
+            0b0100000 => .SUB,
+            else => null,
+        },
         0b001 => if (f7 == 0b0000000) .SLL else null,
         0b010 => if (f7 == 0b0000000) .SLT else null,
         0b011 => if (f7 == 0b0000000) .SLTU else null,

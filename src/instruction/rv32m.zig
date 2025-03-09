@@ -12,6 +12,10 @@ pub const Opcode = enum {
     REM,
     REMU,
 
+    pub fn name(self: Opcode) []const u8 {
+        return @tagName(self);
+    }
+
     pub fn format(self: Opcode) Format {
         _ = self;
         return .R;

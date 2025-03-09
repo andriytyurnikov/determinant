@@ -22,8 +22,8 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b0110011 => decodeR(raw),
         0b0010011 => decodeIAlu(raw),
         0b0000011 => decodeLoad(raw),
-        0b0100011 => decodeS(raw),
-        0b1100011 => decodeB(raw),
+        0b0100011 => decodeStore(raw),
+        0b1100011 => decodeBranch(raw),
         0b0110111 => decodeU(raw, .{ .i = .LUI }),
         0b0010111 => decodeU(raw, .{ .i = .AUIPC }),
         0b1101111 => decodeJ(raw),
@@ -132,12 +132,12 @@ fn decodeLoad(raw: u32) DecodeError!Instruction {
     return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
 }
 
-fn decodeS(raw: u32) DecodeError!Instruction {
+fn decodeStore(raw: u32) DecodeError!Instruction {
     const i_op = rv32i.decodeStore(funct3(raw)) orelse return error.IllegalInstruction;
     return .{ .op = .{ .i = i_op }, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immS(raw), .raw = raw };
 }
 
-fn decodeB(raw: u32) DecodeError!Instruction {
+fn decodeBranch(raw: u32) DecodeError!Instruction {
     const i_op = rv32i.decodeBranch(funct3(raw)) orelse return error.IllegalInstruction;
     return .{ .op = .{ .i = i_op }, .rs1 = rs1(raw), .rs2 = rs2(raw), .imm = immB(raw), .raw = raw };
 }

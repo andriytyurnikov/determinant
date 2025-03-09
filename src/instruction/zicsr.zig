@@ -11,6 +11,10 @@ pub const Opcode = enum {
     CSRRSI,
     CSRRCI,
 
+    pub fn name(self: Opcode) []const u8 {
+        return @tagName(self);
+    }
+
     pub fn format(self: Opcode) Format {
         _ = self;
         return .I;

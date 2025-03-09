@@ -22,10 +22,7 @@ pub const Opcode = union(enum) {
 
     pub fn name(self: Opcode) []const u8 {
         return switch (self) {
-            .i => |op| @tagName(op),
-            .m => |op| @tagName(op),
-            .a => |op| @tagName(op),
-            .csr => |op| @tagName(op),
+            inline else => |op| op.name(),
         };
     }
 };
