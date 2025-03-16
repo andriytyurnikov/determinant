@@ -59,7 +59,7 @@ pub fn decodeR(f7: u7) ?Opcode {
 
 /// Compute the result of an AMO operation given the old memory value and rs2.
 /// Only valid for AMO opcodes (not LR_W/SC_W).
-pub fn computeAmo(op: Opcode, old: u32, rs2_val: u32) u32 {
+pub fn execute(op: Opcode, old: u32, rs2_val: u32) u32 {
     return switch (op) {
         .AMOSWAP_W => rs2_val,
         .AMOADD_W => old +% rs2_val,

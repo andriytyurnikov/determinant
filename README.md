@@ -55,7 +55,7 @@ src/
     rv32i_test.zig      — RV32I decode + execute tests
     rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
     rv32m_test.zig      — RV32M decode + execute tests
-    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), computeAmo(), format()
+    rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), execute(), format()
     rv32a_test.zig      — RV32A decode + execute tests
     rv32c.zig           — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Instruction)
     rv32c_test.zig      — RV32C expansion + CPU step tests

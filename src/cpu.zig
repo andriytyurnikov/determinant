@@ -135,7 +135,7 @@ pub const Cpu = struct {
             .i => |i_op| {
                 result = try self.executeI(i_op, inst, rs1_val, rs2_val, inst_size, &next_pc);
             },
-            .m => |m_op| self.writeReg(inst.rd, rv32m.execute(m_op, rs1_val, rs2_val)),
+            .m => |m_op| self.executeM(m_op, inst.rd, rs1_val, rs2_val),
             .a => |a_op| try self.executeA(a_op, inst.rd, rs1_val, rs2_val),
             .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, inst.imm),
         }
@@ -257,6 +257,12 @@ pub const Cpu = struct {
         return .Continue;
     }
 
+    // --- RV32M helpers ---
+
+    fn executeM(self: *Cpu, op: rv32m.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32) void {
+        self.writeReg(rd_reg, rv32m.execute(op, rs1_val, rs2_val));
+    }
+
     // --- RV32A helpers ---
 
     fn invalidateReservation(self: *Cpu, addr: u32) void {
@@ -285,7 +291,7 @@ pub const Cpu = struct {
             },
             else => {
                 const old = try self.readWord(addr);
-                try self.writeWord(addr, rv32a.computeAmo(op, old, rs2_val));
+                try self.writeWord(addr, rv32a.execute(op, old, rs2_val));
                 self.writeReg(rd_reg, old);
             },
         }
