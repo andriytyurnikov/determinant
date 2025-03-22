@@ -18,10 +18,11 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
 - Tests live in `*_test.zig` companion files, pulled in via `test { _ = @import("foo_test.zig"); }` blocks
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
-- ISA extensions live in `src/instruction/` — each owns its own `Opcode` enum (with `name()` and `format()` methods), decode, and execute logic
+- ISA extensions live in `src/instruction/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
+- `format.zig` exports `Meta` struct (`name_str` + `fmt`) and generic `opcodeName`/`opcodeFormat` helpers; each extension's `Opcode` provides a `pub fn meta(comptime self)` and thin `name()`/`format()` wrappers that delegate to the generic helpers
 - `instruction.zig` composes extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode }`
 - `instruction.Opcode` delegates `name()` and `format()` to extensions via `inline else`; `rv32a.name()` returns canonical dot notation (`"LR.W"`, `"AMOSWAP.W"`)
-- `Format` enum lives in `format.zig` — extensions import it to provide their `format()` method; `instruction.zig` re-exports it
+- `format.zig` owns `Format` enum, `Meta` struct, and generic `opcodeName`/`opcodeFormat` helpers; extensions import it as `fmt`; `instruction.zig` re-exports `Format`
 - Extension files (`rv32i.zig`, `rv32m.zig`, `rv32a.zig`, `zicsr.zig`) do NOT import `instruction.zig` — no circular deps
 - CSR storage (`Csr` struct with `read`/`write`) lives in `zicsr.zig`, not `cpu.zig`
 - Each extension's execution is delegated: `executeI()` (RV32I), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`
@@ -29,7 +30,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - LR_W/SC_W orchestration stays in cpu.zig (needs reservation state + memory access); AMO computation is in `rv32a.zig`
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
 - `rv32c.zig` imports `instruction.zig` (consumes types) — it expands 16-bit compressed to existing RV32I `Instruction`s; imported directly by `root.zig` (not via `instruction.zig`) to avoid circular dependency
-- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instruction.Opcode` tagged union (no execution path, no format); `decode()` maps bits→Opcode, `expand()` calls `decode()` then flat-switches to build `Instruction`
+- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instruction.Opcode` tagged union (no execution path, no format); uses `meta()` with a comptime `dotName` transform (`C_LW` → `"C.LW"`); `decode()` maps bits→Opcode, `expand()` calls `decode()` then flat-switches to build `Instruction`
 - `decoder.zig` sub-decoders use semantic names matching their rv32i counterparts: `decodeStore`, `decodeBranch`, `decodeLoad`, `decodeAtomic`, `decodeSystem`
 - Decode return types: `rv32m.decodeR()` returns non-optional `Opcode` (all funct3 values valid); other decoders return `?Opcode` (some inputs invalid)
 - No allocators in core VM — deterministic by construction

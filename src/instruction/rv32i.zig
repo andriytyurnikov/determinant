@@ -1,7 +1,8 @@
 /// RV32I base integer instruction set opcodes and decode helpers.
 /// This module does NOT import instruction.zig — it is imported BY it.
 
-const Format = @import("format.zig").Format;
+const fmt = @import("format.zig");
+const Format = fmt.Format;
 
 /// RV32I opcodes (39 variants).
 pub const Opcode = enum {
@@ -60,22 +61,29 @@ pub const Opcode = enum {
     ECALL,
     EBREAK,
 
+    pub fn meta(comptime self: Opcode) fmt.Meta {
+        return .{
+            .name_str = @tagName(self),
+            .fmt = switch (self) {
+                .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
+                .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
+                .LB, .LH, .LW, .LBU, .LHU => .I,
+                .JALR => .I,
+                .ECALL, .EBREAK => .I,
+                .SB, .SH, .SW => .S,
+                .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
+                .LUI, .AUIPC => .U,
+                .JAL => .J,
+            },
+        };
+    }
+
     pub fn name(self: Opcode) []const u8 {
-        return @tagName(self);
+        return fmt.opcodeName(Opcode, self);
     }
 
     pub fn format(self: Opcode) Format {
-        return switch (self) {
-            .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
-            .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
-            .LB, .LH, .LW, .LBU, .LHU => .I,
-            .JALR => .I,
-            .ECALL, .EBREAK => .I,
-            .SB, .SH, .SW => .S,
-            .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,
-            .LUI, .AUIPC => .U,
-            .JAL => .J,
-        };
+        return fmt.opcodeFormat(Opcode, self);
     }
 };
 

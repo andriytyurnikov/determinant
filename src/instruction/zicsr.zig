@@ -1,7 +1,8 @@
 /// Zicsr extension: Control and Status Register instructions (6 variants).
 /// This module does NOT import instruction.zig — it is imported BY it.
 
-const Format = @import("format.zig").Format;
+const fmt = @import("format.zig");
+const Format = fmt.Format;
 
 pub const Opcode = enum {
     CSRRW,
@@ -11,13 +12,16 @@ pub const Opcode = enum {
     CSRRSI,
     CSRRCI,
 
+    pub fn meta(comptime self: Opcode) fmt.Meta {
+        return .{ .name_str = @tagName(self), .fmt = .I };
+    }
+
     pub fn name(self: Opcode) []const u8 {
-        return @tagName(self);
+        return fmt.opcodeName(Opcode, self);
     }
 
     pub fn format(self: Opcode) Format {
-        _ = self;
-        return .I;
+        return fmt.opcodeFormat(Opcode, self);
     }
 };
 

@@ -1,5 +1,6 @@
 const std = @import("std");
-const Format = @import("format.zig").Format;
+const fmt = @import("format.zig");
+const Format = fmt.Format;
 
 /// RV32M multiply/divide extension opcodes (8 variants).
 pub const Opcode = enum {
@@ -12,13 +13,16 @@ pub const Opcode = enum {
     REM,
     REMU,
 
+    pub fn meta(comptime self: Opcode) fmt.Meta {
+        return .{ .name_str = @tagName(self), .fmt = .R };
+    }
+
     pub fn name(self: Opcode) []const u8 {
-        return @tagName(self);
+        return fmt.opcodeName(Opcode, self);
     }
 
     pub fn format(self: Opcode) Format {
-        _ = self;
-        return .R;
+        return fmt.opcodeFormat(Opcode, self);
     }
 };
 

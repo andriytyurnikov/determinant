@@ -3,6 +3,7 @@
 /// This module imports instruction.zig (consumes types) but instruction.zig does NOT import this.
 /// Unlike other extensions, rv32c has its own Opcode enum for decode/display purposes only —
 /// it is NOT part of the instruction.Opcode tagged union (no execution path, no format).
+const fmt = @import("format.zig");
 const instruction = @import("../instruction.zig");
 const Instruction = instruction.Instruction;
 const BaseOpcode = instruction.Opcode;
@@ -40,35 +41,23 @@ pub const Opcode = enum {
     C_ADD,
     C_SWSP,
 
+    pub fn meta(comptime self: Opcode) struct { name_str: []const u8 } {
+        return .{ .name_str = comptime dotName(@tagName(self)) };
+    }
+
     pub fn name(self: Opcode) []const u8 {
-        return switch (self) {
-            .C_ADDI4SPN => "C.ADDI4SPN",
-            .C_LW => "C.LW",
-            .C_SW => "C.SW",
-            .C_ADDI => "C.ADDI",
-            .C_JAL => "C.JAL",
-            .C_LI => "C.LI",
-            .C_ADDI16SP => "C.ADDI16SP",
-            .C_LUI => "C.LUI",
-            .C_SRLI => "C.SRLI",
-            .C_SRAI => "C.SRAI",
-            .C_ANDI => "C.ANDI",
-            .C_SUB => "C.SUB",
-            .C_XOR => "C.XOR",
-            .C_OR => "C.OR",
-            .C_AND => "C.AND",
-            .C_J => "C.J",
-            .C_BEQZ => "C.BEQZ",
-            .C_BNEZ => "C.BNEZ",
-            .C_SLLI => "C.SLLI",
-            .C_LWSP => "C.LWSP",
-            .C_JR => "C.JR",
-            .C_MV => "C.MV",
-            .C_EBREAK => "C.EBREAK",
-            .C_JALR => "C.JALR",
-            .C_ADD => "C.ADD",
-            .C_SWSP => "C.SWSP",
-        };
+        return fmt.opcodeName(Opcode, self);
+    }
+
+    fn dotName(comptime tag: []const u8) []const u8 {
+        comptime {
+            if (tag.len < 2 or tag[0] != 'C' or tag[1] != '_')
+                @compileError("expected C_ prefix on rv32c opcode tag");
+            var buf: [tag.len]u8 = tag[0..tag.len].*;
+            buf[1] = '.';
+            const final = buf;
+            return &final;
+        }
     }
 };
 

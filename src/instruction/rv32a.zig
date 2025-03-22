@@ -1,4 +1,5 @@
-const Format = @import("format.zig").Format;
+const fmt = @import("format.zig");
+const Format = fmt.Format;
 
 /// RV32A atomic extension opcodes (11 variants).
 pub const Opcode = enum {
@@ -14,25 +15,31 @@ pub const Opcode = enum {
     AMOMINU_W,
     AMOMAXU_W,
 
-    pub fn name(self: Opcode) []const u8 {
-        return switch (self) {
-            .LR_W => "LR.W",
-            .SC_W => "SC.W",
-            .AMOSWAP_W => "AMOSWAP.W",
-            .AMOADD_W => "AMOADD.W",
-            .AMOXOR_W => "AMOXOR.W",
-            .AMOAND_W => "AMOAND.W",
-            .AMOOR_W => "AMOOR.W",
-            .AMOMIN_W => "AMOMIN.W",
-            .AMOMAX_W => "AMOMAX.W",
-            .AMOMINU_W => "AMOMINU.W",
-            .AMOMAXU_W => "AMOMAXU.W",
+    pub fn meta(comptime self: Opcode) fmt.Meta {
+        return .{
+            .fmt = .R,
+            .name_str = switch (self) {
+                .LR_W => "LR.W",
+                .SC_W => "SC.W",
+                .AMOSWAP_W => "AMOSWAP.W",
+                .AMOADD_W => "AMOADD.W",
+                .AMOXOR_W => "AMOXOR.W",
+                .AMOAND_W => "AMOAND.W",
+                .AMOOR_W => "AMOOR.W",
+                .AMOMIN_W => "AMOMIN.W",
+                .AMOMAX_W => "AMOMAX.W",
+                .AMOMINU_W => "AMOMINU.W",
+                .AMOMAXU_W => "AMOMAXU.W",
+            },
         };
     }
 
+    pub fn name(self: Opcode) []const u8 {
+        return fmt.opcodeName(Opcode, self);
+    }
+
     pub fn format(self: Opcode) Format {
-        _ = self;
-        return .R;
+        return fmt.opcodeFormat(Opcode, self);
     }
 };
 
