@@ -23,7 +23,6 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - `instruction.zig` composes extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode }`
 - `instruction.Opcode` delegates `name()` and `format()` to extensions via `inline else`; `rv32a.name()` returns canonical dot notation (`"LR.W"`, `"AMOSWAP.W"`)
 - `format.zig` owns `Format` enum, `Meta` struct, and generic `opcodeName`/`opcodeFormat` helpers; extensions import it as `fmt`; `instruction.zig` re-exports `Format`
-- Extension files (`rv32i.zig`, `rv32m.zig`, `rv32a.zig`, `zicsr.zig`) do NOT import `instruction.zig` — no circular deps
 - CSR storage (`Csr` struct with `read`/`write`) lives in `zicsr.zig`, not `cpu.zig`
 - Each extension's execution is delegated: `executeI()` (RV32I), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`

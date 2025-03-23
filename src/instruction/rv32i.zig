@@ -1,5 +1,4 @@
 /// RV32I base integer instruction set opcodes and decode helpers.
-/// This module does NOT import instruction.zig — it is imported BY it.
 
 const fmt = @import("format.zig");
 const Format = fmt.Format;

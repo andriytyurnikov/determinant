@@ -1,5 +1,4 @@
 /// Zicsr extension: Control and Status Register instructions (6 variants).
-/// This module does NOT import instruction.zig — it is imported BY it.
 
 const fmt = @import("format.zig");
 const Format = fmt.Format;
