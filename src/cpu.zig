@@ -293,6 +293,7 @@ pub const Cpu = struct {
                 const old = try self.readWord(addr);
                 try self.writeWord(addr, rv32a.execute(op, old, rs2_val));
                 self.writeReg(rd_reg, old);
+                self.invalidateReservation(addr);
             },
         }
     }

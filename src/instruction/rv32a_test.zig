@@ -187,6 +187,34 @@ test "step: SC.W fails when address differs from LR.W" {
     try std.testing.expectEqual(@as(u32, 0x12345678), readWordAt(&cpu, sc_addr)); // unchanged
 }
 
+test "step: SC.W fails after intervening AMO to same address" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 10);
+    cpu.writeReg(1, addr);
+
+    // LR.W x3, (x1)
+    loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expect(cpu.reservation_set);
+
+    // AMOADD.W x6, x2, (x1) — intervening AMO to same address
+    cpu.writeReg(2, 5);
+    cpu.pc = 4;
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], encodeAtomic(0b00000, 6, 1, 2), .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 15), readWordAt(&cpu, addr));
+    try std.testing.expect(!cpu.reservation_set); // reservation invalidated by AMO
+
+    // SC.W x4, x5, (x1) — should fail
+    cpu.writeReg(5, 0xCAFEBABE);
+    cpu.pc = 8;
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], encodeAtomic(0b00011, 4, 1, 5), .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
+    try std.testing.expectEqual(@as(u32, 15), readWordAt(&cpu, addr)); // unchanged
+}
+
 // --- AMO tests ---
 
 test "step: AMOSWAP.W" {
