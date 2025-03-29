@@ -73,7 +73,7 @@ pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
             else if (a == std.math.minInt(i32) and b == -1)
                 std.math.minInt(i32)
             else
-                @truncate(@divTrunc(a, b));
+                @divTrunc(a, b);
             break :blk @bitCast(res);
         },
         .DIVU => if (rs2_val == 0) 0xFFFFFFFF else rs1_val / rs2_val,
@@ -85,7 +85,7 @@ pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
             else if (a == std.math.minInt(i32) and b == -1)
                 0
             else
-                @truncate(@rem(a, b));
+                @rem(a, b);
             break :blk @bitCast(res);
         },
         .REMU => if (rs2_val == 0) rs1_val else rs1_val % rs2_val,
