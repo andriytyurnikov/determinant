@@ -4,6 +4,9 @@ pub const rv32i = @import("instruction/rv32i.zig");
 pub const rv32m = @import("instruction/rv32m.zig");
 pub const rv32a = @import("instruction/rv32a.zig");
 pub const zicsr = @import("instruction/zicsr.zig");
+pub const zba = @import("instruction/zba.zig");
+pub const zbb = @import("instruction/zbb.zig");
+pub const zbs = @import("instruction/zbs.zig");
 
 pub const Format = @import("instruction/format.zig").Format;
 
@@ -13,6 +16,9 @@ pub const Opcode = union(enum) {
     m: rv32m.Opcode,
     a: rv32a.Opcode,
     csr: zicsr.Opcode,
+    zba: zba.Opcode,
+    zbb: zbb.Opcode,
+    zbs: zbs.Opcode,
 
     pub fn format(self: Opcode) Format {
         return switch (self) {
@@ -54,4 +60,7 @@ test "opcode format mapping" {
 test "opcode name" {
     try std.testing.expectEqualStrings("ADD", (Opcode{ .i = .ADD }).name());
     try std.testing.expectEqualStrings("MUL", (Opcode{ .m = .MUL }).name());
+    try std.testing.expectEqualStrings("SH1ADD", (Opcode{ .zba = .SH1ADD }).name());
+    try std.testing.expectEqualStrings("SEXT.B", (Opcode{ .zbb = .SEXT_B }).name());
+    try std.testing.expectEqualStrings("BCLR", (Opcode{ .zbs = .BCLR }).name());
 }

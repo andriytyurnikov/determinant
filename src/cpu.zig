@@ -5,6 +5,9 @@ const rv32i = instruction.rv32i;
 const rv32m = instruction.rv32m;
 const rv32a = instruction.rv32a;
 const zicsr = instruction.zicsr;
+const zba = instruction.zba;
+const zbb = instruction.zbb;
+const zbs = instruction.zbs;
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
@@ -138,6 +141,9 @@ pub const Cpu = struct {
             .m => |m_op| self.executeM(m_op, inst.rd, rs1_val, rs2_val),
             .a => |a_op| try self.executeA(a_op, inst.rd, rs1_val, rs2_val),
             .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, inst.imm),
+            .zba => |op| self.executeZba(op, inst.rd, rs1_val, rs2_val),
+            .zbb => |op| self.executeZbb(op, inst.rd, rs1_val, rs2_val, @bitCast(inst.imm)),
+            .zbs => |op| self.executeZbs(op, inst.rd, rs1_val, rs2_val, @bitCast(inst.imm)),
         }
 
         self.pc = next_pc;
@@ -296,6 +302,26 @@ pub const Cpu = struct {
                 self.invalidateReservation(addr);
             },
         }
+    }
+
+    // --- Zba helpers ---
+
+    fn executeZba(self: *Cpu, op: zba.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32) void {
+        self.writeReg(rd_reg, zba.execute(op, rs1_val, rs2_val));
+    }
+
+    // --- Zbb helpers ---
+
+    fn executeZbb(self: *Cpu, op: zbb.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32, imm: u32) void {
+        const src2: u32 = if (op.format() == .R) rs2_val else imm;
+        self.writeReg(rd_reg, zbb.execute(op, rs1_val, src2));
+    }
+
+    // --- Zbs helpers ---
+
+    fn executeZbs(self: *Cpu, op: zbs.Opcode, rd_reg: u5, rs1_val: u32, rs2_val: u32, imm: u32) void {
+        const src2: u32 = if (op.format() == .R) rs2_val else imm;
+        self.writeReg(rd_reg, zbs.execute(op, rs1_val, src2));
     }
 
     // --- Zicsr helpers ---

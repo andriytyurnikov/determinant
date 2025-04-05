@@ -4,6 +4,9 @@ const rv32i = instruction.rv32i;
 const rv32m = instruction.rv32m;
 const rv32a = instruction.rv32a;
 const zicsr = instruction.zicsr;
+const zba = instruction.zba;
+const zbb = instruction.zbb;
+const zbs = instruction.zbs;
 const rv32c = @import("instruction/rv32c.zig");
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
@@ -111,20 +114,56 @@ fn decodeR(raw: u32) DecodeError!Instruction {
         return .{ .op = .{ .m = rv32m.decodeR(f3) }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
-    const i_op = rv32i.decodeR(f3, f7) orelse return error.IllegalInstruction;
-    return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    // RV32I base
+    if (rv32i.decodeR(f3, f7)) |i_op| {
+        return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    }
+
+    // Zba: funct7 = 0b0010000
+    if (f7 == 0b0010000) {
+        if (zba.decodeR(f3)) |op| {
+            return .{ .op = .{ .zba = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+        }
+    }
+
+    // Zbb
+    if (zbb.decodeR(f3, f7, rs2(raw))) |op| {
+        return .{ .op = .{ .zbb = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    }
+
+    // Zbs
+    if (zbs.decodeR(f3, f7)) |op| {
+        return .{ .op = .{ .zbs = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    }
+
+    return error.IllegalInstruction;
 }
 
 fn decodeIAlu(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
-    const i_op = rv32i.decodeIAlu(f3, f7) orelse return error.IllegalInstruction;
-    // For shift instructions, immediate is the shamt (rs2 field = bits [24:20])
+    // For shift-like instructions (f3=001 or f3=101), immediate is the shamt
     const imm_val: i32 = if (f3 == 0b001 or f3 == 0b101)
         @as(i32, @intCast(rs2(raw)))
     else
         immI(raw);
-    return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
+
+    // RV32I base
+    if (rv32i.decodeIAlu(f3, f7)) |i_op| {
+        return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
+    }
+
+    // Zbb I-type
+    if (zbb.decodeIAlu(f3, f7, rs2(raw))) |op| {
+        return .{ .op = .{ .zbb = op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
+    }
+
+    // Zbs I-type
+    if (zbs.decodeIAlu(f3, f7)) |op| {
+        return .{ .op = .{ .zbs = op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = imm_val, .raw = raw };
+    }
+
+    return error.IllegalInstruction;
 }
 
 fn decodeLoad(raw: u32) DecodeError!Instruction {

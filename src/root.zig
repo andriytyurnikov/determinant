@@ -7,6 +7,9 @@ pub const rv32i = instruction.rv32i;
 pub const rv32m = instruction.rv32m;
 pub const rv32a = instruction.rv32a;
 pub const zicsr = instruction.zicsr;
+pub const zba = instruction.zba;
+pub const zbb = instruction.zbb;
+pub const zbs = instruction.zbs;
 // rv32c imports instruction.zig (for Instruction/Opcode types), so instruction.zig
 // cannot import rv32c without a circular dependency. Imported directly here.
 pub const rv32c = @import("instruction/rv32c.zig");
