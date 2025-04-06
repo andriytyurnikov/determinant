@@ -62,8 +62,7 @@ pub fn main() !void {
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
-    // Detect compressed instructions: low 2 bits of raw != 0b11
-    const op_name = if ((inst.raw & 0b11) != 0b11)
+    const op_name = if (det.instruction.isCompressed(inst.raw))
         (det.rv32c.decode(@truncate(inst.raw)) catch unreachable).name()
     else
         inst.op.name();

@@ -22,8 +22,7 @@ pub const Cpu = struct {
     regs: [32]u32,
     memory: [MEMORY_SIZE]u8,
     cycle_count: u64,
-    reservation_set: bool,
-    reservation_addr: u32,
+    reservation: ?u32,
     csrs: zicsr.Csr,
 
     pub fn init() Cpu {
@@ -32,8 +31,7 @@ pub const Cpu = struct {
             .regs = [_]u32{0} ** 32,
             .memory = [_]u8{0} ** MEMORY_SIZE,
             .cycle_count = 0,
-            .reservation_set = false,
-            .reservation_addr = 0,
+            .reservation = null,
             .csrs = .{},
         };
     }
@@ -57,7 +55,7 @@ pub const Cpu = struct {
         if (self.pc > MEMORY_SIZE - 2) return error.PCOutOfBounds;
         const addr: usize = self.pc;
         const low: u16 = std.mem.readInt(u16, self.memory[addr..][0..2], .little);
-        if ((low & 0b11) != 0b11) return @as(u32, low);
+        if (instruction.isCompressed(low)) return @as(u32, low);
         if (self.pc > MEMORY_SIZE - 4) return error.PCOutOfBounds;
         return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
     }
@@ -93,6 +91,7 @@ pub const Cpu = struct {
     pub fn writeByte(self: *Cpu, addr: u32, value: u8) !void {
         if (addr >= MEMORY_SIZE) return error.AddressOutOfBounds;
         self.memory[addr] = value;
+        self.invalidateReservation(addr);
     }
 
     pub fn writeHalfword(self: *Cpu, addr: u32, value: u16) !void {
@@ -100,6 +99,7 @@ pub const Cpu = struct {
         if (addr > MEMORY_SIZE - 2) return error.AddressOutOfBounds;
         const a: usize = addr;
         std.mem.writeInt(u16, self.memory[a..][0..2], value, .little);
+        self.invalidateReservation(addr);
     }
 
     pub fn writeWord(self: *Cpu, addr: u32, value: u32) !void {
@@ -107,6 +107,7 @@ pub const Cpu = struct {
         if (addr > MEMORY_SIZE - 4) return error.AddressOutOfBounds;
         const a: usize = addr;
         std.mem.writeInt(u32, self.memory[a..][0..4], value, .little);
+        self.invalidateReservation(addr);
     }
 
     // --- Executor ---
@@ -123,10 +124,18 @@ pub const Cpu = struct {
     }
 
     /// Fetch, decode, and execute one instruction. Advances PC and increments cycle_count.
+    ///
+    /// Pipeline invariant — the following order is load-bearing:
+    ///   1. fetch()           — read raw instruction bits at current PC
+    ///   2. decode()          — parse into Instruction struct
+    ///   3. read rs1, rs2     — register reads happen BEFORE execution
+    ///   4. execute           — modify registers/memory (may update next_pc for branches/jumps)
+    ///   5. update PC         — written AFTER execution so branches see the old PC
+    ///   6. increment cycle   — AFTER everything, so CSR reads of cycle see the pre-step count
     pub fn step(self: *Cpu) !StepResult {
         const raw = try self.fetch();
         const inst = try decoder.decode(raw);
-        const inst_size: u32 = if ((raw & 0b11) != 0b11) 2 else 4;
+        const inst_size: u32 = if (instruction.isCompressed(raw)) 2 else 4;
 
         const rs1_val = self.readReg(inst.rs1);
         const rs2_val = self.readReg(inst.rs2);
@@ -208,17 +217,14 @@ pub const Cpu = struct {
             .SB => {
                 const addr = rs1_val +% imm_u;
                 try self.writeByte(addr, @truncate(rs2_val));
-                self.invalidateReservation(addr);
             },
             .SH => {
                 const addr = rs1_val +% imm_u;
                 try self.writeHalfword(addr, @truncate(rs2_val));
-                self.invalidateReservation(addr);
             },
             .SW => {
                 const addr = rs1_val +% imm_u;
                 try self.writeWord(addr, rs2_val);
-                self.invalidateReservation(addr);
             },
 
             // Branches
@@ -272,8 +278,10 @@ pub const Cpu = struct {
     // --- RV32A helpers ---
 
     fn invalidateReservation(self: *Cpu, addr: u32) void {
-        if (self.reservation_set and (addr & 0xFFFFFFFC) == self.reservation_addr) {
-            self.reservation_set = false;
+        if (self.reservation) |res_addr| {
+            if ((addr & 0xFFFFFFFC) == res_addr) {
+                self.reservation = null;
+            }
         }
     }
 
@@ -283,23 +291,21 @@ pub const Cpu = struct {
             .LR_W => {
                 const val = try self.readWord(addr);
                 self.writeReg(rd_reg, val);
-                self.reservation_set = true;
-                self.reservation_addr = addr;
+                self.reservation = addr;
             },
             .SC_W => {
-                if (self.reservation_set and self.reservation_addr == addr) {
+                if (self.reservation == addr) {
                     try self.writeWord(addr, rs2_val);
                     self.writeReg(rd_reg, 0); // success
                 } else {
                     self.writeReg(rd_reg, 1); // failure
                 }
-                self.reservation_set = false;
+                self.reservation = null;
             },
             else => {
                 const old = try self.readWord(addr);
                 try self.writeWord(addr, rv32a.execute(op, old, rs2_val));
                 self.writeReg(rd_reg, old);
-                self.invalidateReservation(addr);
             },
         }
     }

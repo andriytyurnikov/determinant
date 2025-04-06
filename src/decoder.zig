@@ -17,7 +17,7 @@ pub const DecodeError = error{IllegalInstruction};
 /// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
 pub fn decode(raw: u32) DecodeError!Instruction {
     // Compressed instruction: low 2 bits != 11
-    if ((raw & 0b11) != 0b11) {
+    if (instruction.isCompressed(raw)) {
         return rv32c.expand(@truncate(raw));
     }
     const opcode_bits: u7 = @truncate(raw);
@@ -105,6 +105,11 @@ fn immJ(raw: u32) i32 {
 
 // --- Sub-decoders ---
 
+/// Decode an R-type instruction (opcode 0b0110011).
+/// Extensions are checked in priority order: M-extension first (unique funct7=0b0000001
+/// distinguishes it from RV32I which shares the same base opcode), then RV32I base,
+/// then Zba, Zbb, Zbs. M-extension must precede RV32I because both use opcode 0b0110011
+/// and a false match on funct3 alone would misidentify M instructions as RV32I.
 fn decodeR(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
@@ -139,6 +144,9 @@ fn decodeR(raw: u32) DecodeError!Instruction {
     return error.IllegalInstruction;
 }
 
+/// Decode an I-type ALU instruction (opcode 0b0010011).
+/// RV32I base is checked first, then Zbb, then Zbs. For shift-like instructions
+/// (funct3=001 or 101), funct7 disambiguates between extensions.
 fn decodeIAlu(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
@@ -212,4 +220,9 @@ fn decodeSystem(raw: u32) DecodeError!Instruction {
     }
     const csr_op = zicsr.decodeSystem(f3) orelse return error.IllegalInstruction;
     return .{ .op = .{ .csr = csr_op }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
+}
+
+test {
+    _ = @import("decoder_test.zig");
+    _ = @import("rv32c_cross_test.zig");
 }

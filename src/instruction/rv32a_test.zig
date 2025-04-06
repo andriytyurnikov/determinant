@@ -79,8 +79,7 @@ test "step: LR.W loads word and sets reservation" {
     loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 0)); // LR.W x3, (x1)
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(3));
-    try std.testing.expect(cpu.reservation_set);
-    try std.testing.expectEqual(addr, cpu.reservation_addr);
+    try std.testing.expectEqual(@as(?u32, addr), cpu.reservation);
 }
 
 test "step: SC.W succeeds after LR.W to same address" {
@@ -101,7 +100,7 @@ test "step: SC.W succeeds after LR.W to same address" {
 
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
     try std.testing.expectEqual(@as(u32, 0xCAFEBABE), readWordAt(&cpu, addr));
-    try std.testing.expect(!cpu.reservation_set);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
 }
 
 test "step: SC.W failure clears reservation" {
@@ -113,7 +112,7 @@ test "step: SC.W failure clears reservation" {
     // LR.W x3, (x1)
     loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 0));
     _ = try cpu.step();
-    try std.testing.expect(cpu.reservation_set);
+    try std.testing.expect(cpu.reservation != null);
 
     // SC.W x4, x2, (x5) — different address → failure
     cpu.writeReg(5, 0x200);
@@ -122,7 +121,7 @@ test "step: SC.W failure clears reservation" {
     std.mem.writeInt(u32, cpu.memory[4..][0..4], encodeAtomic(0b00011, 4, 5, 2), .little);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
-    try std.testing.expect(!cpu.reservation_set); // reservation cleared even on failure
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation); // reservation cleared even on failure
 }
 
 test "step: SC.W fails without prior LR.W" {
@@ -196,7 +195,7 @@ test "step: SC.W fails after intervening AMO to same address" {
     // LR.W x3, (x1)
     loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 0));
     _ = try cpu.step();
-    try std.testing.expect(cpu.reservation_set);
+    try std.testing.expect(cpu.reservation != null);
 
     // AMOADD.W x6, x2, (x1) — intervening AMO to same address
     cpu.writeReg(2, 5);
@@ -204,7 +203,7 @@ test "step: SC.W fails after intervening AMO to same address" {
     std.mem.writeInt(u32, cpu.memory[4..][0..4], encodeAtomic(0b00000, 6, 1, 2), .little);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 15), readWordAt(&cpu, addr));
-    try std.testing.expect(!cpu.reservation_set); // reservation invalidated by AMO
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation); // reservation invalidated by AMO
 
     // SC.W x4, x5, (x1) — should fail
     cpu.writeReg(5, 0xCAFEBABE);

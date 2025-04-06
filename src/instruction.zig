@@ -33,6 +33,12 @@ pub const Opcode = union(enum) {
     }
 };
 
+/// Returns true if the raw instruction bits represent a 16-bit compressed (RV32C) instruction.
+/// Compressed instructions have bits [1:0] != 0b11.
+pub fn isCompressed(raw: u32) bool {
+    return (raw & 0b11) != 0b11;
+}
+
 /// Decoded RV32 instruction.
 pub const Instruction = struct {
     op: Opcode,
