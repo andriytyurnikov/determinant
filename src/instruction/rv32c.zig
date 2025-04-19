@@ -1,12 +1,9 @@
 /// RV32C compressed instruction expansion.
 /// Every 16-bit compressed instruction maps to an existing RV32I instruction.
-/// This module imports instruction.zig (consumes types) but instruction.zig does NOT import this.
 /// Unlike other extensions, rv32c has its own Opcode enum for decode/display purposes only —
 /// it is NOT part of the instruction.Opcode tagged union (no execution path, no format).
 const fmt = @import("format.zig");
-const instruction = @import("../instruction.zig");
-const Instruction = instruction.Instruction;
-const BaseOpcode = instruction.Opcode;
+const rv32i = @import("rv32i.zig");
 
 /// RV32C compressed instruction opcodes (26 variants).
 /// Used for self-documenting decode and display (e.g. showing "C.LW" instead of "LW").
@@ -59,6 +56,17 @@ pub const Opcode = enum {
             return &final;
         }
     }
+};
+
+/// Expanded compressed instruction — uses rv32i.Opcode directly (sibling-only dependency).
+/// The decoder wraps this into a full Instruction with .op = .{ .i = exp.op }.
+pub const Expanded = struct {
+    op: rv32i.Opcode,
+    rd: u5 = 0,
+    rs1: u5 = 0,
+    rs2: u5 = 0,
+    imm: i32 = 0,
+    raw: u32,
 };
 
 /// Decode a 16-bit compressed instruction into its Opcode.
@@ -141,9 +149,9 @@ fn decodeQ2(half: u16) error{IllegalInstruction}!Opcode {
     };
 }
 
-/// Expand a 16-bit compressed instruction into its equivalent 32-bit Instruction.
+/// Expand a 16-bit compressed instruction into its equivalent Expanded form.
 /// The `raw` field stores the 16-bit value zero-extended to u32.
-pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
+pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
     const op = try decode(half);
     const raw: u32 = half;
     return switch (op) {
@@ -151,7 +159,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const nzu = ciw_nzuimm(half);
             if (nzu == 0) return error.IllegalInstruction;
             return .{
-                .op = .{ .i = .ADDI },
+                .op = .ADDI,
                 .rd = cReg(@truncate(half >> 2)),
                 .rs1 = 2, // x2 = sp
                 .imm = @intCast(nzu),
@@ -159,14 +167,14 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             };
         },
         .C_LW => .{
-            .op = .{ .i = .LW },
+            .op = .LW,
             .rd = cReg(@truncate(half >> 2)),
             .rs1 = cReg(@truncate(half >> 7)),
             .imm = @intCast(clsw_offset(half)),
             .raw = raw,
         },
         .C_SW => .{
-            .op = .{ .i = .SW },
+            .op = .SW,
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = cReg(@truncate(half >> 2)),
             .imm = @intCast(clsw_offset(half)),
@@ -175,7 +183,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
         .C_ADDI => {
             const rd_val: u5 = @truncate(half >> 7);
             return .{
-                .op = .{ .i = .ADDI },
+                .op = .ADDI,
                 .rd = rd_val,
                 .rs1 = rd_val,
                 .imm = ci_imm(half),
@@ -183,7 +191,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             };
         },
         .C_JAL => .{
-            .op = .{ .i = .JAL },
+            .op = .JAL,
             .rd = 1, // ra
             .imm = cj_offset(half),
             .raw = raw,
@@ -191,7 +199,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
         .C_LI => {
             const rd_val: u5 = @truncate(half >> 7);
             return .{
-                .op = .{ .i = .ADDI },
+                .op = .ADDI,
                 .rd = rd_val,
                 .rs1 = 0,
                 .imm = ci_imm(half),
@@ -202,7 +210,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const imm = ci_addi16sp_imm(half);
             if (imm == 0) return error.IllegalInstruction;
             return .{
-                .op = .{ .i = .ADDI },
+                .op = .ADDI,
                 .rd = 2,
                 .rs1 = 2,
                 .imm = imm,
@@ -213,7 +221,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const imm = ci_lui_imm(half);
             if (imm == 0) return error.IllegalInstruction;
             return .{
-                .op = .{ .i = .LUI },
+                .op = .LUI,
                 .rd = @truncate(half >> 7),
                 .imm = imm,
                 .raw = raw,
@@ -224,7 +232,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             if (shamt & 0x20 != 0) return error.IllegalInstruction; // shamt[5]=1 illegal on RV32
             const rd_rs1 = cReg(@truncate(half >> 7));
             return .{
-                .op = .{ .i = .SRLI },
+                .op = .SRLI,
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = @intCast(shamt & 0x1F),
@@ -236,7 +244,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             if (shamt & 0x20 != 0) return error.IllegalInstruction; // shamt[5]=1 illegal on RV32
             const rd_rs1 = cReg(@truncate(half >> 7));
             return .{
-                .op = .{ .i = .SRAI },
+                .op = .SRAI,
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = @intCast(shamt & 0x1F),
@@ -246,7 +254,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
         .C_ANDI => {
             const rd_rs1 = cReg(@truncate(half >> 7));
             return .{
-                .op = .{ .i = .ANDI },
+                .op = .ANDI,
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = ci_imm(half),
@@ -256,30 +264,30 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
         .C_SUB, .C_XOR, .C_OR, .C_AND => {
             const rd_rs1 = cReg(@truncate(half >> 7));
             const rs2_val = cReg(@truncate(half >> 2));
-            const base_op: BaseOpcode = switch (op) {
-                .C_SUB => .{ .i = .SUB },
-                .C_XOR => .{ .i = .XOR },
-                .C_OR => .{ .i = .OR },
-                .C_AND => .{ .i = .AND },
+            const base_op: rv32i.Opcode = switch (op) {
+                .C_SUB => .SUB,
+                .C_XOR => .XOR,
+                .C_OR => .OR,
+                .C_AND => .AND,
                 else => unreachable,
             };
             return .{ .op = base_op, .rd = rd_rs1, .rs1 = rd_rs1, .rs2 = rs2_val, .raw = raw };
         },
         .C_J => .{
-            .op = .{ .i = .JAL },
+            .op = .JAL,
             .rd = 0,
             .imm = cj_offset(half),
             .raw = raw,
         },
         .C_BEQZ => .{
-            .op = .{ .i = .BEQ },
+            .op = .BEQ,
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = 0,
             .imm = cb_offset(half),
             .raw = raw,
         },
         .C_BNEZ => .{
-            .op = .{ .i = .BNE },
+            .op = .BNE,
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = 0,
             .imm = cb_offset(half),
@@ -290,7 +298,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const shamt = ci_shamt(half);
             if (shamt & 0x20 != 0) return error.IllegalInstruction; // shamt[5]=1 illegal on RV32
             return .{
-                .op = .{ .i = .SLLI },
+                .op = .SLLI,
                 .rd = rd_val,
                 .rs1 = rd_val,
                 .imm = @intCast(shamt & 0x1F),
@@ -301,7 +309,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const rd_val: u5 = @truncate(half >> 7);
             if (rd_val == 0) return error.IllegalInstruction;
             return .{
-                .op = .{ .i = .LW },
+                .op = .LW,
                 .rd = rd_val,
                 .rs1 = 2, // sp
                 .imm = @intCast(ci_lwsp_offset(half)),
@@ -312,7 +320,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const rd_rs1: u5 = @truncate(half >> 7);
             if (rd_rs1 == 0) return error.IllegalInstruction;
             return .{
-                .op = .{ .i = .JALR },
+                .op = .JALR,
                 .rd = 0,
                 .rs1 = rd_rs1,
                 .imm = 0,
@@ -323,7 +331,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const rd_rs1: u5 = @truncate(half >> 7);
             const rs2_val: u5 = @truncate(half >> 2);
             return .{
-                .op = .{ .i = .ADD },
+                .op = .ADD,
                 .rd = rd_rs1,
                 .rs1 = 0,
                 .rs2 = rs2_val,
@@ -331,13 +339,13 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             };
         },
         .C_EBREAK => .{
-            .op = .{ .i = .EBREAK },
+            .op = .EBREAK,
             .raw = raw,
         },
         .C_JALR => {
             const rd_rs1: u5 = @truncate(half >> 7);
             return .{
-                .op = .{ .i = .JALR },
+                .op = .JALR,
                 .rd = 1, // ra
                 .rs1 = rd_rs1,
                 .imm = 0,
@@ -348,7 +356,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             const rd_rs1: u5 = @truncate(half >> 7);
             const rs2_val: u5 = @truncate(half >> 2);
             return .{
-                .op = .{ .i = .ADD },
+                .op = .ADD,
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .rs2 = rs2_val,
@@ -356,7 +364,7 @@ pub fn expand(half: u16) error{IllegalInstruction}!Instruction {
             };
         },
         .C_SWSP => .{
-            .op = .{ .i = .SW },
+            .op = .SW,
             .rs1 = 2, // sp
             .rs2 = @truncate(half >> 2),
             .imm = @intCast(css_swsp_offset(half)),

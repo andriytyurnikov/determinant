@@ -1,21 +1,21 @@
 const std = @import("std");
 const rv32c = @import("rv32c.zig");
+const rv32i = @import("rv32i.zig");
 const instruction = @import("../instruction.zig");
-const Instruction = instruction.Instruction;
 const Opcode = instruction.Opcode;
 const decoder = @import("../decoder.zig");
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;
 const h = @import("test_helpers.zig");
 
-fn expectExpand(half: u16, expected_op: Opcode, expected_rd: u5, expected_rs1: u5, expected_rs2: u5, expected_imm: i32) !void {
-    const inst = try rv32c.expand(half);
-    try std.testing.expectEqual(expected_op, inst.op);
-    try std.testing.expectEqual(expected_rd, inst.rd);
-    try std.testing.expectEqual(expected_rs1, inst.rs1);
-    try std.testing.expectEqual(expected_rs2, inst.rs2);
-    try std.testing.expectEqual(expected_imm, inst.imm);
-    try std.testing.expectEqual(@as(u32, half), inst.raw);
+fn expectExpand(half: u16, expected_op: rv32i.Opcode, expected_rd: u5, expected_rs1: u5, expected_rs2: u5, expected_imm: i32) !void {
+    const exp = try rv32c.expand(half);
+    try std.testing.expectEqual(expected_op, exp.op);
+    try std.testing.expectEqual(expected_rd, exp.rd);
+    try std.testing.expectEqual(expected_rs1, exp.rs1);
+    try std.testing.expectEqual(expected_rs2, exp.rs2);
+    try std.testing.expectEqual(expected_imm, exp.imm);
+    try std.testing.expectEqual(@as(u32, half), exp.raw);
 }
 
 // ============================================================
@@ -33,7 +33,7 @@ test "C.ADDI4SPN: addi rd', x2, nzuimm" {
     // All other nzuimm bits 0
     // rd'=0 (x8)
     // = 0b000_00000_10_000_00 = 0x0020
-    try expectExpand(0x0020, .{ .i = .ADDI }, 8, 2, 0, 8);
+    try expectExpand(0x0020, .ADDI, 8, 2, 0, 8);
 }
 
 test "C.ADDI4SPN: nzuimm=0 is illegal" {
@@ -46,7 +46,7 @@ test "C.LW: lw rd', offset(rs1')" {
     // C.LW x8, 0(x8)
     // funct3=010, rs1'=0(x8), rd'=0(x8), all offset bits=0
     // = 0b010_000_000_00_000_00 = 0x4000
-    try expectExpand(0x4000, .{ .i = .LW }, 8, 8, 0, 0);
+    try expectExpand(0x4000, .LW, 8, 8, 0, 0);
 }
 
 test "C.LW with offset" {
@@ -62,14 +62,14 @@ test "C.LW with offset" {
     // rs1'=2 (x10) → bits[9:7]=010
     // rd'=1 (x9) → bits[4:2]=001
     // = 0b010_000_010_1_0_001_00 = 0x4144
-    try expectExpand(0x4144, .{ .i = .LW }, 9, 10, 0, 4);
+    try expectExpand(0x4144, .LW, 9, 10, 0, 4);
 }
 
 test "C.SW: sw rs2', offset(rs1')" {
     // C.SW x8, 0(x8)
     // funct3=110, rs1'=0(x8), rs2'=0(x8), offset=0
     // = 0b110_000_000_00_000_00 = 0xC000
-    try expectExpand(0xC000, .{ .i = .SW }, 0, 8, 8, 0);
+    try expectExpand(0xC000, .SW, 0, 8, 8, 0);
 }
 
 // ============================================================
@@ -79,14 +79,14 @@ test "C.SW: sw rs2', offset(rs1')" {
 test "C.NOP" {
     // C.NOP: funct3=000, rd=0, imm=0, op=01
     // = 0b000_0_00000_00000_01 = 0x0001
-    try expectExpand(0x0001, .{ .i = .ADDI }, 0, 0, 0, 0);
+    try expectExpand(0x0001, .ADDI, 0, 0, 0, 0);
 }
 
 test "C.ADDI: addi rd, rd, nzimm" {
     // C.ADDI x1, x1, 1
     // funct3=000, bit[12]=0 (imm[5]=0), rd=1 in bits[11:7], bits[6:2]=00001 (imm[4:0]=1), op=01
     // = 0b000_0_00001_00001_01 = 0x0085
-    try expectExpand(0x0085, .{ .i = .ADDI }, 1, 1, 0, 1);
+    try expectExpand(0x0085, .ADDI, 1, 1, 0, 1);
 }
 
 test "C.ADDI negative" {
@@ -96,27 +96,27 @@ test "C.ADDI negative" {
     // rd=1 → bits[11:7]=00001
     // funct3=000, op=01
     // = 0b000_1_00001_11111_01 = 0x10FD
-    try expectExpand(0x10FD, .{ .i = .ADDI }, 1, 1, 0, -1);
+    try expectExpand(0x10FD, .ADDI, 1, 1, 0, -1);
 }
 
 test "C.JAL: jal x1, offset" {
     // C.JAL with offset=0: all bits zero except funct3=001 and op=01
     // = 0b001_00000000000_01 = 0x2001
-    try expectExpand(0x2001, .{ .i = .JAL }, 1, 0, 0, 0);
+    try expectExpand(0x2001, .JAL, 1, 0, 0, 0);
 }
 
 test "C.LI: addi rd, x0, imm" {
     // C.LI x1, 5
     // funct3=010, bit[12]=0, rd=1 → bits[11:7]=00001, bits[6:2]=00101, op=01
     // = 0b010_0_00001_00101_01 = 0x4095
-    try expectExpand(0x4095, .{ .i = .ADDI }, 1, 0, 0, 5);
+    try expectExpand(0x4095, .ADDI, 1, 0, 0, 5);
 }
 
 test "C.LI negative" {
     // C.LI x1, -1
     // funct3=010, bit[12]=1, rd=1, bits[6:2]=11111, op=01
     // = 0b010_1_00001_11111_01 = 0x50FD
-    try expectExpand(0x50FD, .{ .i = .ADDI }, 1, 0, 0, -1);
+    try expectExpand(0x50FD, .ADDI, 1, 0, 0, -1);
 }
 
 test "C.ADDI16SP: addi x2, x2, nzimm" {
@@ -135,7 +135,7 @@ test "C.ADDI16SP: addi x2, x2, nzimm" {
     // nzimm=16: bit4=1 → bit[6]=1
     // bits[6:2] = 10000
     // = 0b011_0_00010_10000_01 = 0x6141
-    try expectExpand(0x6141, .{ .i = .ADDI }, 2, 2, 0, 16);
+    try expectExpand(0x6141, .ADDI, 2, 2, 0, 16);
 }
 
 test "C.ADDI16SP negative" {
@@ -148,7 +148,7 @@ test "C.ADDI16SP negative" {
     // imm[5]=1 → bit[2]=1
     // bits[6:2]=11111
     // = 0b011_1_00010_11111_01 = 0x717D
-    try expectExpand(0x717D, .{ .i = .ADDI }, 2, 2, 0, -16);
+    try expectExpand(0x717D, .ADDI, 2, 2, 0, -16);
 }
 
 test "C.ADDI16SP: nzimm=0 is illegal" {
@@ -164,7 +164,7 @@ test "C.LUI: lui rd, nzimm" {
     // funct3=011, rd=1, op=01
     // = 0b011_0_00001_00001_01 = 0x6085
     // The resulting immediate should be 0x1000 = 4096
-    try expectExpand(0x6085, .{ .i = .LUI }, 1, 0, 0, 4096);
+    try expectExpand(0x6085, .LUI, 1, 0, 0, 4096);
 }
 
 test "C.LUI negative" {
@@ -173,7 +173,7 @@ test "C.LUI negative" {
     // bit[12]=1, bits[6:2]=11111
     // funct3=011, rd=1, op=01
     // = 0b011_1_00001_11111_01 = 0x70FD
-    try expectExpand(0x70FD, .{ .i = .LUI }, 1, 0, 0, @bitCast(@as(u32, 0xFFFFF000)));
+    try expectExpand(0x70FD, .LUI, 1, 0, 0, @bitCast(@as(u32, 0xFFFFF000)));
 }
 
 test "C.LUI: nzimm=0 is illegal" {
@@ -186,7 +186,7 @@ test "C.SRLI" {
     // C.SRLI x8, x8, 1
     // funct3=100, funct2=00 (bits[11:10]), bit[12]=0 (shamt[5]), rd'=0(x8) bits[9:7], bits[6:2]=00001 (shamt[4:0]=1), op=01
     // = 0b100_0_00_000_00001_01 = 0x8005
-    try expectExpand(0x8005, .{ .i = .SRLI }, 8, 8, 0, 1);
+    try expectExpand(0x8005, .SRLI, 8, 8, 0, 1);
 }
 
 test "C.SRLI: shamt[5]=1 illegal on RV32" {
@@ -199,70 +199,70 @@ test "C.SRAI" {
     // C.SRAI x8, x8, 1
     // funct3=100, funct2=01 (bits[11:10]), bit[12]=0, rd'=0(x8), bits[6:2]=00001, op=01
     // = 0b100_0_01_000_00001_01 = 0x8405
-    try expectExpand(0x8405, .{ .i = .SRAI }, 8, 8, 0, 1);
+    try expectExpand(0x8405, .SRAI, 8, 8, 0, 1);
 }
 
 test "C.ANDI" {
     // C.ANDI x8, x8, 3
     // funct3=100, funct2=10 (bits[11:10]), bit[12]=0, rd'=0(x8), bits[6:2]=00011, op=01
     // = 0b100_0_10_000_00011_01 = 0x880D
-    try expectExpand(0x880D, .{ .i = .ANDI }, 8, 8, 0, 3);
+    try expectExpand(0x880D, .ANDI, 8, 8, 0, 3);
 }
 
 test "C.ANDI negative" {
     // C.ANDI x8, x8, -1
     // funct3=100, funct2=10, bit[12]=1 (sign), rd'=0(x8), bits[6:2]=11111, op=01
     // = 0b100_1_10_000_11111_01 = 0x987D
-    try expectExpand(0x987D, .{ .i = .ANDI }, 8, 8, 0, -1);
+    try expectExpand(0x987D, .ANDI, 8, 8, 0, -1);
 }
 
 test "C.SUB" {
     // C.SUB x8, x8, x9
     // funct3=100, bit[12]=0, funct2=11 (bits[11:10]), rd'/rs1'=0(x8) bits[9:7], funct2b=00 (bits[6:5]), rs2'=1(x9) bits[4:2], op=01
     // = 0b100_0_11_000_00_001_01 = 0x8C05
-    try expectExpand(0x8C05, .{ .i = .SUB }, 8, 8, 9, 0);
+    try expectExpand(0x8C05, .SUB, 8, 8, 9, 0);
 }
 
 test "C.XOR" {
     // C.XOR x8, x8, x9
     // Same as SUB but funct2b=01 (bits[6:5])
     // = 0b100_0_11_000_01_001_01 = 0x8C25
-    try expectExpand(0x8C25, .{ .i = .XOR }, 8, 8, 9, 0);
+    try expectExpand(0x8C25, .XOR, 8, 8, 9, 0);
 }
 
 test "C.OR" {
     // C.OR x8, x8, x9
     // funct2b=10
     // = 0b100_0_11_000_10_001_01 = 0x8C45
-    try expectExpand(0x8C45, .{ .i = .OR }, 8, 8, 9, 0);
+    try expectExpand(0x8C45, .OR, 8, 8, 9, 0);
 }
 
 test "C.AND" {
     // C.AND x8, x8, x9
     // funct2b=11
     // = 0b100_0_11_000_11_001_01 = 0x8C65
-    try expectExpand(0x8C65, .{ .i = .AND }, 8, 8, 9, 0);
+    try expectExpand(0x8C65, .AND, 8, 8, 9, 0);
 }
 
 test "C.J: jal x0, offset" {
     // C.J with offset=0
     // funct3=101, all offset bits=0, op=01
     // = 0b101_00000000000_01 = 0xA001
-    try expectExpand(0xA001, .{ .i = .JAL }, 0, 0, 0, 0);
+    try expectExpand(0xA001, .JAL, 0, 0, 0, 0);
 }
 
 test "C.BEQZ: beq rs1', x0, offset" {
     // C.BEQZ x8, 0
     // funct3=110, rs1'=0(x8), all offset=0, op=01
     // = 0b110_000_000_00000_01 = 0xC001
-    try expectExpand(0xC001, .{ .i = .BEQ }, 0, 8, 0, 0);
+    try expectExpand(0xC001, .BEQ, 0, 8, 0, 0);
 }
 
 test "C.BNEZ: bne rs1', x0, offset" {
     // C.BNEZ x8, 0
     // funct3=111, rs1'=0(x8), all offset=0, op=01
     // = 0b111_000_000_00000_01 = 0xE001
-    try expectExpand(0xE001, .{ .i = .BNE }, 0, 8, 0, 0);
+    try expectExpand(0xE001, .BNE, 0, 8, 0, 0);
 }
 
 // ============================================================
@@ -273,7 +273,7 @@ test "C.SLLI" {
     // C.SLLI x1, x1, 1
     // funct3=000, bit[12]=0, rd=1 bits[11:7], bits[6:2]=00001, op=10
     // = 0b000_0_00001_00001_10 = 0x0086
-    try expectExpand(0x0086, .{ .i = .SLLI }, 1, 1, 0, 1);
+    try expectExpand(0x0086, .SLLI, 1, 1, 0, 1);
 }
 
 test "C.SLLI: shamt[5]=1 illegal on RV32" {
@@ -286,7 +286,7 @@ test "C.LWSP: lw rd, offset(x2)" {
     // C.LWSP x1, 0(x2)
     // funct3=010, bit[12]=0, rd=1, bits[6:2]=00000, op=10
     // = 0b010_0_00001_00000_10 = 0x4082
-    try expectExpand(0x4082, .{ .i = .LW }, 1, 2, 0, 0);
+    try expectExpand(0x4082, .LW, 1, 2, 0, 0);
 }
 
 test "C.LWSP with offset" {
@@ -294,7 +294,7 @@ test "C.LWSP with offset" {
     // offset=4: offset[2]=1 → bit[4]=1
     // funct3=010, bit[12]=0, rd=1, bits[6:2]=00100, op=10
     // = 0b010_0_00001_00100_10 = 0x4092
-    try expectExpand(0x4092, .{ .i = .LW }, 1, 2, 0, 4);
+    try expectExpand(0x4092, .LW, 1, 2, 0, 4);
 }
 
 test "C.LWSP: rd=0 is illegal" {
@@ -307,7 +307,7 @@ test "C.JR: jalr x0, 0(rs1)" {
     // C.JR x1
     // funct3=100, bit[12]=0, rd/rs1=1, rs2=0, op=10
     // = 0b100_0_00001_00000_10 = 0x8082
-    try expectExpand(0x8082, .{ .i = .JALR }, 0, 1, 0, 0);
+    try expectExpand(0x8082, .JALR, 0, 1, 0, 0);
 }
 
 test "C.JR: rs1=0 is illegal" {
@@ -320,34 +320,34 @@ test "C.MV: add rd, x0, rs2" {
     // C.MV x1, x2
     // funct3=100, bit[12]=0, rd=1, rs2=2, op=10
     // = 0b100_0_00001_00010_10 = 0x808A
-    try expectExpand(0x808A, .{ .i = .ADD }, 1, 0, 2, 0);
+    try expectExpand(0x808A, .ADD, 1, 0, 2, 0);
 }
 
 test "C.EBREAK" {
     // funct3=100, bit[12]=1, rd=0, rs2=0, op=10
     // = 0b100_1_00000_00000_10 = 0x9002
-    try expectExpand(0x9002, .{ .i = .EBREAK }, 0, 0, 0, 0);
+    try expectExpand(0x9002, .EBREAK, 0, 0, 0, 0);
 }
 
 test "C.JALR: jalr x1, 0(rs1)" {
     // C.JALR x1
     // funct3=100, bit[12]=1, rd/rs1=1, rs2=0, op=10
     // = 0b100_1_00001_00000_10 = 0x9082
-    try expectExpand(0x9082, .{ .i = .JALR }, 1, 1, 0, 0);
+    try expectExpand(0x9082, .JALR, 1, 1, 0, 0);
 }
 
 test "C.ADD: add rd, rd, rs2" {
     // C.ADD x1, x2
     // funct3=100, bit[12]=1, rd=1, rs2=2, op=10
     // = 0b100_1_00001_00010_10 = 0x908A
-    try expectExpand(0x908A, .{ .i = .ADD }, 1, 1, 2, 0);
+    try expectExpand(0x908A, .ADD, 1, 1, 2, 0);
 }
 
 test "C.SWSP: sw rs2, offset(x2)" {
     // C.SWSP x1, 0(x2)
     // funct3=110, bits[12:7]=000000 (offset), rs2=1 bits[6:2], op=10
     // = 0b110_000000_00001_10 = 0xC006
-    try expectExpand(0xC006, .{ .i = .SW }, 0, 2, 1, 0);
+    try expectExpand(0xC006, .SW, 0, 2, 1, 0);
 }
 
 test "C.SWSP with offset" {
@@ -355,7 +355,7 @@ test "C.SWSP with offset" {
     // offset=4: offset[2]=1 → bit[9]=1
     // funct3=110, bits[12:7]=000100, rs2=1, op=10
     // = 0b110_000100_00001_10 = 0xC206
-    try expectExpand(0xC206, .{ .i = .SW }, 0, 2, 1, 4);
+    try expectExpand(0xC206, .SW, 0, 2, 1, 4);
 }
 
 // ============================================================

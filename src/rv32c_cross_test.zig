@@ -1,17 +1,18 @@
 /// Cross-validation tests for RV32C compressed instruction expansion.
-/// For each compressed instruction, verify that rv32c.expand() produces an Instruction
+/// For each compressed instruction, verify that rv32c.expand() produces an Expanded
 /// with the same fields as the equivalent 32-bit instruction decoded by decoder.decode().
 const std = @import("std");
-const rv32c = @import("instruction/rv32c.zig");
-const decoder = @import("decoder.zig");
 const instruction = @import("instruction.zig");
+const rv32c = instruction.rv32c;
+const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
+const decoder = @import("decoder.zig");
 const h = @import("instruction/test_helpers.zig");
 
 /// Compare expanded compressed instruction against the equivalent 32-bit decoded instruction.
 /// The `raw` field will differ (16-bit vs 32-bit), so we compare only semantic fields.
-fn expectSameSemantics(compressed: Instruction, full: Instruction) !void {
-    try std.testing.expectEqual(full.op, compressed.op);
+fn expectSameSemantics(compressed: rv32c.Expanded, full: Instruction) !void {
+    try std.testing.expectEqual(full.op, Opcode{ .i = compressed.op });
     try std.testing.expectEqual(full.rd, compressed.rd);
     try std.testing.expectEqual(full.rs1, compressed.rs1);
     try std.testing.expectEqual(full.rs2, compressed.rs2);

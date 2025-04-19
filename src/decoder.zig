@@ -7,7 +7,7 @@ const zicsr = instruction.zicsr;
 const zba = instruction.zba;
 const zbb = instruction.zbb;
 const zbs = instruction.zbs;
-const rv32c = @import("instruction/rv32c.zig");
+const rv32c = instruction.rv32c;
 const Opcode = instruction.Opcode;
 const Instruction = instruction.Instruction;
 
@@ -18,7 +18,7 @@ pub const DecodeError = error{IllegalInstruction};
 pub fn decode(raw: u32) DecodeError!Instruction {
     // Compressed instruction: low 2 bits != 11
     if (instruction.isCompressed(raw)) {
-        return rv32c.expand(@truncate(raw));
+        return expandCompressed(raw);
     }
     const opcode_bits: u7 = @truncate(raw);
     return switch (opcode_bits) {
@@ -35,6 +35,12 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b1110011 => decodeSystem(raw),
         else => error.IllegalInstruction,
     };
+}
+
+/// Wrap an rv32c Expanded into a full Instruction.
+fn expandCompressed(raw: u32) DecodeError!Instruction {
+    const exp = try rv32c.expand(@truncate(raw));
+    return .{ .op = .{ .i = exp.op }, .rd = exp.rd, .rs1 = exp.rs1, .rs2 = exp.rs2, .imm = exp.imm, .raw = raw };
 }
 
 // --- Bit field extraction ---

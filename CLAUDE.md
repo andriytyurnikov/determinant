@@ -48,7 +48,7 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 ### ISA Extension Architecture
 
 - ISA extensions live in `src/instruction/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
-- `instruction.zig` composes extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
+- `instruction.zig` imports all extensions including rv32c; composes execution extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
 - `instruction.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
 - Each extension's execution is delegated: `executeI()` (RV32I in cpu.zig), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`, `zba.execute()`, `zbb.execute()`, `zbs.execute()`
@@ -62,9 +62,10 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ### Compressed Instructions (RV32C)
 
-- `rv32c.zig` imports `instruction.zig` (consumes types) — it expands 16-bit compressed to existing RV32I `Instruction`s; imported directly by `root.zig` (not via `instruction.zig`) to avoid circular dependency
+- `rv32c.zig` is a normal sibling extension — it only imports `rv32i.zig` and `format.zig` (no upward dependency on `instruction.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instruction.Opcode` tagged union (no execution path, no format)
-- `decode()` identifies the opcode; `expand()` validates constraints and builds the `Instruction` — keep identification and validation separate
+- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoder.zig`
+- `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
 - `instruction.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoder.zig, cpu.zig, and main.zig
 
@@ -91,7 +92,7 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 ### Testing Patterns
 
 - `decoder_test.zig` contains encode/decode round-trip tests for all instruction formats
-- `rv32c_cross_test.zig` cross-validates compressed expansion against 32-bit decode
+- `rv32c_cross_test.zig` cross-validates compressed `Expanded` against 32-bit decoded `Instruction` (wraps `compressed.op` into `Opcode{ .i = compressed.op }` for comparison)
 - Each extension has comprehensive execute tests with edge cases (overflow, sign-extension boundaries, spec-mandated special cases like DIV-by-zero → -1)
 
 ## Traps to Avoid
