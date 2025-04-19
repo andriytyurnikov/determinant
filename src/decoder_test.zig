@@ -303,6 +303,16 @@ test "CSR round-trip: CSRRCI" {
     try expectRoundTripCsr(0b111, .{ .csr = .CSRRCI });
 }
 
+// --- Edge cases ---
+
+test "decode zero instruction (0x00000000) is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(0x00000000));
+}
+
+test "decode all-ones instruction (0xFFFFFFFF) is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(0xFFFFFFFF));
+}
+
 fn expectRoundTripCsr(f3: u3, expected_op: Opcode) !void {
     const test_regs = [_]u5{ 0, 1, 15, 31 };
     const test_addrs = [_]u12{ 0x000, 0xC00, 0xC80, 0x340, 0xFFF };
