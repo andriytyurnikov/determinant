@@ -41,13 +41,15 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 ### Module Structure
 
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
+- `src/` holds entry points (`root.zig`, `main.zig`); `src/vm/` holds the VM library implementation
+- `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instruction`, `decoder`
 - Tests live in `*_test.zig` companion files, pulled in via `test { _ = @import("foo_test.zig"); }` blocks
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
 
 ### ISA Extension Architecture
 
-- ISA extensions live in `src/instruction/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
+- ISA extensions live in `src/vm/instruction/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
 - `instruction.zig` imports all extensions including rv32c; composes execution extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
 - `instruction.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
@@ -141,8 +143,8 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 
 ## Adding a New Extension
 
-1. Create `src/instruction/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
-2. Create `src/instruction/newext_test.zig` with decode + execute tests
+1. Create `src/vm/instruction/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
+2. Create `src/vm/instruction/newext_test.zig` with decode + execute tests
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
 4. Add variant to `instruction.zig` `Opcode` tagged union
 5. Add decode dispatch in `decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`

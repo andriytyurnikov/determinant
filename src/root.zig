@@ -1,8 +1,9 @@
 const std = @import("std");
+const vm = @import("vm.zig");
 
-pub const cpu = @import("cpu.zig");
-pub const instruction = @import("instruction.zig");
-pub const decoder = @import("decoder.zig");
+pub const cpu = vm.cpu;
+pub const instruction = vm.instruction;
+pub const decoder = vm.decoder;
 pub const rv32i = instruction.rv32i;
 pub const rv32m = instruction.rv32m;
 pub const rv32a = instruction.rv32a;
@@ -26,11 +27,11 @@ test {
 }
 
 test "integration: load, fetch, decode" {
-    var vm = cpu.Cpu.init();
+    var machine = cpu.Cpu.init();
     // ADDI x1, x0, 42 = 0x02A00093
     const program = [_]u8{ 0x93, 0x00, 0xA0, 0x02 };
-    try vm.loadProgram(&program, 0);
-    const raw = try vm.fetch();
+    try machine.loadProgram(&program, 0);
+    const raw = try machine.fetch();
     const inst = try decoder.decode(raw);
     try std.testing.expectEqual(instruction.Opcode{ .i = .ADDI }, inst.op);
     try std.testing.expectEqual(@as(u5, 1), inst.rd);
