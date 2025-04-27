@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as both a library and CLI executable. See `README.md` for architecture, public API, and conventions.
+Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as both a library and CLI executable. See `README.md` for public API, [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
 
 ## Build Commands
 
@@ -40,12 +40,7 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ### Module Structure
 
-- The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
-- `src/` holds entry points (`root.zig`, `main.zig`); `src/vm/` holds the VM library implementation
-- `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instruction`, `decoder`
-- Tests live in `*_test.zig` companion files, pulled in via `test { _ = @import("foo_test.zig"); }` blocks
-- Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
-- Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
+See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instruction`, `decoder`.
 
 ### ISA Extension Architecture
 
@@ -93,8 +88,6 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ### Testing Patterns
 
-- `decoder_test.zig` contains encode/decode round-trip tests for all instruction formats
-- `rv32c_cross_test.zig` cross-validates compressed `Expanded` against 32-bit decoded `Instruction` (wraps `compressed.op` into `Opcode{ .i = compressed.op }` for comparison)
 - Each extension has comprehensive execute tests with edge cases (overflow, sign-extension boundaries, spec-mandated special cases like DIV-by-zero → -1)
 
 ## Traps to Avoid
