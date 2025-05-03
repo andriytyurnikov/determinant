@@ -2,23 +2,23 @@ const std = @import("std");
 const vm = @import("vm.zig");
 
 pub const cpu = vm.cpu;
-pub const instruction = vm.instruction;
+pub const instructions = vm.instructions;
 pub const decoder = vm.decoder;
-pub const rv32i = instruction.rv32i;
-pub const rv32m = instruction.rv32m;
-pub const rv32a = instruction.rv32a;
-pub const zicsr = instruction.zicsr;
-pub const zba = instruction.zba;
-pub const zbb = instruction.zbb;
-pub const zbs = instruction.zbs;
-pub const rv32c = instruction.rv32c;
+pub const rv32i = instructions.rv32i;
+pub const rv32m = instructions.rv32m;
+pub const rv32a = instructions.rv32a;
+pub const zicsr = instructions.zicsr;
+pub const zba = instructions.zba;
+pub const zbb = instructions.zbb;
+pub const zbs = instructions.zbs;
+pub const rv32c = instructions.rv32c;
 
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
 pub const StepResult = cpu.StepResult;
-pub const Instruction = instruction.Instruction;
-pub const Opcode = instruction.Opcode;
-pub const Format = instruction.Format;
+pub const Instruction = instructions.Instruction;
+pub const Opcode = instructions.Opcode;
+pub const Format = instructions.Format;
 pub const decode = decoder.decode;
 pub const DecodeError = decoder.DecodeError;
 
@@ -33,7 +33,7 @@ test "integration: load, fetch, decode" {
     try machine.loadProgram(&program, 0);
     const raw = try machine.fetch();
     const inst = try decoder.decode(raw);
-    try std.testing.expectEqual(instruction.Opcode{ .i = .ADDI }, inst.op);
+    try std.testing.expectEqual(instructions.Opcode{ .i = .ADDI }, inst.op);
     try std.testing.expectEqual(@as(u5, 1), inst.rd);
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
     try std.testing.expectEqual(@as(i32, 42), inst.imm);

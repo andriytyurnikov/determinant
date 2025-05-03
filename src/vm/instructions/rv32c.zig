@@ -1,7 +1,7 @@
 /// RV32C compressed instruction expansion.
 /// Every 16-bit compressed instruction maps to an existing RV32I instruction.
 /// Unlike other extensions, rv32c has its own Opcode enum for decode/display purposes only —
-/// it is NOT part of the instruction.Opcode tagged union (no execution path, no format).
+/// it is NOT part of the instructions.Opcode tagged union (no execution path, no format).
 const fmt = @import("format.zig");
 const rv32i = @import("rv32i.zig");
 

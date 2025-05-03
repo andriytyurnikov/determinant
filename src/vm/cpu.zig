@@ -1,13 +1,13 @@
 const std = @import("std");
 const decoder = @import("decoder.zig");
-const instruction = @import("instruction.zig");
-const rv32i = instruction.rv32i;
-const rv32m = instruction.rv32m;
-const rv32a = instruction.rv32a;
-const zicsr = instruction.zicsr;
-const zba = instruction.zba;
-const zbb = instruction.zbb;
-const zbs = instruction.zbs;
+const instructions = @import("instructions.zig");
+const rv32i = instructions.rv32i;
+const rv32m = instructions.rv32m;
+const rv32a = instructions.rv32a;
+const zicsr = instructions.zicsr;
+const zba = instructions.zba;
+const zbb = instructions.zbb;
+const zbs = instructions.zbs;
 
 pub const MEMORY_SIZE: u32 = 1024 * 1024; // 1 MB
 
@@ -55,7 +55,7 @@ pub const Cpu = struct {
         if (self.pc > MEMORY_SIZE - 2) return error.PCOutOfBounds;
         const addr: usize = self.pc;
         const low: u16 = std.mem.readInt(u16, self.memory[addr..][0..2], .little);
-        if (instruction.isCompressed(low)) return @as(u32, low);
+        if (instructions.isCompressed(low)) return @as(u32, low);
         if (self.pc > MEMORY_SIZE - 4) return error.PCOutOfBounds;
         return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
     }
@@ -135,7 +135,7 @@ pub const Cpu = struct {
     pub fn step(self: *Cpu) !StepResult {
         const raw = try self.fetch();
         const inst = try decoder.decode(raw);
-        const inst_size: u32 = if (instruction.isCompressed(raw)) 2 else 4;
+        const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
 
         const rs1_val = self.readReg(inst.rs1);
         const rs2_val = self.readReg(inst.rs2);
@@ -160,7 +160,7 @@ pub const Cpu = struct {
         return result;
     }
 
-    fn executeI(self: *Cpu, op: rv32i.Opcode, inst: instruction.Instruction, rs1_val: u32, rs2_val: u32, inst_size: u32, next_pc: *u32) !StepResult {
+    fn executeI(self: *Cpu, op: rv32i.Opcode, inst: instructions.Instruction, rs1_val: u32, rs2_val: u32, inst_size: u32, next_pc: *u32) !StepResult {
         const imm_u: u32 = @bitCast(inst.imm);
         switch (op) {
             // R-type ALU

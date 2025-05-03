@@ -347,7 +347,7 @@ test "readWord: one past last valid address fails" {
 }
 
 test "step: branch beyond memory causes PCOutOfBounds on next fetch" {
-    const h = @import("instruction/test_helpers.zig");
+    const h = @import("instructions/test_helpers.zig");
     var cpu = Cpu.init();
     // BEQ x0, x0, +4094 (large forward branch, always taken since x0==x0)
     // Target = 0 + 4094 = 4094, still in memory — but let's target beyond MEMORY_SIZE
@@ -363,7 +363,7 @@ test "step: branch beyond memory causes PCOutOfBounds on next fetch" {
 }
 
 test "step: JAL beyond memory causes PCOutOfBounds on next fetch" {
-    const h = @import("instruction/test_helpers.zig");
+    const h = @import("instructions/test_helpers.zig");
     var cpu = Cpu.init();
     const pc: u32 = MEMORY_SIZE - 4;
     cpu.pc = pc;

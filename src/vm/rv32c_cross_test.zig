@@ -2,12 +2,12 @@
 /// For each compressed instruction, verify that rv32c.expand() produces an Expanded
 /// with the same fields as the equivalent 32-bit instruction decoded by decoder.decode().
 const std = @import("std");
-const instruction = @import("instruction.zig");
-const rv32c = instruction.rv32c;
-const Opcode = instruction.Opcode;
-const Instruction = instruction.Instruction;
+const instructions = @import("instructions.zig");
+const rv32c = instructions.rv32c;
+const Opcode = instructions.Opcode;
+const Instruction = instructions.Instruction;
 const decoder = @import("decoder.zig");
-const h = @import("instruction/test_helpers.zig");
+const h = @import("instructions/test_helpers.zig");
 
 /// Compare expanded compressed instruction against the equivalent 32-bit decoded instruction.
 /// The `raw` field will differ (16-bit vs 32-bit), so we compare only semantic fields.

@@ -1,15 +1,15 @@
 const std = @import("std");
-const instruction = @import("instruction.zig");
-const rv32i = instruction.rv32i;
-const rv32m = instruction.rv32m;
-const rv32a = instruction.rv32a;
-const zicsr = instruction.zicsr;
-const zba = instruction.zba;
-const zbb = instruction.zbb;
-const zbs = instruction.zbs;
-const rv32c = instruction.rv32c;
-const Opcode = instruction.Opcode;
-const Instruction = instruction.Instruction;
+const instructions = @import("instructions.zig");
+const rv32i = instructions.rv32i;
+const rv32m = instructions.rv32m;
+const rv32a = instructions.rv32a;
+const zicsr = instructions.zicsr;
+const zba = instructions.zba;
+const zbb = instructions.zbb;
+const zbs = instructions.zbs;
+const rv32c = instructions.rv32c;
+const Opcode = instructions.Opcode;
+const Instruction = instructions.Instruction;
 
 pub const DecodeError = error{IllegalInstruction};
 
@@ -17,7 +17,7 @@ pub const DecodeError = error{IllegalInstruction};
 /// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
 pub fn decode(raw: u32) DecodeError!Instruction {
     // Compressed instruction: low 2 bits != 11
-    if (instruction.isCompressed(raw)) {
+    if (instructions.isCompressed(raw)) {
         return expandCompressed(raw);
     }
     const opcode_bits: u7 = @truncate(raw);

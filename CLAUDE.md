@@ -40,13 +40,13 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ### Module Structure
 
-See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instruction`, `decoder`.
+See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instructions`, `decoder`.
 
 ### ISA Extension Architecture
 
-- ISA extensions live in `src/vm/instruction/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
-- `instruction.zig` imports all extensions including rv32c; composes execution extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
-- `instruction.Opcode` delegates `name()` and `format()` to extensions via `inline else`
+- ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
+- `instructions.zig` imports all extensions including rv32c; composes execution extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
+- `instructions.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
 - Each extension's execution is delegated: `executeI()` (RV32I in cpu.zig), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`, `zba.execute()`, `zbb.execute()`, `zbs.execute()`
 
@@ -59,12 +59,12 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 ### Compressed Instructions (RV32C)
 
-- `rv32c.zig` is a normal sibling extension — it only imports `rv32i.zig` and `format.zig` (no upward dependency on `instruction.zig`)
-- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instruction.Opcode` tagged union (no execution path, no format)
+- `rv32c.zig` is a normal sibling extension — it only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
+- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
 - `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoder.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
-- `instruction.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoder.zig, cpu.zig, and main.zig
+- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoder.zig, cpu.zig, and main.zig
 
 ### Decoder Dispatch Priority
 
@@ -136,10 +136,10 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 
 ## Adding a New Extension
 
-1. Create `src/vm/instruction/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
-2. Create `src/vm/instruction/newext_test.zig` with decode + execute tests
+1. Create `src/vm/instructions/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
+2. Create `src/vm/instructions/newext_test.zig` with decode + execute tests
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
-4. Add variant to `instruction.zig` `Opcode` tagged union
+4. Add variant to `instructions.zig` `Opcode` tagged union
 5. Add decode dispatch in `decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`
 6. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
 7. Add disassembly case in `main.zig` `printInstruction()`

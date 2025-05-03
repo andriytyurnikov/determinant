@@ -1,15 +1,15 @@
 const std = @import("std");
 
-pub const rv32i = @import("instruction/rv32i.zig");
-pub const rv32m = @import("instruction/rv32m.zig");
-pub const rv32a = @import("instruction/rv32a.zig");
-pub const zicsr = @import("instruction/zicsr.zig");
-pub const zba = @import("instruction/zba.zig");
-pub const zbb = @import("instruction/zbb.zig");
-pub const zbs = @import("instruction/zbs.zig");
-pub const rv32c = @import("instruction/rv32c.zig");
+pub const rv32i = @import("instructions/rv32i.zig");
+pub const rv32m = @import("instructions/rv32m.zig");
+pub const rv32a = @import("instructions/rv32a.zig");
+pub const zicsr = @import("instructions/zicsr.zig");
+pub const zba = @import("instructions/zba.zig");
+pub const zbb = @import("instructions/zbb.zig");
+pub const zbs = @import("instructions/zbs.zig");
+pub const rv32c = @import("instructions/rv32c.zig");
 
-pub const Format = @import("instruction/format.zig").Format;
+pub const Format = @import("instructions/format.zig").Format;
 
 /// Tagged union opcode spanning all supported ISA extensions.
 pub const Opcode = union(enum) {

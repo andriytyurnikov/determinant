@@ -3,9 +3,9 @@
 /// and decoder (decoder.zig) into explicit verified coupling.
 const std = @import("std");
 const decoder = @import("decoder.zig");
-const instruction = @import("instruction.zig");
-const Opcode = instruction.Opcode;
-const h = @import("instruction/test_helpers.zig");
+const instructions = @import("instructions.zig");
+const Opcode = instructions.Opcode;
+const h = @import("instructions/test_helpers.zig");
 
 // --- R-type round-trip ---
 

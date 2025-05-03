@@ -63,6 +63,6 @@ The library is available via `@import("determinant")`.
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
-- **`instruction.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
+- **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
 - **`decode(u32)`** — decode an instruction word (16-bit compressed or 32-bit), returns `Instruction` or `DecodeError`
 - **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`

@@ -9,9 +9,9 @@ src/
     cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
     decoder.zig           — pure routing: bit extraction + dispatch to extension decoders; wraps rv32c.Expanded → Instruction
     decoder_test.zig      — encode/decode round-trip tests for all instruction formats
-    instruction.zig       — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
+    instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     rv32c_cross_test.zig  — cross-validation: rv32c.Expanded vs decoder.decode() Instruction equivalence
-    instruction/
+    instructions/
       format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
       rv32i.zig           — RV32I base integer opcodes (39 variants), decode helpers, format()
       rv32i_test.zig      — RV32I decode + execute tests
@@ -38,10 +38,10 @@ build.zig.zon             — package metadata (name, version, dependencies, fin
 
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
 - `src/` holds entry points (`root.zig`, `main.zig`); `src/vm/` holds the VM library implementation
-- `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instruction`, `decoder`
+- `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instructions`, `decoder`
 - Tests live in dedicated `*_test.zig` companion files, pulled in via `test { _ = @import("foo_test.zig"); }` blocks
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
-- ISA extensions live in `src/vm/instruction/` — each owns its own `Opcode` enum, decode, and execute logic
-- RV32C compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `Opcode` tagged union)
+- ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum, decode, and execute logic
+- RV32C compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)

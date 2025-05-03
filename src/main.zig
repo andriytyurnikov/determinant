@@ -62,7 +62,7 @@ pub fn main() !void {
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
-    const op_name = if (det.instruction.isCompressed(inst.raw))
+    const op_name = if (det.instructions.isCompressed(inst.raw))
         (det.rv32c.decode(@truncate(inst.raw)) catch unreachable).name()
     else
         inst.op.name();
