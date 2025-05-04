@@ -4,6 +4,7 @@
 src/
   root.zig                — library root, re-exports all submodules and convenience aliases
   main.zig                — CLI entry point, imports the library as @import("determinant")
+  vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoder
   vm/
     cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
     cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
