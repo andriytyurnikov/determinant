@@ -45,7 +45,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 ### ISA Extension Architecture
 
 - ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
-- `instructions.zig` imports all extensions including rv32c; composes execution extensions via `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }`
+- `instructions.zig` imports all execution extensions; composes `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }` (rv32c is accessed via `rv32i.rv32c`, not directly from instructions.zig)
 - `instructions.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
 - Each extension's execution is delegated: `executeI()` (RV32I in cpu.zig), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`, `zba.execute()`, `zbb.execute()`, `zbs.execute()`
@@ -55,11 +55,11 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 - `format.zig` owns `Format` enum (R/I/S/B/U/J), `Meta` struct (`name_str` + `fmt`), and generic `opcodeName`/`opcodeFormat` helpers
 - Extensions import format.zig as `fmt` and provide `pub fn meta(comptime self: Opcode) fmt.Meta` — this compiles to a perfect dispatch table with zero runtime cost via `inline else`
 - `rv32a.zig` uses explicit name strings in `meta()` for dot notation (`"LR.W"`, `"AMOSWAP.W"`) — other extensions use `@tagName(self)` directly
-- `rv32c.zig` uses a comptime `dotName` transform (`C_LW` → `"C.LW"`) for its own naming convention
+- `rv32i/rv32c.zig` uses a comptime `dotName` transform (`C_LW` → `"C.LW"`) for its own naming convention
 
 ### Compressed Instructions (RV32C)
 
-- `rv32c.zig` is a normal sibling extension — it only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
+- `rv32c.zig` lives under `rv32i/` and is accessed as `rv32i.rv32c` — it's a decode-time front-end to rv32i, not an independent peer extension. It only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
 - `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoder.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate

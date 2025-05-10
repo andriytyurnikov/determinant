@@ -1,7 +1,10 @@
 /// RV32I base integer instruction set opcodes and decode helpers.
+/// Also serves as namespace hub for rv32c (compressed instructions depend on rv32i).
 
 const fmt = @import("format.zig");
 const Format = fmt.Format;
+
+pub const rv32c = @import("rv32i/rv32c.zig");
 
 /// RV32I opcodes (39 variants).
 pub const Opcode = enum {
@@ -165,4 +168,5 @@ pub fn decodeBranch(f3: u3) ?Opcode {
 
 test {
     _ = @import("rv32i_test.zig");
+    _ = @import("rv32i/rv32c.zig");
 }

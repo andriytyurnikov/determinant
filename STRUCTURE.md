@@ -14,14 +14,15 @@ src/
     rv32c_cross_test.zig  — cross-validation: rv32c.Expanded vs decoder.decode() Instruction equivalence
     instructions/
       format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
-      rv32i.zig           — RV32I base integer opcodes (39 variants), decode helpers, format()
+      rv32i.zig           — RV32I base integer opcodes (39 variants), decode helpers, format(); namespace hub re-exporting rv32c
       rv32i_test.zig      — RV32I decode + execute tests
+      rv32i/
+        rv32c.zig         — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only
+        rv32c_test.zig    — RV32C expansion + CPU step tests
       rv32m.zig           — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
       rv32m_test.zig      — RV32M decode + execute tests
       rv32a.zig           — RV32A atomic opcodes (11 variants), decodeR(), execute(), format()
       rv32a_test.zig      — RV32A decode + execute tests
-      rv32c.zig           — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); sibling-only imports (rv32i, format)
-      rv32c_test.zig      — RV32C expansion + CPU step tests
       zicsr.zig           — Zicsr CSR opcodes (6 variants), decodeSystem(), format(), Csr struct with read/write/execute
       zicsr_test.zig      — Zicsr decode + execute tests
       zba.zig             — Zba address-generation opcodes (3 variants: SH1ADD, SH2ADD, SH3ADD), decodeR(), execute()
@@ -45,4 +46,4 @@ build.zig.zon             — package metadata (name, version, dependencies, fin
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
 - ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum, decode, and execute logic
-- RV32C compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)
+- RV32C lives under `rv32i/` (accessed as `rv32i.rv32c`) because it's a decode-time front-end to rv32i, not an independent peer extension. Compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)

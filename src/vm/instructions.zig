@@ -7,7 +7,7 @@ pub const zicsr = @import("instructions/zicsr.zig");
 pub const zba = @import("instructions/zba.zig");
 pub const zbb = @import("instructions/zbb.zig");
 pub const zbs = @import("instructions/zbs.zig");
-pub const rv32c = @import("instructions/rv32c.zig");
+
 
 pub const Format = @import("instructions/format.zig").Format;
 

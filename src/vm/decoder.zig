@@ -7,7 +7,7 @@ const zicsr = instructions.zicsr;
 const zba = instructions.zba;
 const zbb = instructions.zbb;
 const zbs = instructions.zbs;
-const rv32c = instructions.rv32c;
+const rv32c = rv32i.rv32c;
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 

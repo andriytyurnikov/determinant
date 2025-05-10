@@ -3,7 +3,7 @@
 /// with the same fields as the equivalent 32-bit instruction decoded by decoder.decode().
 const std = @import("std");
 const instructions = @import("instructions.zig");
-const rv32c = instructions.rv32c;
+const rv32c = instructions.rv32i.rv32c;
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 const decoder = @import("decoder.zig");

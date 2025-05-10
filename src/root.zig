@@ -11,7 +11,7 @@ pub const zicsr = instructions.zicsr;
 pub const zba = instructions.zba;
 pub const zbb = instructions.zbb;
 pub const zbs = instructions.zbs;
-pub const rv32c = instructions.rv32c;
+
 
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
