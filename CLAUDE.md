@@ -144,3 +144,4 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 6. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
 7. Add disassembly case in `main.zig` `printInstruction()`
 8. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
+9. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved
