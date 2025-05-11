@@ -1,6 +1,6 @@
 const std = @import("std");
 const rv32c = @import("rv32c.zig");
-const rv32i = @import("../rv32i.zig");
+const rv32i = @import("rv32i.zig");
 const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
 const decoder = @import("../../decoder.zig");

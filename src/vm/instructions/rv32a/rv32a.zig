@@ -1,6 +1,6 @@
 /// RV32A atomic extension opcodes, decode, and execute.
 
-const fmt = @import("format.zig");
+const fmt = @import("../format.zig");
 const Format = fmt.Format;
 
 /// RV32A atomic extension opcodes (11 variants).

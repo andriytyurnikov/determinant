@@ -3,7 +3,7 @@
 /// Unlike other extensions, rv32c has its own Opcode enum for decode/display purposes only —
 /// it is NOT part of the instructions.Opcode tagged union (no execution path, no format).
 const fmt = @import("../format.zig");
-const rv32i = @import("../rv32i.zig");
+const rv32i = @import("rv32i.zig");
 
 /// RV32C compressed instruction opcodes (26 variants).
 /// Used for self-documenting decode and display (e.g. showing "C.LW" instead of "LW").

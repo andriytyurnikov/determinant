@@ -44,7 +44,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 ### ISA Extension Architecture
 
-- ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
+- ISA extensions live in `src/vm/instructions/` — each owns a subdirectory (`ext/ext.zig` + `ext/ext_test.zig`) with its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
 - `instructions.zig` imports all execution extensions; composes `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }` (rv32c is accessed via `rv32i.rv32c`, not directly from instructions.zig)
 - `instructions.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
@@ -136,8 +136,8 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 
 ## Adding a New Extension
 
-1. Create `src/vm/instructions/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
-2. Create `src/vm/instructions/newext_test.zig` with decode + execute tests
+1. Create `src/vm/instructions/newext/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
+2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
 4. Add variant to `instructions.zig` `Opcode` tagged union
 5. Add decode dispatch in `decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`

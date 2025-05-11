@@ -1,6 +1,6 @@
 /// Zba address generation extension opcodes, decode, and execute.
 
-const fmt = @import("format.zig");
+const fmt = @import("../format.zig");
 const Format = fmt.Format;
 
 /// Zba address generation extension opcodes (3 variants).

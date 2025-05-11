@@ -1,12 +1,12 @@
 const std = @import("std");
 
-pub const rv32i = @import("instructions/rv32i.zig");
-pub const rv32m = @import("instructions/rv32m.zig");
-pub const rv32a = @import("instructions/rv32a.zig");
-pub const zicsr = @import("instructions/zicsr.zig");
-pub const zba = @import("instructions/zba.zig");
-pub const zbb = @import("instructions/zbb.zig");
-pub const zbs = @import("instructions/zbs.zig");
+pub const rv32i = @import("instructions/rv32i/rv32i.zig");
+pub const rv32m = @import("instructions/rv32m/rv32m.zig");
+pub const rv32a = @import("instructions/rv32a/rv32a.zig");
+pub const zicsr = @import("instructions/zicsr/zicsr.zig");
+pub const zba = @import("instructions/zba/zba.zig");
+pub const zbb = @import("instructions/zbb/zbb.zig");
+pub const zbs = @import("instructions/zbs/zbs.zig");
 
 
 pub const Format = @import("instructions/format.zig").Format;

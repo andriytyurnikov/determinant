@@ -1,11 +1,11 @@
 const std = @import("std");
-const instructions = @import("../instructions.zig");
+const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
-const decoder = @import("../decoder.zig");
+const decoder = @import("../../decoder.zig");
 const decode = decoder.decode;
-const cpu_mod = @import("../cpu.zig");
+const cpu_mod = @import("../../cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const h = @import("test_helpers.zig");
+const h = @import("../test_helpers.zig");
 
 const encodeAtomic = h.encodeAtomic;
 const loadInst = h.loadInst;

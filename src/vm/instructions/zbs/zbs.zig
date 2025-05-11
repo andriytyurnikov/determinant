@@ -1,6 +1,6 @@
 /// Zbs single-bit manipulation extension opcodes, decode, and execute.
 
-const fmt = @import("format.zig");
+const fmt = @import("../format.zig");
 const Format = fmt.Format;
 
 /// Zbs single-bit manipulation extension opcodes (8 variants).
