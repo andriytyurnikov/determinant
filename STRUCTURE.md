@@ -18,8 +18,9 @@ src/
       rv32i/
         rv32i.zig         — RV32I base integer opcodes (39 variants), decode helpers, format(); re-exports rv32c
         rv32i_test.zig    — RV32I decode + execute tests
-        rv32c.zig         — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only
-        rv32c_test.zig    — RV32C expansion + CPU step tests
+        rv32c/
+          rv32c.zig       — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only
+          rv32c_test.zig  — RV32C expansion + CPU step tests
       rv32m/
         rv32m.zig         — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
         rv32m_test.zig    — RV32M decode + execute tests

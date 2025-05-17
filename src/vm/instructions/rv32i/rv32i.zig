@@ -4,7 +4,7 @@
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 
-pub const rv32c = @import("rv32c.zig");
+pub const rv32c = @import("rv32c/rv32c.zig");
 
 /// RV32I opcodes (39 variants).
 pub const Opcode = enum {
@@ -168,5 +168,5 @@ pub fn decodeBranch(f3: u3) ?Opcode {
 
 test {
     _ = @import("rv32i_test.zig");
-    _ = @import("rv32c.zig");
+    _ = @import("rv32c/rv32c.zig");
 }
