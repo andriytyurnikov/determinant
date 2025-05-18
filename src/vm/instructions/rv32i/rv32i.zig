@@ -1,5 +1,4 @@
 /// RV32I base integer instruction set opcodes and decode helpers.
-/// Also serves as namespace hub for rv32c (compressed instructions depend on rv32i).
 
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
