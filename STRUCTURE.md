@@ -52,5 +52,4 @@ build.zig.zon             — package metadata (name, version, dependencies, fin
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
-- ISA extensions live in `src/vm/instructions/` — each owns its own `Opcode` enum, decode, and execute logic
-- RV32C lives under `rv32i/` (accessed as `rv32i.rv32c`) because it's a decode-time front-end to rv32i, not an independent peer extension. Compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)
+- RV32C lives under `rv32i/rv32c/` (accessed as `rv32i.rv32c`) because it's a decode-time front-end to rv32i, not an independent peer extension. Compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)
