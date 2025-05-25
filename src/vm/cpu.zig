@@ -149,14 +149,14 @@ pub const Cpu = struct {
             },
             .m => |m_op| self.executeM(m_op, inst.rd, rs1_val, rs2_val),
             .a => |a_op| try self.executeA(a_op, inst.rd, rs1_val, rs2_val),
-            .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, inst.imm),
+            .csr => |csr_op| try self.executeCsr(csr_op, inst.rd, inst.rs1, rs1_val, inst.imm),
             .zba => |op| self.executeZba(op, inst.rd, rs1_val, rs2_val),
             .zbb => |op| self.executeZbb(op, inst.rd, rs1_val, rs2_val, @bitCast(inst.imm)),
             .zbs => |op| self.executeZbs(op, inst.rd, rs1_val, rs2_val, @bitCast(inst.imm)),
         }
 
         self.pc = next_pc;
-        self.cycle_count += 1;
+        self.cycle_count +%= 1;
         return result;
     }
 
@@ -332,10 +332,10 @@ pub const Cpu = struct {
 
     // --- Zicsr helpers ---
 
-    fn executeCsr(self: *Cpu, op: zicsr.Opcode, rd_reg: u5, rs1_field: u5, imm: i32) !void {
+    fn executeCsr(self: *Cpu, op: zicsr.Opcode, rd_reg: u5, rs1_field: u5, rs1_val: u32, imm: i32) !void {
         const csr_addr: u12 = @truncate(@as(u32, @bitCast(imm)));
         const src_val: u32 = switch (op) {
-            .CSRRW, .CSRRS, .CSRRC => self.readReg(rs1_field),
+            .CSRRW, .CSRRS, .CSRRC => rs1_val,
             .CSRRWI, .CSRRSI, .CSRRCI => @intCast(rs1_field),
         };
         const result = try self.csrs.execute(op, self.cycle_count, csr_addr, src_val, rd_reg != 0, rs1_field != 0);

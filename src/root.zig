@@ -12,7 +12,6 @@ pub const zba = instructions.zba;
 pub const zbb = instructions.zbb;
 pub const zbs = instructions.zbs;
 
-
 // Convenience aliases
 pub const Cpu = cpu.Cpu;
 pub const StepResult = cpu.StepResult;

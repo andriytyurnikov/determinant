@@ -32,11 +32,11 @@ pub fn main() !void {
     for (program, 0..) |word, i| {
         const addr = i * 4;
         if (det.decode(word)) |inst| {
-            try stdout.print("  0x{X:0>4}: ", .{addr});
+            try stdout.print("  0x{X:0>8}: ", .{addr});
             try printInstruction(stdout, inst);
             try stdout.print("\n", .{});
         } else |err| {
-            try stdout.print("  0x{X:0>4}: ??? (error: {s})\n", .{ addr, @errorName(err) });
+            try stdout.print("  0x{X:0>8}: ??? (error: {s})\n", .{ addr, @errorName(err) });
         }
     }
 
@@ -55,7 +55,7 @@ pub fn main() !void {
     }
 
     // Show memory at store target
-    const mem_val = std.mem.readInt(u32, vm.memory[100..104], .little);
+    const mem_val = std.mem.readInt(u32, vm.memory[100..][0..4], .little);
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
 
     try stdout.flush();
@@ -63,7 +63,7 @@ pub fn main() !void {
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
     const op_name = if (det.instructions.isCompressed(inst.raw))
-        (det.rv32i.rv32c.decode(@truncate(inst.raw)) catch unreachable).name()
+        if (det.rv32i.rv32c.decode(@truncate(inst.raw))) |c| c.name() else |_| inst.op.name()
     else
         inst.op.name();
     switch (inst.op) {
