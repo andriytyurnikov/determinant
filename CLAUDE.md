@@ -21,7 +21,7 @@ These are load-bearing constraints — violating any one breaks deterministic ex
 - **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`.
 - **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct). Zero allocation failure modes.
 - **No floating-point** — intentional; FP non-determinism (rounding modes, NaN payloads) is avoided entirely.
-- **Single-hart** — no threading, no FENCE (intentionally omitted).
+- **Single-hart** — no threading, FENCE is a no-op.
 
 ## Pipeline Invariant
 

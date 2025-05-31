@@ -656,6 +656,23 @@ test "step: EBREAK" {
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
 
+test "decode FENCE" {
+    // Standard FENCE iorw, iorw = 0x0FF0000F
+    const raw: u32 = 0x0FF0000F;
+    const inst = try decode(raw);
+    try std.testing.expectEqual(Opcode{ .i = .FENCE }, inst.op);
+}
+
+test "step: FENCE is no-op" {
+    var cpu = Cpu.init();
+    // FENCE iorw, iorw = 0x0FF0000F
+    loadInst(&cpu, 0x0FF0000F);
+    const result = try cpu.step();
+    try std.testing.expectEqual(StepResult.Continue, result);
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+}
+
 test "step: x0 writes ignored" {
     var cpu = Cpu.init();
     // ADDI x0, x0, 42 — should not change x0

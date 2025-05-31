@@ -31,6 +31,7 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b0010111 => decodeU(raw, .{ .i = .AUIPC }),
         0b1101111 => decodeJ(raw),
         0b1100111 => decodeJalr(raw),
+        0b0001111 => decodeFence(raw),
         0b0101111 => decodeAtomic(raw),
         0b1110011 => decodeSystem(raw),
         else => error.IllegalInstruction,
@@ -130,11 +131,9 @@ fn decodeR(raw: u32) DecodeError!Instruction {
         return .{ .op = .{ .i = i_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
-    // Zba: funct7 = 0b0010000
-    if (f7 == 0b0010000) {
-        if (zba.decodeR(f3)) |op| {
-            return .{ .op = .{ .zba = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
-        }
+    // Zba
+    if (zba.decodeR(f3, f7)) |op| {
+        return .{ .op = .{ .zba = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
     // Zbb
@@ -206,6 +205,11 @@ fn decodeJ(raw: u32) DecodeError!Instruction {
 fn decodeJalr(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b000) return error.IllegalInstruction;
     return .{ .op = .{ .i = .JALR }, .rd = rd(raw), .rs1 = rs1(raw), .imm = immI(raw), .raw = raw };
+}
+
+fn decodeFence(raw: u32) DecodeError!Instruction {
+    if (funct3(raw) != 0b000) return error.IllegalInstruction;
+    return .{ .op = .{ .i = .FENCE }, .raw = raw };
 }
 
 fn decodeAtomic(raw: u32) DecodeError!Instruction {

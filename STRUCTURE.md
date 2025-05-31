@@ -16,7 +16,7 @@ src/
       format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
       test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
       rv32i/
-        rv32i.zig         — RV32I base integer opcodes (39 variants), decode helpers, format(); re-exports rv32c
+        rv32i.zig         — RV32I base integer opcodes (40 variants, incl. FENCE), decode helpers, format(); re-exports rv32c
         rv32i_test.zig    — RV32I decode + execute tests
         rv32c/
           rv32c.zig       — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only

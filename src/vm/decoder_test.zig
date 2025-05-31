@@ -303,6 +303,20 @@ test "CSR round-trip: CSRRCI" {
     try expectRoundTripCsr(0b111, .{ .csr = .CSRRCI });
 }
 
+// --- FENCE ---
+
+test "FENCE round-trip" {
+    // Standard FENCE iorw,iorw = 0x0FF0000F
+    const inst = try decoder.decode(0x0FF0000F);
+    try std.testing.expectEqual(Opcode{ .i = .FENCE }, inst.op);
+}
+
+test "FENCE with invalid funct3 is illegal" {
+    // opcode=0b0001111, funct3=001 (FENCE.I, not implemented)
+    const raw: u32 = (0b001 << 12) | 0b0001111;
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
 // --- Edge cases ---
 
 test "decode zero instruction (0x00000000) is illegal" {

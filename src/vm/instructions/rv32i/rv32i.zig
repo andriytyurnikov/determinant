@@ -5,7 +5,7 @@ const Format = fmt.Format;
 
 pub const rv32c = @import("rv32c/rv32c.zig");
 
-/// RV32I opcodes (39 variants).
+/// RV32I opcodes (40 variants).
 pub const Opcode = enum {
     // R-type ALU
     ADD,
@@ -58,6 +58,9 @@ pub const Opcode = enum {
     JAL, // J-type
     JALR, // I-type
 
+    // Memory ordering (no-op on single-hart)
+    FENCE,
+
     // System
     ECALL,
     EBREAK,
@@ -70,6 +73,7 @@ pub const Opcode = enum {
                 .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
                 .LB, .LH, .LW, .LBU, .LHU => .I,
                 .JALR => .I,
+                .FENCE => .I,
                 .ECALL, .EBREAK => .I,
                 .SB, .SH, .SW => .S,
                 .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,

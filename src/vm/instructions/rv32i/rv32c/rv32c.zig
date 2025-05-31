@@ -38,12 +38,29 @@ pub const Opcode = enum {
     C_ADD,
     C_SWSP,
 
-    pub fn meta(comptime self: Opcode) struct { name_str: []const u8 } {
-        return .{ .name_str = comptime dotName(@tagName(self)) };
+    pub fn meta(comptime self: Opcode) fmt.Meta {
+        return .{
+            .name_str = comptime dotName(@tagName(self)),
+            .fmt = switch (self) {
+                .C_LW, .C_SW => .S, // CL/CS format (load/store)
+                .C_ADDI4SPN, .C_ADDI, .C_LI, .C_ADDI16SP, .C_LUI => .I,
+                .C_SRLI, .C_SRAI, .C_ANDI, .C_SLLI => .I,
+                .C_JAL, .C_J => .J,
+                .C_BEQZ, .C_BNEZ => .B,
+                .C_SUB, .C_XOR, .C_OR, .C_AND, .C_ADD, .C_MV => .R,
+                .C_LWSP, .C_SWSP => .I,
+                .C_JR, .C_JALR => .I,
+                .C_EBREAK => .I,
+            },
+        };
     }
 
     pub fn name(self: Opcode) []const u8 {
         return fmt.opcodeName(Opcode, self);
+    }
+
+    pub fn format(self: Opcode) fmt.Format {
+        return fmt.opcodeFormat(Opcode, self);
     }
 
     fn dotName(comptime tag: []const u8) []const u8 {

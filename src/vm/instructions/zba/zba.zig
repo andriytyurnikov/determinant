@@ -22,9 +22,9 @@ pub const Opcode = enum {
     }
 };
 
-/// Decode a Zba R-type instruction from funct3.
-/// Caller must verify funct7 = 0b0010000.
-pub fn decodeR(f3: u3) ?Opcode {
+/// Decode a Zba R-type instruction from funct3 and funct7.
+pub fn decodeR(f3: u3, f7: u7) ?Opcode {
+    if (f7 != 0b0010000) return null;
     return switch (f3) {
         0b010 => .SH1ADD,
         0b100 => .SH2ADD,

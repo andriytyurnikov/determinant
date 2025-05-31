@@ -63,7 +63,7 @@ pub const Cpu = struct {
     /// Load program bytes into memory at the given offset.
     pub fn loadProgram(self: *Cpu, program: []const u8, offset: u32) !void {
         const off: usize = offset;
-        if (off + program.len > MEMORY_SIZE) return error.AddressOutOfBounds;
+        if (program.len > MEMORY_SIZE or off > MEMORY_SIZE - program.len) return error.AddressOutOfBounds;
         @memcpy(self.memory[off..][0..program.len], program);
     }
 
@@ -261,6 +261,9 @@ pub const Cpu = struct {
                 next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
                 self.writeReg(inst.rd, return_addr);
             },
+
+            // Memory ordering (no-op on single-hart)
+            .FENCE => {},
 
             // System
             .ECALL => return .Ecall,
