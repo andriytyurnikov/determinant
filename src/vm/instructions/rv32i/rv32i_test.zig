@@ -482,7 +482,7 @@ test "step: LBU zero-extends" {
 
 test "step: LH sign-extends" {
     var cpu = Cpu.init();
-    std.mem.writeInt(u16, cpu.memory[200..202], 0x8000, .little);
+    std.mem.writeInt(u16, cpu.memory[200..][0..2], 0x8000, .little);
     cpu.writeReg(1, 200);
     // LH x2, 0(x1) = 0x00009103
     loadInst(&cpu, 0x00009103);
@@ -492,7 +492,7 @@ test "step: LH sign-extends" {
 
 test "step: LHU zero-extends" {
     var cpu = Cpu.init();
-    std.mem.writeInt(u16, cpu.memory[200..202], 0x8000, .little);
+    std.mem.writeInt(u16, cpu.memory[200..][0..2], 0x8000, .little);
     cpu.writeReg(1, 200);
     // LHU x2, 0(x1) = 0x0000D103
     loadInst(&cpu, 0x0000D103);
@@ -517,7 +517,7 @@ test "step: SH stores low halfword" {
     // SH x2, 0(x1) = 0x00209023
     loadInst(&cpu, 0x00209023);
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u16, 0x1234), std.mem.readInt(u16, cpu.memory[300..302], .little));
+    try std.testing.expectEqual(@as(u16, 0x1234), std.mem.readInt(u16, cpu.memory[300..][0..2], .little));
 }
 
 test "step: BEQ taken" {

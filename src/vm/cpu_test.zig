@@ -29,7 +29,7 @@ test "register read/write" {
 test "fetch from memory" {
     var cpu = Cpu.init();
     // Write a little-endian u32 at address 0 (bits[1:0]=11 so it's treated as 32-bit)
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x1234567F, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x1234567F, .little);
     const inst = try cpu.fetch();
     try std.testing.expectEqual(@as(u32, 0x1234567F), inst);
 }
@@ -43,7 +43,7 @@ test "fetch misaligned PC" {
 test "fetch at 2-byte-aligned address" {
     var cpu = Cpu.init();
     // Write a 32-bit instruction at address 2 (2-byte aligned but not 4-byte)
-    std.mem.writeInt(u32, cpu.memory[2..6], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[2..][0..4], 0x00000013, .little);
     cpu.pc = 2;
     const raw = try cpu.fetch();
     try std.testing.expectEqual(@as(u32, 0x00000013), raw);
@@ -52,7 +52,7 @@ test "fetch at 2-byte-aligned address" {
 test "fetch compressed instruction returns zero-extended u16" {
     var cpu = Cpu.init();
     // C.NOP = 0x0001 (low 2 bits = 01, not 11 → compressed)
-    std.mem.writeInt(u16, cpu.memory[0..2], 0x0001, .little);
+    std.mem.writeInt(u16, cpu.memory[0..][0..2], 0x0001, .little);
     const raw = try cpu.fetch();
     try std.testing.expectEqual(@as(u32, 0x0001), raw);
 }
@@ -149,8 +149,8 @@ test "writeWord out of bounds" {
 test "step: cycle count increments" {
     var cpu = Cpu.init();
     // Two NOPs (ADDI x0, x0, 0 = 0x00000013)
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000013, .little);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
     _ = try cpu.step();
@@ -160,11 +160,11 @@ test "step: cycle count increments" {
 test "step: multi-instruction ADDI + ADD" {
     var cpu = Cpu.init();
     // ADDI x1, x0, 5 = 0x00500093
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x00500093, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00500093, .little);
     // ADDI x2, x0, 10 = 0x00A00113
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00A00113, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00A00113, .little);
     // ADD x3, x1, x2 = 0x002081B3
-    std.mem.writeInt(u32, cpu.memory[8..12], 0x002081B3, .little);
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], 0x002081B3, .little);
 
     _ = try cpu.step();
     _ = try cpu.step();
@@ -180,15 +180,15 @@ test "step: multi-instruction ADDI + ADD" {
 test "step: full demo program" {
     var cpu = Cpu.init();
     // ADDI x1, x0, 100
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x06400093, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x06400093, .little);
     // ADDI x2, x0, 10
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00A00113, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00A00113, .little);
     // ADD x3, x1, x2
-    std.mem.writeInt(u32, cpu.memory[8..12], 0x002081B3, .little);
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], 0x002081B3, .little);
     // SW x3, 0(x1) — store at address 100 (aligned)
-    std.mem.writeInt(u32, cpu.memory[12..16], 0x0030A023, .little);
+    std.mem.writeInt(u32, cpu.memory[12..][0..4], 0x0030A023, .little);
     // ECALL
-    std.mem.writeInt(u32, cpu.memory[16..20], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu.memory[16..][0..4], 0x00000073, .little);
 
     var result: StepResult = .Continue;
     while (result == .Continue) {
@@ -201,7 +201,7 @@ test "step: full demo program" {
     try std.testing.expectEqual(@as(u32, 110), cpu.readReg(3));
     try std.testing.expectEqual(@as(u64, 5), cpu.cycle_count);
     // Verify SW wrote to memory at address 100
-    try std.testing.expectEqual(@as(u32, 110), std.mem.readInt(u32, cpu.memory[100..104], .little));
+    try std.testing.expectEqual(@as(u32, 110), std.mem.readInt(u32, cpu.memory[100..][0..4], .little));
 }
 
 // --- run() tests ---
@@ -209,9 +209,9 @@ test "step: full demo program" {
 test "run: stops on ECALL" {
     var cpu = Cpu.init();
     // ADDI x1, x0, 42
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x02A00093, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x02A00093, .little);
     // ECALL
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
 
     const result = try cpu.run(0);
     try std.testing.expectEqual(StepResult.Ecall, result);
@@ -222,7 +222,7 @@ test "run: stops on ECALL" {
 test "run: stops on EBREAK" {
     var cpu = Cpu.init();
     // EBREAK
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x00100073, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00100073, .little);
 
     const result = try cpu.run(0);
     try std.testing.expectEqual(StepResult.Ebreak, result);
@@ -232,11 +232,11 @@ test "run: stops on EBREAK" {
 test "run: respects max_cycles" {
     var cpu = Cpu.init();
     // 4 NOPs then ECALL
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[8..12], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[12..16], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[16..20], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[12..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[16..][0..4], 0x00000073, .little);
 
     // Limit to 2 cycles — should stop before ECALL
     const result = try cpu.run(2);
@@ -248,8 +248,8 @@ test "run: respects max_cycles" {
 test "run: max_cycles exactly at ECALL" {
     var cpu = Cpu.init();
     // NOP then ECALL
-    std.mem.writeInt(u32, cpu.memory[0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[4..8], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
 
     // max_cycles=2: should execute both instructions
     const result = try cpu.run(2);
@@ -382,26 +382,26 @@ test "determinism: two VMs with same program produce identical state" {
 
     // Same program: compute (5 + 10) * 3 via shifts and adds, store result, ECALL
     // ADDI x1, x0, 5
-    std.mem.writeInt(u32, cpu1.memory[0..4], 0x00500093, .little);
-    std.mem.writeInt(u32, cpu2.memory[0..4], 0x00500093, .little);
+    std.mem.writeInt(u32, cpu1.memory[0..][0..4], 0x00500093, .little);
+    std.mem.writeInt(u32, cpu2.memory[0..][0..4], 0x00500093, .little);
     // ADDI x2, x0, 10
-    std.mem.writeInt(u32, cpu1.memory[4..8], 0x00A00113, .little);
-    std.mem.writeInt(u32, cpu2.memory[4..8], 0x00A00113, .little);
+    std.mem.writeInt(u32, cpu1.memory[4..][0..4], 0x00A00113, .little);
+    std.mem.writeInt(u32, cpu2.memory[4..][0..4], 0x00A00113, .little);
     // ADD x3, x1, x2 (x3 = 15)
-    std.mem.writeInt(u32, cpu1.memory[8..12], 0x002081B3, .little);
-    std.mem.writeInt(u32, cpu2.memory[8..12], 0x002081B3, .little);
+    std.mem.writeInt(u32, cpu1.memory[8..][0..4], 0x002081B3, .little);
+    std.mem.writeInt(u32, cpu2.memory[8..][0..4], 0x002081B3, .little);
     // SLLI x4, x3, 1 (x4 = 30)
-    std.mem.writeInt(u32, cpu1.memory[12..16], 0x00119213, .little);
-    std.mem.writeInt(u32, cpu2.memory[12..16], 0x00119213, .little);
+    std.mem.writeInt(u32, cpu1.memory[12..][0..4], 0x00119213, .little);
+    std.mem.writeInt(u32, cpu2.memory[12..][0..4], 0x00119213, .little);
     // ADD x5, x4, x3 (x5 = 45)
-    std.mem.writeInt(u32, cpu1.memory[16..20], 0x003202B3, .little);
-    std.mem.writeInt(u32, cpu2.memory[16..20], 0x003202B3, .little);
+    std.mem.writeInt(u32, cpu1.memory[16..][0..4], 0x003202B3, .little);
+    std.mem.writeInt(u32, cpu2.memory[16..][0..4], 0x003202B3, .little);
     // SW x5, 256(x0)
-    std.mem.writeInt(u32, cpu1.memory[20..24], 0x10502023, .little);
-    std.mem.writeInt(u32, cpu2.memory[20..24], 0x10502023, .little);
+    std.mem.writeInt(u32, cpu1.memory[20..][0..4], 0x10502023, .little);
+    std.mem.writeInt(u32, cpu2.memory[20..][0..4], 0x10502023, .little);
     // ECALL
-    std.mem.writeInt(u32, cpu1.memory[24..28], 0x00000073, .little);
-    std.mem.writeInt(u32, cpu2.memory[24..28], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu1.memory[24..][0..4], 0x00000073, .little);
+    std.mem.writeInt(u32, cpu2.memory[24..][0..4], 0x00000073, .little);
 
     const result1 = try cpu1.run(0);
     const result2 = try cpu2.run(0);
@@ -418,12 +418,12 @@ test "determinism: two VMs with same program produce identical state" {
 
     // Identical memory at store target
     try std.testing.expectEqual(
-        std.mem.readInt(u32, cpu1.memory[256..260], .little),
-        std.mem.readInt(u32, cpu2.memory[256..260], .little),
+        std.mem.readInt(u32, cpu1.memory[256..][0..4], .little),
+        std.mem.readInt(u32, cpu2.memory[256..][0..4], .little),
     );
 
     // Verify expected values
     try std.testing.expectEqual(StepResult.Ecall, result1);
     try std.testing.expectEqual(@as(u32, 45), cpu1.readReg(5));
-    try std.testing.expectEqual(@as(u32, 45), std.mem.readInt(u32, cpu1.memory[256..260], .little));
+    try std.testing.expectEqual(@as(u32, 45), std.mem.readInt(u32, cpu1.memory[256..][0..4], .little));
 }
