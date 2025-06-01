@@ -18,7 +18,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 These are load-bearing constraints — violating any one breaks deterministic execution:
 
 - **Wrapping arithmetic everywhere** — all VM arithmetic uses `+%`, `-%`, `*%` (wrapping operators). Zig's default `+`, `-`, `*` panic on overflow in debug mode and are undefined in release. Every ADD, SUB, address calculation, and PC update must wrap.
-- **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`.
+- **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`. Never use `std.mem.sliceAsBytes` on typed arrays — it reinterprets in native byte order. See "Endianness" in Traps to Avoid.
 - **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct). Zero allocation failure modes.
 - **No floating-point** — intentional; FP non-determinism (rounding modes, NaN payloads) is avoided entirely.
 - **Single-hart** — no threading, FENCE is a no-op.
@@ -119,6 +119,24 @@ self.writeReg(inst.rd, @as(u32, byte));
 // RIGHT — u8 → i8 (bitcast) → i32 (sign-extends) → u32 (bitcast):
 self.writeReg(inst.rd, @bitCast(@as(i32, @as(i8, @bitCast(byte)))));
 ```
+
+### Endianness (Critical)
+RISC-V is little-endian. All multi-byte data must be serialized explicitly — never rely on host byte order.
+```zig
+// WRONG — reinterprets [_]u32 in native byte order (breaks on big-endian hosts):
+const program = [_]u32{ 0x06400093, 0x00A00113 };
+const bytes = std.mem.sliceAsBytes(&program);
+
+// RIGHT — define as explicit LE bytes:
+const program = [_]u8{
+    0x93, 0x00, 0x40, 0x06, // ADDI x1, x0, 100
+    0x13, 0x01, 0x0A, 0x00, // ADDI x2, x0, 10
+};
+
+// RIGHT — or write per-word with explicit endianness:
+std.mem.writeInt(u32, buf[0..][0..4], 0x06400093, .little);
+```
+Banned APIs in VM/CLI code: `std.mem.sliceAsBytes`, `std.mem.bytesAsSlice`, `@ptrCast` on byte buffers, `.native` endianness. These all depend on host byte order and silently break determinism on big-endian targets.
 
 ### Zig 0.15.2 Memory Slice Syntax
 ```zig

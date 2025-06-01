@@ -368,3 +368,15 @@ test "step: AMOADD.W wrapping" {
     try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
     try std.testing.expectEqual(@as(u32, 0), readWordAt(&cpu, addr));
 }
+
+test "step: AMOADD.W signed overflow boundary" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0x7FFFFFFF); // max positive i32
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 1);
+    loadInst(&cpu, encodeAtomic(0b00000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 0x80000000), readWordAt(&cpu, addr)); // wraps to min negative
+}

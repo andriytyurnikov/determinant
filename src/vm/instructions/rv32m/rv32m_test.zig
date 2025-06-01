@@ -235,3 +235,23 @@ test "step: REMU by zero" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
 }
+
+test "step: MULH SIGNED_MIN × SIGNED_MIN" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    cpu.writeReg(2, 0x80000000);
+    loadInst(&cpu, encodeR(0b001, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    // (-2^31) × (-2^31) = 2^62 = 0x4000000000000000, upper 32 = 0x40000000
+    try std.testing.expectEqual(@as(u32, 0x40000000), cpu.readReg(3));
+}
+
+test "step: MULHSU SIGNED_MIN × unsigned max" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000); // -2^31 (signed)
+    cpu.writeReg(2, 0xFFFFFFFF); // 2^32-1 (unsigned)
+    loadInst(&cpu, encodeR(0b010, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    // (-2^31) × (2^32-1) = -9223372034707292160, as u64 = 0x8000000080000000
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}

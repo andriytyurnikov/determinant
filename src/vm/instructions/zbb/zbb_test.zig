@@ -318,3 +318,29 @@ test "step: REV8 basic" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x04030201), cpu.readReg(3));
 }
+
+test "step: ROL with high rs2 (shift amount masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000001);
+    cpu.writeReg(2, 0x21); // 33 & 0x1F = 1
+    loadInst(&cpu, encodeR(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000003), cpu.readReg(3));
+}
+
+test "step: ROR with high rs2 (shift amount masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000001);
+    cpu.writeReg(2, 0x21); // 33 & 0x1F = 1
+    loadInst(&cpu, encodeR(0b101, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xC0000000), cpu.readReg(3));
+}
+
+test "step: RORI by zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEADBEEF);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0110000, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(3));
+}

@@ -327,6 +327,28 @@ test "decode all-ones instruction (0xFFFFFFFF) is illegal" {
     try std.testing.expectError(error.IllegalInstruction, decoder.decode(0xFFFFFFFF));
 }
 
+test "ECALL and EBREAK exact decode" {
+    const ecall = try decoder.decode(0x00000073);
+    try std.testing.expectEqual(Opcode{ .i = .ECALL }, ecall.op);
+    const ebreak = try decoder.decode(0x00100073);
+    try std.testing.expectEqual(Opcode{ .i = .EBREAK }, ebreak.op);
+}
+
+test "invalid R-type funct7 fallthrough is illegal" {
+    const raw = h.encodeR(0b0110011, 0b000, 0b1111111, 4, 5, 6);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "I-type shift shamt extraction for SLLI" {
+    const imm12: u12 = (@as(u12, 0b0000000) << 5) | 17;
+    const raw = h.encodeI(0b0010011, 0b001, 3, 5, imm12);
+    const inst = try decoder.decode(raw);
+    try std.testing.expectEqual(Opcode{ .i = .SLLI }, inst.op);
+    try std.testing.expectEqual(@as(u5, 3), inst.rd);
+    try std.testing.expectEqual(@as(u5, 5), inst.rs1);
+    try std.testing.expectEqual(@as(i32, 17), inst.imm);
+}
+
 fn expectRoundTripCsr(f3: u3, expected_op: Opcode) !void {
     const test_regs = [_]u5{ 0, 1, 15, 31 };
     const test_addrs = [_]u12{ 0x000, 0xC00, 0xC80, 0x340, 0xFFF };

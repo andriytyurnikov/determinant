@@ -51,19 +51,19 @@ pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
         .MULH => blk: {
             const a: i64 = @as(i32, @bitCast(rs1_val));
             const b: i64 = @as(i32, @bitCast(rs2_val));
-            const result: u64 = @bitCast(a * b);
+            const result: u64 = @bitCast(a *% b);
             break :blk @truncate(result >> 32);
         },
         .MULHSU => blk: {
             const a: i64 = @as(i32, @bitCast(rs1_val));
             const b: i64 = @as(u32, rs2_val);
-            const result: u64 = @bitCast(a * b);
+            const result: u64 = @bitCast(a *% b);
             break :blk @truncate(result >> 32);
         },
         .MULHU => blk: {
             const a: u64 = rs1_val;
             const b: u64 = rs2_val;
-            break :blk @truncate((a * b) >> 32);
+            break :blk @truncate((a *% b) >> 32);
         },
         .DIV => blk: {
             const a: i32 = @bitCast(rs1_val);

@@ -68,3 +68,21 @@ test "step: SH1ADD wrapping" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // (0x80000000 << 1) +% 1 = 1
 }
+
+test "step: SH2ADD wrapping" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xC0000000);
+    cpu.writeReg(2, 1);
+    loadInst(&cpu, encodeR(0b100, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // (0xC0000000 << 2) +% 1 = 1
+}
+
+test "step: SH3ADD wrapping" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xE0000000);
+    cpu.writeReg(2, 1);
+    loadInst(&cpu, encodeR(0b110, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // (0xE0000000 << 3) +% 1 = 1
+}

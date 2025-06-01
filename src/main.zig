@@ -14,23 +14,23 @@ pub fn main() !void {
     //   ADD  x3, x1, x2     — x3 = x1 + x2 = 110
     //   SW   x3, 0(x1)      — mem[100] = 110
     //   ECALL                — system call
-    const program = [_]u32{
-        0x06400093, // ADDI x1, x0, 100
-        0x00A00113, // ADDI x2, x0, 10
-        0x002081B3, // ADD  x3, x1, x2
-        0x0030A023, // SW   x3, 0(x1)
-        0x00000073, // ECALL
+    const program = [_]u8{
+        0x93, 0x00, 0x40, 0x06, // ADDI x1, x0, 100
+        0x13, 0x01, 0x0A, 0x00, // ADDI x2, x0, 10
+        0xB3, 0x81, 0x20, 0x00, // ADD  x3, x1, x2
+        0x23, 0xA0, 0x30, 0x00, // SW   x3, 0(x1)
+        0x73, 0x00, 0x00, 0x00, // ECALL
     };
 
     // Load program into VM
     var vm = det.Cpu.init();
-    const program_bytes = std.mem.sliceAsBytes(&program);
-    try vm.loadProgram(program_bytes, 0);
+    try vm.loadProgram(&program, 0);
 
     // Decode and display instructions
     try stdout.print("Program:\n", .{});
-    for (program, 0..) |word, i| {
+    for (0..program.len / 4) |i| {
         const addr = i * 4;
+        const word = std.mem.readInt(u32, program[addr..][0..4], .little);
         if (det.decode(word)) |inst| {
             try stdout.print("  0x{X:0>8}: ", .{addr});
             try printInstruction(stdout, inst);
@@ -78,7 +78,11 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
             .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
         },
         .m => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),
-        .a => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),
+        .a => |a_op| switch (a_op) {
+            .LR_W => try stdout.print("{s} x{d}, (x{d})", .{ op_name, inst.rd, inst.rs1 }),
+            .SC_W => try stdout.print("{s} x{d}, x{d}, (x{d})", .{ op_name, inst.rd, inst.rs2, inst.rs1 }),
+            else => try stdout.print("{s} x{d}, x{d}, (x{d})", .{ op_name, inst.rd, inst.rs2, inst.rs1 }),
+        },
         .csr => |csr_op| {
             const csr_addr: u12 = @truncate(@as(u32, @bitCast(inst.imm)));
             switch (csr_op) {

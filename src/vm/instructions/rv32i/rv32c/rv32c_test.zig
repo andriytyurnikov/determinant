@@ -510,6 +510,12 @@ test "CPU step: C.LW and C.SW" {
     try std.testing.expectEqual(@as(u32, 42), try cpu.readWord(256));
 }
 
+test "C.SRAI: shamt[5]=1 illegal on RV32" {
+    // funct3=100, funct2=01 (bits[11:10]), bit[12]=1 (shamt[5]), rd'=0(x8), bits[6:2]=00001, op=01
+    // = 0b100_1_01_000_00001_01 = 0x9405
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x9405));
+}
+
 test "CPU step: C.BEQZ taken" {
     var cpu = Cpu.init();
     // x8 = 0 by default

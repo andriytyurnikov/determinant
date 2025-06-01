@@ -129,3 +129,30 @@ test "step: BSETI basic" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3)); // bit 31 set
 }
+
+test "step: BCLR bit 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, encodeR(0b001, 0b0100100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3));
+}
+
+test "step: BINV bit 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, encodeR(0b001, 0b0110100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}
+
+test "step: BSET bit 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, encodeR(0b001, 0b0010100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}

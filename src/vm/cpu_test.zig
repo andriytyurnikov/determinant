@@ -376,6 +376,29 @@ test "step: JAL beyond memory causes PCOutOfBounds on next fetch" {
     try std.testing.expectError(error.PCOutOfBounds, cpu.step());
 }
 
+test "step: cycle_count wrapping at u64 max" {
+    var cpu = Cpu.init();
+    cpu.cycle_count = std.math.maxInt(u64);
+    // NOP
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u64, 0), cpu.cycle_count);
+}
+
+test "step: backward branch (negative offset)" {
+    const h2 = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    // NOP at address 0
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    // NOP at address 4
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000013, .little);
+    // BEQ x0, x0, -4 at address 8 → target = 4
+    cpu.pc = 8;
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], h2.encodeB(0b000, 0, 0, -4), .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}
+
 test "determinism: two VMs with same program produce identical state" {
     var cpu1 = Cpu.init();
     var cpu2 = Cpu.init();
