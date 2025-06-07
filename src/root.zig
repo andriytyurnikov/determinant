@@ -37,3 +37,16 @@ test "integration: load, fetch, decode" {
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
     try std.testing.expectEqual(@as(i32, 42), inst.imm);
 }
+
+test "regression: demo program second instruction encodes ADDI x2, x0, 10" {
+    // Bytes from main.zig line 19 — ADDI x2, x0, 10 = 0x00A00113.
+    // Previously had 0x0A/0xA0 transposed, encoding ADDI x2, x20, 0 instead.
+    const demo_bytes = [_]u8{ 0x13, 0x01, 0xA0, 0x00 };
+    const raw = std.mem.readInt(u32, &demo_bytes, .little);
+    const inst = try decoder.decode(raw);
+
+    try std.testing.expectEqual(instructions.Opcode{ .i = .ADDI }, inst.op);
+    try std.testing.expectEqual(@as(u5, 2), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(i32, 10), inst.imm);
+}

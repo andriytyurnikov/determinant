@@ -121,9 +121,9 @@ fn decodeR(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
 
-    // M-extension: funct7 = 0b0000001
-    if (f7 == 0b0000001) {
-        return .{ .op = .{ .m = rv32m.decodeR(f3) }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    // M-extension
+    if (rv32m.decodeR(f3, f7)) |op| {
+        return .{ .op = .{ .m = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
     // RV32I base
