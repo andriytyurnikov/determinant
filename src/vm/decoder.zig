@@ -66,6 +66,14 @@ fn funct7(raw: u32) u7 {
     return @truncate(raw >> 25);
 }
 
+fn funct5(raw: u32) u5 {
+    return @truncate(raw >> 27);
+}
+
+fn funct12(raw: u32) u12 {
+    return @truncate(raw >> 20);
+}
+
 // --- Immediate extraction ---
 
 fn immI(raw: u32) i32 {
@@ -121,9 +129,9 @@ fn decodeR(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);
 
-    // M-extension
-    if (rv32m.decodeR(f3, f7)) |op| {
-        return .{ .op = .{ .m = op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
+    // M-extension: funct7 = 0b0000001, all 8 funct3 values valid
+    if (f7 == 0b0000001) {
+        return .{ .op = .{ .m = rv32m.decodeR(f3) }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
     }
 
     // RV32I base
@@ -214,17 +222,17 @@ fn decodeFence(raw: u32) DecodeError!Instruction {
 
 fn decodeAtomic(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b010) return error.IllegalInstruction;
-    const a_op = rv32a.decodeR(funct7(raw)) orelse return error.IllegalInstruction;
+    const a_op = rv32a.decodeR(funct5(raw)) orelse return error.IllegalInstruction;
     return .{ .op = .{ .a = a_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     if (f3 == 0b000) {
-        // ECALL / EBREAK
-        return switch (raw) {
-            0x00000073 => .{ .op = .{ .i = .ECALL }, .raw = raw },
-            0x00100073 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
+        // ECALL / EBREAK: distinguished by funct12
+        return switch (funct12(raw)) {
+            0x000 => .{ .op = .{ .i = .ECALL }, .raw = raw },
+            0x001 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
             else => error.IllegalInstruction,
         };
     }

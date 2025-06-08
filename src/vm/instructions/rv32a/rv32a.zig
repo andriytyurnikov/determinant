@@ -45,12 +45,10 @@ pub const Opcode = enum {
     }
 };
 
-/// Decode an A-extension R-type instruction from funct7.
-/// The funct5 field (bits [6:2] of funct7) determines the operation.
-/// aq/rl bits (bits [1:0] of funct7) are ignored on single-hart.
-pub fn decodeR(f7: u7) ?Opcode {
-    const funct5: u5 = @truncate(f7 >> 2);
-    return switch (funct5) {
+/// Decode an A-extension R-type instruction from funct5.
+/// aq/rl bits are stripped by the caller; funct5 determines the operation.
+pub fn decodeR(f5: u5) ?Opcode {
+    return switch (f5) {
         0b00010 => .LR_W,
         0b00011 => .SC_W,
         0b00001 => .AMOSWAP_W,
