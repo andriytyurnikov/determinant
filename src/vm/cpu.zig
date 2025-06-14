@@ -1,5 +1,5 @@
 const std = @import("std");
-const decoder = @import("decoder.zig");
+const comptime_lut = @import("comptime_lut.zig");
 const instructions = @import("instructions.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;
@@ -134,7 +134,7 @@ pub const Cpu = struct {
     ///   6. increment cycle   — AFTER everything, so CSR reads of cycle see the pre-step count
     pub fn step(self: *Cpu) !StepResult {
         const raw = try self.fetch();
-        const inst = try decoder.decode(raw);
+        const inst = try comptime_lut.decodeInstruction(raw);
         const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
 
         const rs1_val = self.readReg(inst.rs1);

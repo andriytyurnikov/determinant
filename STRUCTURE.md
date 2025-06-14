@@ -4,11 +4,14 @@
 src/
   root.zig                — library root, re-exports all submodules and convenience aliases
   main.zig                — CLI entry point, imports the library as @import("determinant")
-  vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoder
+  vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoder, comptime_lut
   vm/
     cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
     cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
-    decoder.zig           — pure routing: bit extraction + dispatch to extension decoders; wraps rv32c.Expanded → Instruction
+    bitfields.zig         — shared bit-field extraction (rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
+    comptime_lut.zig      — primary decoder: comptime LUT tables (level1 strategy → format-specific tables), 94 opcodes
+    comptime_lut_test.zig — LUT unit tests + conformance suite (field-by-field match vs decoder.zig)
+    decoder.zig           — reference decoder: branch-based dispatch to extension decoders; wraps rv32c.Expanded → Instruction
     decoder_test.zig      — encode/decode round-trip tests for all instruction formats
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     rv32c_cross_test.zig  — cross-validation: rv32c.Expanded vs decoder.decode() Instruction equivalence

@@ -1,5 +1,6 @@
 const std = @import("std");
 const instructions = @import("instructions.zig");
+const bf = @import("bitfields.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;
 const rv32a = instructions.rv32a;
@@ -12,6 +13,20 @@ const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 
 pub const DecodeError = error{IllegalInstruction};
+
+// Import bit-field extractors from shared module.
+const rd = bf.rd;
+const funct3 = bf.funct3;
+const rs1 = bf.rs1;
+const rs2 = bf.rs2;
+const funct7 = bf.funct7;
+const funct5 = bf.funct5;
+const funct12 = bf.funct12;
+const immI = bf.immI;
+const immS = bf.immS;
+const immB = bf.immB;
+const immU = bf.immU;
+const immJ = bf.immJ;
 
 /// Decode a RISC-V instruction word into an Instruction.
 /// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
@@ -42,80 +57,6 @@ pub fn decode(raw: u32) DecodeError!Instruction {
 fn expandCompressed(raw: u32) DecodeError!Instruction {
     const exp = try rv32c.expand(@truncate(raw));
     return .{ .op = .{ .i = exp.op }, .rd = exp.rd, .rs1 = exp.rs1, .rs2 = exp.rs2, .imm = exp.imm, .raw = raw };
-}
-
-// --- Bit field extraction ---
-
-fn rd(raw: u32) u5 {
-    return @truncate(raw >> 7);
-}
-
-fn funct3(raw: u32) u3 {
-    return @truncate(raw >> 12);
-}
-
-fn rs1(raw: u32) u5 {
-    return @truncate(raw >> 15);
-}
-
-fn rs2(raw: u32) u5 {
-    return @truncate(raw >> 20);
-}
-
-fn funct7(raw: u32) u7 {
-    return @truncate(raw >> 25);
-}
-
-fn funct5(raw: u32) u5 {
-    return @truncate(raw >> 27);
-}
-
-fn funct12(raw: u32) u12 {
-    return @truncate(raw >> 20);
-}
-
-// --- Immediate extraction ---
-
-fn immI(raw: u32) i32 {
-    const bits: i32 = @bitCast(raw);
-    return bits >> 20; // arithmetic right shift sign-extends
-}
-
-fn immS(raw: u32) i32 {
-    const imm_11_5: u32 = (raw >> 25) & 0x7F;
-    const imm_4_0: u32 = (raw >> 7) & 0x1F;
-    const imm_raw: u32 = (imm_11_5 << 5) | imm_4_0;
-    // Sign extend from bit 11
-    const shifted: i32 = @as(i32, @bitCast(imm_raw << 20)) >> 20;
-    return shifted;
-}
-
-fn immB(raw: u32) i32 {
-    // imm[12|10:5|4:1|11]
-    const imm_12: u32 = (raw >> 31) & 1;
-    const imm_11: u32 = (raw >> 7) & 1;
-    const imm_10_5: u32 = (raw >> 25) & 0x3F;
-    const imm_4_1: u32 = (raw >> 8) & 0xF;
-    const imm_raw: u32 = (imm_12 << 12) | (imm_11 << 11) | (imm_10_5 << 5) | (imm_4_1 << 1);
-    // Sign extend from bit 12
-    const shifted: i32 = @as(i32, @bitCast(imm_raw << 19)) >> 19;
-    return shifted;
-}
-
-fn immU(raw: u32) i32 {
-    return @bitCast(raw & 0xFFFFF000);
-}
-
-fn immJ(raw: u32) i32 {
-    // imm[20|10:1|11|19:12]
-    const imm_20: u32 = (raw >> 31) & 1;
-    const imm_19_12: u32 = (raw >> 12) & 0xFF;
-    const imm_11: u32 = (raw >> 20) & 1;
-    const imm_10_1: u32 = (raw >> 21) & 0x3FF;
-    const imm_raw: u32 = (imm_20 << 20) | (imm_19_12 << 12) | (imm_11 << 11) | (imm_10_1 << 1);
-    // Sign extend from bit 20
-    const shifted: i32 = @as(i32, @bitCast(imm_raw << 11)) >> 11;
-    return shifted;
 }
 
 // --- Sub-decoders ---
@@ -243,4 +184,5 @@ fn decodeSystem(raw: u32) DecodeError!Instruction {
 test {
     _ = @import("decoder_test.zig");
     _ = @import("rv32c_cross_test.zig");
+    _ = @import("comptime_lut.zig");
 }
