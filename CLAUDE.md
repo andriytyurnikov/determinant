@@ -70,7 +70,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 - `comptime_lut.zig` is the **primary decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
 - **Two-level design**: Level 1 `[128]Strategy` maps opcode[6:0] → decode strategy (1 byte each). Level 2 tables are strategy-specific: `r_table[8][128]`, `shift_table[2][128]`, `load/store/branch/system[8]`, `atomic[32]`, `i_alu_base[8]`
-- **Zbb rs2 refinement**: 4 of 1024 R-type table coordinates and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
+- **Zbb rs2 refinement**: 1 of 1024 R-type table coordinates (ZEXT_H) and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
 - **Bit-field extraction**: shared `bitfields.zig` module used by both `comptime_lut.zig` and `decoder.zig`
 - **RV32C**: 16-bit compressed instructions delegate to `rv32c.expand()` — fundamentally not table-based
 - **Special I-format cases**: ECALL/EBREAK/FENCE use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `decoder.zig` behavior

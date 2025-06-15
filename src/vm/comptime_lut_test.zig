@@ -445,6 +445,9 @@ test "conformance: R-type (RV32I + RV32M + Zba + Zbb + Zbs)" {
     try assertConformance(encodeRBase(0b110, 0b0100000, 1, 2, 3)); // ORN
     try assertConformance(encodeRBase(0b100, 0b0100000, 1, 2, 3)); // XNOR
     try assertConformance(encodeRBase(0b100, 0b0000101, 1, 2, 3)); // MIN
+    try assertConformance(encodeRBase(0b101, 0b0000101, 1, 2, 3)); // MINU
+    try assertConformance(encodeRBase(0b110, 0b0000101, 1, 2, 3)); // MAX
+    try assertConformance(encodeRBase(0b111, 0b0000101, 1, 2, 3)); // MAXU
     try assertConformance(encodeRBase(0b001, 0b0110000, 1, 2, 3)); // ROL
     try assertConformance(encodeRBase(0b101, 0b0110000, 1, 2, 3)); // ROR
     try assertConformance(encodeRBase(0b100, 0b0000100, 1, 2, 0)); // ZEXT_H
@@ -456,31 +459,31 @@ test "conformance: R-type (RV32I + RV32M + Zba + Zbb + Zbs)" {
 }
 
 test "conformance: I-type ALU (RV32I + Zbb + Zbs)" {
-    // RV32I non-shifts
-    try assertConformance(encodeIAlu(0b000, 42)); // ADDI
-    try assertConformance(encodeIAlu(0b010, 42)); // SLTI
-    try assertConformance(encodeIAlu(0b011, 42)); // SLTIU
-    try assertConformance(encodeIAlu(0b100, 42)); // XORI
-    try assertConformance(encodeIAlu(0b110, 42)); // ORI
-    try assertConformance(encodeIAlu(0b111, 42)); // ANDI
-    // RV32I shifts
-    try assertConformance(encodeIAlu(0b001, 0b0000000_00101)); // SLLI
-    try assertConformance(encodeIAlu(0b101, 0b0000000_00011)); // SRLI
-    try assertConformance(encodeIAlu(0b101, 0b0100000_00011)); // SRAI
-    // Zbb shifts
-    try assertConformance(encodeIAlu(0b101, 0b0110000_00101)); // RORI
-    try assertConformance(encodeIAlu(0b001, 0b0110000_00000)); // CLZ
-    try assertConformance(encodeIAlu(0b001, 0b0110000_00001)); // CTZ
-    try assertConformance(encodeIAlu(0b001, 0b0110000_00010)); // CPOP
-    try assertConformance(encodeIAlu(0b001, 0b0110000_00100)); // SEXT_B
-    try assertConformance(encodeIAlu(0b001, 0b0110000_00101)); // SEXT_H
-    try assertConformance(encodeIAlu(0b101, 0b0010100_00111)); // ORC_B
-    try assertConformance(encodeIAlu(0b101, 0b0110100_11000)); // REV8
-    // Zbs shifts
-    try assertConformance(encodeIAlu(0b001, 0b0100100_00101)); // BCLRI
-    try assertConformance(encodeIAlu(0b101, 0b0100100_00011)); // BEXTI
-    try assertConformance(encodeIAlu(0b001, 0b0110100_00010)); // BINVI
-    try assertConformance(encodeIAlu(0b001, 0b0010100_00111)); // BSETI
+    // RV32I non-shifts (with non-zero rd/rs1 via encodeI)
+    try assertConformance(encodeI(0b0010011, 0b000, 5, 10, 42)); // ADDI
+    try assertConformance(encodeI(0b0010011, 0b010, 5, 10, 42)); // SLTI
+    try assertConformance(encodeI(0b0010011, 0b011, 5, 10, 42)); // SLTIU
+    try assertConformance(encodeI(0b0010011, 0b100, 5, 10, 42)); // XORI
+    try assertConformance(encodeI(0b0010011, 0b110, 5, 10, 42)); // ORI
+    try assertConformance(encodeI(0b0010011, 0b111, 5, 10, 42)); // ANDI
+    // RV32I shifts (with non-zero rd/rs1)
+    try assertConformance(encodeI(0b0010011, 0b001, 3, 7, 0b0000000_00101)); // SLLI
+    try assertConformance(encodeI(0b0010011, 0b101, 3, 7, 0b0000000_00011)); // SRLI
+    try assertConformance(encodeI(0b0010011, 0b101, 3, 7, 0b0100000_00011)); // SRAI
+    // Zbb shifts (with non-zero rd/rs1)
+    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0110000_00101)); // RORI
+    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00000)); // CLZ
+    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00001)); // CTZ
+    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00010)); // CPOP
+    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00100)); // SEXT_B
+    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00101)); // SEXT_H
+    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0010100_00111)); // ORC_B
+    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0110100_11000)); // REV8
+    // Zbs shifts (with non-zero rd/rs1)
+    try assertConformance(encodeI(0b0010011, 0b001, 6, 12, 0b0100100_00101)); // BCLRI
+    try assertConformance(encodeI(0b0010011, 0b101, 6, 12, 0b0100100_00011)); // BEXTI
+    try assertConformance(encodeI(0b0010011, 0b001, 6, 12, 0b0110100_00010)); // BINVI
+    try assertConformance(encodeI(0b0010011, 0b001, 6, 12, 0b0010100_00111)); // BSETI
 }
 
 test "conformance: Load/Store/Branch" {
@@ -536,4 +539,9 @@ test "conformance: invalid encodings" {
     try assertConformance(encodeI(0b1100111, 0b001, 1, 2, 0)); // JALR bad funct3
     try assertConformance(encodeI(0b0001111, 0b001, 0, 0, 0)); // FENCE bad funct3
     try assertConformance(encodeSystem(0b000, 0, 0, 0x002)); // invalid funct12
+    // Zbb rs2-dependent invalid cases
+    try assertConformance(encodeRBase(0b100, 0b0000100, 1, 2, 1)); // ZEXT_H with rs2=1
+    try assertConformance(encodeIAlu(0b001, 0b0110000_00011)); // CLZ group rs2=3
+    try assertConformance(encodeIAlu(0b101, 0b0010100_00000)); // ORC_B with rs2=0
+    try assertConformance(encodeIAlu(0b101, 0b0110100_00000)); // REV8 with rs2=0
 }
