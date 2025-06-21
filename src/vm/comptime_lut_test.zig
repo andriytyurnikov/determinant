@@ -56,6 +56,22 @@ fn encodeBranch(f3: u3, rs1_v: u5, rs2_v: u5) u32 {
         (@as(u32, rs2_v) << 20);
 }
 
+fn encodeBranchFull(f3: u3, rs1_v: u5, rs2_v: u5, imm: i13) u32 {
+    const uimm: u13 = @bitCast(imm);
+    const imm_12: u32 = (@as(u32, uimm) >> 12) & 1;
+    const imm_11: u32 = (@as(u32, uimm) >> 11) & 1;
+    const imm_10_5: u32 = (@as(u32, uimm) >> 5) & 0x3F;
+    const imm_4_1: u32 = (@as(u32, uimm) >> 1) & 0xF;
+    return @as(u32, 0b1100011) |
+        (imm_11 << 7) |
+        (imm_4_1 << 8) |
+        (@as(u32, f3) << 12) |
+        (@as(u32, rs1_v) << 15) |
+        (@as(u32, rs2_v) << 20) |
+        (imm_10_5 << 25) |
+        (imm_12 << 31);
+}
+
 fn encodeU(comptime opcode_bits: u7, rd_v: u5, imm20: u20) u32 {
     return @as(u32, opcode_bits) |
         (@as(u32, rd_v) << 7) |
@@ -66,6 +82,20 @@ fn encodeJ(rd_v: u5) u32 {
     // JAL with imm=0 (fine for opcode identification)
     return @as(u32, 0b1101111) |
         (@as(u32, rd_v) << 7);
+}
+
+fn encodeJFull(rd_v: u5, imm: i21) u32 {
+    const uimm: u21 = @bitCast(imm);
+    const imm_20: u32 = (@as(u32, uimm) >> 20) & 1;
+    const imm_19_12: u32 = (@as(u32, uimm) >> 12) & 0xFF;
+    const imm_11: u32 = (@as(u32, uimm) >> 11) & 1;
+    const imm_10_1: u32 = (@as(u32, uimm) >> 1) & 0x3FF;
+    return @as(u32, 0b1101111) |
+        (@as(u32, rd_v) << 7) |
+        (imm_19_12 << 12) |
+        (imm_11 << 20) |
+        (imm_10_1 << 21) |
+        (imm_20 << 31);
 }
 
 fn encodeJalr(rd_v: u5, rs1_v: u5, imm12: u12) u32 {
@@ -86,6 +116,17 @@ fn encodeAtomic(f5: u5, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
         (@as(u32, f5) << 27);
 }
 
+fn encodeAtomicFull(f5: u5, rd_v: u5, rs1_v: u5, rs2_v: u5, aq: u1, rl: u1) u32 {
+    return @as(u32, 0b0101111) |
+        (@as(u32, rd_v) << 7) |
+        (@as(u32, 0b010) << 12) |
+        (@as(u32, rs1_v) << 15) |
+        (@as(u32, rs2_v) << 20) |
+        (@as(u32, rl) << 25) |
+        (@as(u32, aq) << 26) |
+        (@as(u32, f5) << 27);
+}
+
 fn encodeSystem(f3: u3, rd_v: u5, rs1_v: u5, imm12: u12) u32 {
     return encodeI(0b1110011, f3, rd_v, rs1_v, imm12);
 }
@@ -94,7 +135,7 @@ fn encodeSystem(f3: u3, rd_v: u5, rs1_v: u5, imm12: u12) u32 {
 
 fn expectOp(expected: Opcode, actual: ?Opcode) !void {
     try std.testing.expect(actual != null);
-    try std.testing.expectEqual(expected.name(), actual.?.name());
+    try std.testing.expectEqual(expected, actual.?);
 }
 
 fn expectNull(actual: ?Opcode) !void {
@@ -544,4 +585,39 @@ test "conformance: invalid encodings" {
     try assertConformance(encodeIAlu(0b001, 0b0110000_00011)); // CLZ group rs2=3
     try assertConformance(encodeIAlu(0b101, 0b0010100_00000)); // ORC_B with rs2=0
     try assertConformance(encodeIAlu(0b101, 0b0110100_00000)); // REV8 with rs2=0
+}
+
+test "conformance: non-zero immediates (scattered-bit formats)" {
+    // Branch: positive and negative offsets exercise immB bit reassembly
+    try assertConformance(encodeBranchFull(0b000, 1, 2, 256)); // BEQ +256
+    try assertConformance(encodeBranchFull(0b001, 3, 4, -4)); // BNE -4
+    try assertConformance(encodeBranchFull(0b100, 1, 2, 4094)); // BLT max positive (imm[12]=0, all others set)
+    try assertConformance(encodeBranchFull(0b101, 1, 2, -4096)); // BGE min negative (imm[12]=1, all others 0)
+    // JAL: positive and negative offsets exercise immJ bit reassembly
+    try assertConformance(encodeJFull(5, 1048574)); // JAL near-max positive (exercises bit 20=0)
+    try assertConformance(encodeJFull(5, -2)); // JAL -2 (sign bit set)
+    try assertConformance(encodeJFull(5, 2048)); // JAL +2048 (exercises bit 11)
+    try assertConformance(encodeJFull(5, -1048576)); // JAL min negative
+}
+
+test "conformance: sign-extended immediates" {
+    // Store with negative immediate (sign extension from bit 11)
+    try assertConformance(encodeStore(0b010, 1, 2, 0xFFF)); // SW imm=-1
+    try assertConformance(encodeStore(0b000, 1, 2, 0x800)); // SB imm=-2048
+    // Load with negative immediate
+    try assertConformance(encodeLoad(0b010, 1, 2, 0x800)); // LW imm=-2048
+    try assertConformance(encodeLoad(0b000, 1, 2, 0xFFF)); // LB imm=-1
+    // CSR with bit 11 set (sign extension matters)
+    try assertConformance(encodeSystem(0b001, 1, 2, 0xC00)); // CSRRW cycle counter addr
+    try assertConformance(encodeSystem(0b010, 1, 2, 0xFFF)); // CSRRS max addr
+}
+
+test "conformance: atomics with aq/rl bits" {
+    // aq=1, rl=0
+    try assertConformance(encodeAtomicFull(0b00010, 1, 2, 0, 1, 0)); // LR.W.AQ
+    try assertConformance(encodeAtomicFull(0b00011, 1, 2, 3, 1, 0)); // SC.W.AQ
+    // aq=0, rl=1
+    try assertConformance(encodeAtomicFull(0b00001, 1, 2, 3, 0, 1)); // AMOSWAP.W.RL
+    // aq=1, rl=1
+    try assertConformance(encodeAtomicFull(0b00000, 1, 2, 3, 1, 1)); // AMOADD.W.AQRL
 }
