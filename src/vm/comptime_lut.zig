@@ -1,13 +1,12 @@
 //! Comptime decoder lookup table.
 //!
-//! Two-level comptime LUT for RISC-V instruction decoding:
+//! All 94 supported opcodes are declared in a single `registry` array.
+//! Comptime generation derives the lookup tables from this registry:
 //!   Level 1: opcode[6:0] → decode strategy  (128 entries, 1 byte each)
-//!   Level 2: strategy-specific table indexed by funct3/funct7
-//!
-//! Covers all 94 opcodes in the instructions.Opcode tagged union.
+//!   Level 2: strategy-specific tables indexed by funct3, funct7, or funct5
 //!
 //! Trade-off vs branch-based decoder:
-//!   Current decoder: switch(opcode) → chain of if(extension) → switch(funct3/funct7)
+//!   Reference decoder: switch(opcode) → chain of if(extension) → switch(funct3/funct7)
 //!   LUT decoder: array[opcode] → array[funct3][funct7]  (2-3 loads, zero branches)
 //!   Cost: ~4 KiB read-only data.
 
@@ -19,16 +18,171 @@ const Format = instructions.Format;
 
 pub const DecodeError = error{IllegalInstruction};
 
-/// What kind of sub-decode to perform after the level-1 lookup.
+// ===========================================================================
+// Opcode registry — single source of truth for all 94 supported opcodes.
+//
+// Each entry specifies the instruction's encoding fields. The comptime
+// generator derives all lookup tables from this list.
+//
+// Fields:
+//   op      — tagged union variant from instructions.Opcode
+//   opcode7 — bits [6:0], selects the decode strategy
+//   f3      — bits [14:12]; null if not used for identification
+//   f7      — bits [31:25]; null if not used for identification
+//   rs2_eq  — bits [24:20] must equal this value (Zbb special cases)
+//   f5      — bits [31:27], atomics only
+//   f12     — bits [31:20], ECALL/EBREAK only
+// ===========================================================================
+
+const Entry = struct {
+    op: Opcode,
+    opcode7: u7,
+    f3: ?u3 = null,
+    f7: ?u7 = null,
+    rs2_eq: ?u5 = null,
+    f5: ?u5 = null,
+    f12: ?u12 = null,
+};
+
+const registry = [_]Entry{
+    // ---- RV32I R-type (10) ---- opcode 0b0110011
+    .{ .op = .{ .i = .ADD }, .opcode7 = 0b0110011, .f3 = 0b000, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SUB }, .opcode7 = 0b0110011, .f3 = 0b000, .f7 = 0b0100000 },
+    .{ .op = .{ .i = .SLL }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SLT }, .opcode7 = 0b0110011, .f3 = 0b010, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SLTU }, .opcode7 = 0b0110011, .f3 = 0b011, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .XOR }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SRL }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SRA }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0100000 },
+    .{ .op = .{ .i = .OR }, .opcode7 = 0b0110011, .f3 = 0b110, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .AND }, .opcode7 = 0b0110011, .f3 = 0b111, .f7 = 0b0000000 },
+
+    // ---- RV32M (8) ---- opcode 0b0110011, funct7 = 0b0000001
+    .{ .op = .{ .m = .MUL }, .opcode7 = 0b0110011, .f3 = 0b000, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .MULH }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .MULHSU }, .opcode7 = 0b0110011, .f3 = 0b010, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .MULHU }, .opcode7 = 0b0110011, .f3 = 0b011, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .DIV }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .DIVU }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .REM }, .opcode7 = 0b0110011, .f3 = 0b110, .f7 = 0b0000001 },
+    .{ .op = .{ .m = .REMU }, .opcode7 = 0b0110011, .f3 = 0b111, .f7 = 0b0000001 },
+
+    // ---- Zba R-type (3) ---- opcode 0b0110011, funct7 = 0b0010000
+    .{ .op = .{ .zba = .SH1ADD }, .opcode7 = 0b0110011, .f3 = 0b010, .f7 = 0b0010000 },
+    .{ .op = .{ .zba = .SH2ADD }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0010000 },
+    .{ .op = .{ .zba = .SH3ADD }, .opcode7 = 0b0110011, .f3 = 0b110, .f7 = 0b0010000 },
+
+    // ---- Zbb R-type (10) ---- opcode 0b0110011
+    .{ .op = .{ .zbb = .ANDN }, .opcode7 = 0b0110011, .f3 = 0b111, .f7 = 0b0100000 },
+    .{ .op = .{ .zbb = .ORN }, .opcode7 = 0b0110011, .f3 = 0b110, .f7 = 0b0100000 },
+    .{ .op = .{ .zbb = .XNOR }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0100000 },
+    .{ .op = .{ .zbb = .MIN }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0000101 },
+    .{ .op = .{ .zbb = .MINU }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0000101 },
+    .{ .op = .{ .zbb = .MAX }, .opcode7 = 0b0110011, .f3 = 0b110, .f7 = 0b0000101 },
+    .{ .op = .{ .zbb = .MAXU }, .opcode7 = 0b0110011, .f3 = 0b111, .f7 = 0b0000101 },
+    .{ .op = .{ .zbb = .ROL }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0110000 },
+    .{ .op = .{ .zbb = .ROR }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0110000 },
+    .{ .op = .{ .zbb = .ZEXT_H }, .opcode7 = 0b0110011, .f3 = 0b100, .f7 = 0b0000100, .rs2_eq = 0 },
+
+    // ---- Zbs R-type (4) ---- opcode 0b0110011
+    .{ .op = .{ .zbs = .BCLR }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0100100 },
+    .{ .op = .{ .zbs = .BEXT }, .opcode7 = 0b0110011, .f3 = 0b101, .f7 = 0b0100100 },
+    .{ .op = .{ .zbs = .BINV }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0110100 },
+    .{ .op = .{ .zbs = .BSET }, .opcode7 = 0b0110011, .f3 = 0b001, .f7 = 0b0010100 },
+
+    // ---- RV32I I-ALU non-shift (6) ---- opcode 0b0010011
+    .{ .op = .{ .i = .ADDI }, .opcode7 = 0b0010011, .f3 = 0b000 },
+    .{ .op = .{ .i = .SLTI }, .opcode7 = 0b0010011, .f3 = 0b010 },
+    .{ .op = .{ .i = .SLTIU }, .opcode7 = 0b0010011, .f3 = 0b011 },
+    .{ .op = .{ .i = .XORI }, .opcode7 = 0b0010011, .f3 = 0b100 },
+    .{ .op = .{ .i = .ORI }, .opcode7 = 0b0010011, .f3 = 0b110 },
+    .{ .op = .{ .i = .ANDI }, .opcode7 = 0b0010011, .f3 = 0b111 },
+
+    // ---- RV32I I-ALU shift (3) ---- opcode 0b0010011
+    .{ .op = .{ .i = .SLLI }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SRLI }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0000000 },
+    .{ .op = .{ .i = .SRAI }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0100000 },
+
+    // ---- Zbb I-ALU (8) ---- opcode 0b0010011
+    .{ .op = .{ .zbb = .RORI }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0110000 },
+    .{ .op = .{ .zbb = .CLZ }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110000, .rs2_eq = 0 },
+    .{ .op = .{ .zbb = .CTZ }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110000, .rs2_eq = 1 },
+    .{ .op = .{ .zbb = .CPOP }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110000, .rs2_eq = 2 },
+    .{ .op = .{ .zbb = .SEXT_B }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110000, .rs2_eq = 4 },
+    .{ .op = .{ .zbb = .SEXT_H }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110000, .rs2_eq = 5 },
+    .{ .op = .{ .zbb = .ORC_B }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0010100, .rs2_eq = 7 },
+    .{ .op = .{ .zbb = .REV8 }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0110100, .rs2_eq = 24 },
+
+    // ---- Zbs I-ALU shift (4) ---- opcode 0b0010011
+    .{ .op = .{ .zbs = .BCLRI }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0100100 },
+    .{ .op = .{ .zbs = .BEXTI }, .opcode7 = 0b0010011, .f3 = 0b101, .f7 = 0b0100100 },
+    .{ .op = .{ .zbs = .BINVI }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0110100 },
+    .{ .op = .{ .zbs = .BSETI }, .opcode7 = 0b0010011, .f3 = 0b001, .f7 = 0b0010100 },
+
+    // ---- Load (5) ---- opcode 0b0000011
+    .{ .op = .{ .i = .LB }, .opcode7 = 0b0000011, .f3 = 0b000 },
+    .{ .op = .{ .i = .LH }, .opcode7 = 0b0000011, .f3 = 0b001 },
+    .{ .op = .{ .i = .LW }, .opcode7 = 0b0000011, .f3 = 0b010 },
+    .{ .op = .{ .i = .LBU }, .opcode7 = 0b0000011, .f3 = 0b100 },
+    .{ .op = .{ .i = .LHU }, .opcode7 = 0b0000011, .f3 = 0b101 },
+
+    // ---- Store (3) ---- opcode 0b0100011
+    .{ .op = .{ .i = .SB }, .opcode7 = 0b0100011, .f3 = 0b000 },
+    .{ .op = .{ .i = .SH }, .opcode7 = 0b0100011, .f3 = 0b001 },
+    .{ .op = .{ .i = .SW }, .opcode7 = 0b0100011, .f3 = 0b010 },
+
+    // ---- Branch (6) ---- opcode 0b1100011
+    .{ .op = .{ .i = .BEQ }, .opcode7 = 0b1100011, .f3 = 0b000 },
+    .{ .op = .{ .i = .BNE }, .opcode7 = 0b1100011, .f3 = 0b001 },
+    .{ .op = .{ .i = .BLT }, .opcode7 = 0b1100011, .f3 = 0b100 },
+    .{ .op = .{ .i = .BGE }, .opcode7 = 0b1100011, .f3 = 0b101 },
+    .{ .op = .{ .i = .BLTU }, .opcode7 = 0b1100011, .f3 = 0b110 },
+    .{ .op = .{ .i = .BGEU }, .opcode7 = 0b1100011, .f3 = 0b111 },
+
+    // ---- Atomic (11) ---- opcode 0b0101111, funct3 = 0b010
+    .{ .op = .{ .a = .LR_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00010 },
+    .{ .op = .{ .a = .SC_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00011 },
+    .{ .op = .{ .a = .AMOSWAP_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00001 },
+    .{ .op = .{ .a = .AMOADD_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00000 },
+    .{ .op = .{ .a = .AMOXOR_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00100 },
+    .{ .op = .{ .a = .AMOAND_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b01100 },
+    .{ .op = .{ .a = .AMOOR_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b01000 },
+    .{ .op = .{ .a = .AMOMIN_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b10000 },
+    .{ .op = .{ .a = .AMOMAX_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b10100 },
+    .{ .op = .{ .a = .AMOMINU_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b11000 },
+    .{ .op = .{ .a = .AMOMAXU_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b11100 },
+
+    // ---- System (8) ---- opcode 0b1110011
+    .{ .op = .{ .i = .ECALL }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x000 },
+    .{ .op = .{ .i = .EBREAK }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x001 },
+    .{ .op = .{ .csr = .CSRRW }, .opcode7 = 0b1110011, .f3 = 0b001 },
+    .{ .op = .{ .csr = .CSRRS }, .opcode7 = 0b1110011, .f3 = 0b010 },
+    .{ .op = .{ .csr = .CSRRC }, .opcode7 = 0b1110011, .f3 = 0b011 },
+    .{ .op = .{ .csr = .CSRRWI }, .opcode7 = 0b1110011, .f3 = 0b101 },
+    .{ .op = .{ .csr = .CSRRSI }, .opcode7 = 0b1110011, .f3 = 0b110 },
+    .{ .op = .{ .csr = .CSRRCI }, .opcode7 = 0b1110011, .f3 = 0b111 },
+
+    // ---- Fixed opcodes (5) ----
+    .{ .op = .{ .i = .LUI }, .opcode7 = 0b0110111 },
+    .{ .op = .{ .i = .AUIPC }, .opcode7 = 0b0010111 },
+    .{ .op = .{ .i = .JAL }, .opcode7 = 0b1101111 },
+    .{ .op = .{ .i = .JALR }, .opcode7 = 0b1100111, .f3 = 0b000 },
+    .{ .op = .{ .i = .FENCE }, .opcode7 = 0b0001111, .f3 = 0b000 },
+};
+
+// ===========================================================================
+// Decode strategies — what sub-table to consult after level-1 lookup.
+// ===========================================================================
+
 const Strategy = enum(u8) {
     illegal,
     r_type, // → r_table[funct3][funct7]
-    i_alu, // → i_alu_table[funct3], shifts check funct7
+    i_alu, // → i_alu_base[funct3] or shift_table[idx][funct7]
     load, // → load_table[funct3]
     store, // → store_table[funct3]
     branch, // → branch_table[funct3]
-    atomic, // funct3==010 guard, then atomic_table[funct5]
-    system, // funct3==0: funct12; else: system_table[funct3]
+    atomic, // → atomic_table[funct5], funct3==010 guard
+    system, // → system_table[funct3], or ECALL/EBREAK by funct12
     lui, // fixed .{ .i = .LUI }
     auipc, // fixed .{ .i = .AUIPC }
     jal, // fixed .{ .i = .JAL }
@@ -36,232 +190,206 @@ const Strategy = enum(u8) {
     fence, // funct3==0 guard, fixed .{ .i = .FENCE }
 };
 
-// ---------------------------------------------------------------------------
-// Level 1: opcode[6:0] → Strategy.  128 entries, 1 byte each.
-// ---------------------------------------------------------------------------
-
-const level1: [128]Strategy = blk: {
-    var table: [128]Strategy = [1]Strategy{.illegal} ** 128;
-    table[0b0110011] = .r_type;
-    table[0b0010011] = .i_alu;
-    table[0b0000011] = .load;
-    table[0b0100011] = .store;
-    table[0b1100011] = .branch;
-    table[0b0101111] = .atomic;
-    table[0b1110011] = .system;
-    table[0b0110111] = .lui;
-    table[0b0010111] = .auipc;
-    table[0b1101111] = .jal;
-    table[0b1100111] = .jalr;
-    table[0b0001111] = .fence;
-    break :blk table;
-};
-
-// ---------------------------------------------------------------------------
-// Level 2a: R-type.  [funct3][funct7] → ?Opcode.
-// 8 × 128 = 1024 entries.
-// ---------------------------------------------------------------------------
-
-const r_table: [8][128]?Opcode = blk: {
-    var table: [8][128]?Opcode = [1][128]?Opcode{[1]?Opcode{null} ** 128} ** 8;
-    const entries = [_]struct { u3, u7, Opcode }{
-        // RV32I (10)
-        .{ 0b000, 0b0000000, .{ .i = .ADD } },
-        .{ 0b000, 0b0100000, .{ .i = .SUB } },
-        .{ 0b001, 0b0000000, .{ .i = .SLL } },
-        .{ 0b010, 0b0000000, .{ .i = .SLT } },
-        .{ 0b011, 0b0000000, .{ .i = .SLTU } },
-        .{ 0b100, 0b0000000, .{ .i = .XOR } },
-        .{ 0b101, 0b0000000, .{ .i = .SRL } },
-        .{ 0b101, 0b0100000, .{ .i = .SRA } },
-        .{ 0b110, 0b0000000, .{ .i = .OR } },
-        .{ 0b111, 0b0000000, .{ .i = .AND } },
-        // RV32M (8) — funct7=0b0000001
-        .{ 0b000, 0b0000001, .{ .m = .MUL } },
-        .{ 0b001, 0b0000001, .{ .m = .MULH } },
-        .{ 0b010, 0b0000001, .{ .m = .MULHSU } },
-        .{ 0b011, 0b0000001, .{ .m = .MULHU } },
-        .{ 0b100, 0b0000001, .{ .m = .DIV } },
-        .{ 0b101, 0b0000001, .{ .m = .DIVU } },
-        .{ 0b110, 0b0000001, .{ .m = .REM } },
-        .{ 0b111, 0b0000001, .{ .m = .REMU } },
-        // Zba (3) — funct7=0b0010000
-        .{ 0b010, 0b0010000, .{ .zba = .SH1ADD } },
-        .{ 0b100, 0b0010000, .{ .zba = .SH2ADD } },
-        .{ 0b110, 0b0010000, .{ .zba = .SH3ADD } },
-        // Zba (3) are above
-        // Zbb R-type (9 non-rs2-dependent) — ZEXT_H needs rs2 refinement, handled separately
-        .{ 0b111, 0b0100000, .{ .zbb = .ANDN } },
-        .{ 0b110, 0b0100000, .{ .zbb = .ORN } },
-        .{ 0b100, 0b0100000, .{ .zbb = .XNOR } },
-        .{ 0b100, 0b0000101, .{ .zbb = .MIN } },
-        .{ 0b101, 0b0000101, .{ .zbb = .MINU } },
-        .{ 0b110, 0b0000101, .{ .zbb = .MAX } },
-        .{ 0b111, 0b0000101, .{ .zbb = .MAXU } },
-        .{ 0b001, 0b0110000, .{ .zbb = .ROL } },
-        .{ 0b101, 0b0110000, .{ .zbb = .ROR } },
-        // Zbs R-type (4)
-        .{ 0b001, 0b0100100, .{ .zbs = .BCLR } },
-        .{ 0b101, 0b0100100, .{ .zbs = .BEXT } },
-        .{ 0b001, 0b0110100, .{ .zbs = .BINV } },
-        .{ 0b001, 0b0010100, .{ .zbs = .BSET } },
+fn strategyFor(opcode7: u7) Strategy {
+    return switch (opcode7) {
+        0b0110011 => .r_type,
+        0b0010011 => .i_alu,
+        0b0000011 => .load,
+        0b0100011 => .store,
+        0b1100011 => .branch,
+        0b0101111 => .atomic,
+        0b1110011 => .system,
+        0b0110111 => .lui,
+        0b0010111 => .auipc,
+        0b1101111 => .jal,
+        0b1100111 => .jalr,
+        0b0001111 => .fence,
+        else => .illegal,
     };
-    for (entries) |e| {
-        table[e[0]][e[1]] = e[2];
+}
+
+// ===========================================================================
+// Generated tables — all derived from the registry at comptime.
+// ===========================================================================
+
+const Tables = struct {
+    level1: [128]Strategy,
+    r_table: [8][128]?Opcode,
+    i_alu_base: [8]?Opcode,
+    shift_table: [2][128]?Opcode,
+    load_table: [8]?Opcode,
+    store_table: [8]?Opcode,
+    branch_table: [8]?Opcode,
+    atomic_table: [32]?Opcode,
+    system_table: [8]?Opcode,
+};
+
+fn generateTables() Tables {
+    @setEvalBranchQuota(10000);
+    var t = Tables{
+        .level1 = [1]Strategy{.illegal} ** 128,
+        .r_table = [1][128]?Opcode{[1]?Opcode{null} ** 128} ** 8,
+        .i_alu_base = [1]?Opcode{null} ** 8,
+        .shift_table = [1][128]?Opcode{[1]?Opcode{null} ** 128} ** 2,
+        .load_table = [1]?Opcode{null} ** 8,
+        .store_table = [1]?Opcode{null} ** 8,
+        .branch_table = [1]?Opcode{null} ** 8,
+        .atomic_table = [1]?Opcode{null} ** 32,
+        .system_table = [1]?Opcode{null} ** 8,
+    };
+
+    for (registry) |e| {
+        const strat = strategyFor(e.opcode7);
+        if (strat == .illegal) @compileError("registry entry has unknown opcode7");
+        t.level1[e.opcode7] = strat;
+
+        switch (strat) {
+            .r_type => {
+                if (e.rs2_eq != null) continue; // → rs2 refinement
+                const f3 = e.f3 orelse @compileError("R-type entry missing f3");
+                const f7 = e.f7 orelse @compileError("R-type entry missing f7");
+                if (t.r_table[f3][f7] != null) @compileError("R-type table collision");
+                t.r_table[f3][f7] = e.op;
+            },
+            .i_alu => {
+                const f3 = e.f3 orelse @compileError("I-ALU entry missing f3");
+                if (f3 == 0b001 or f3 == 0b101) {
+                    if (e.rs2_eq != null) continue; // → rs2 refinement
+                    const f7 = e.f7 orelse @compileError("I-ALU shift entry missing f7");
+                    const idx: u1 = if (f3 == 0b001) 0 else 1;
+                    if (t.shift_table[idx][f7] != null) @compileError("shift table collision");
+                    t.shift_table[idx][f7] = e.op;
+                } else {
+                    if (t.i_alu_base[f3] != null) @compileError("I-ALU base collision");
+                    t.i_alu_base[f3] = e.op;
+                }
+            },
+            .load => {
+                const f3 = e.f3 orelse @compileError("load entry missing f3");
+                if (t.load_table[f3] != null) @compileError("load table collision");
+                t.load_table[f3] = e.op;
+            },
+            .store => {
+                const f3 = e.f3 orelse @compileError("store entry missing f3");
+                if (t.store_table[f3] != null) @compileError("store table collision");
+                t.store_table[f3] = e.op;
+            },
+            .branch => {
+                const f3 = e.f3 orelse @compileError("branch entry missing f3");
+                if (t.branch_table[f3] != null) @compileError("branch table collision");
+                t.branch_table[f3] = e.op;
+            },
+            .atomic => {
+                const f5 = e.f5 orelse @compileError("atomic entry missing f5");
+                if (t.atomic_table[f5] != null) @compileError("atomic table collision");
+                t.atomic_table[f5] = e.op;
+            },
+            .system => {
+                const f3 = e.f3 orelse @compileError("system entry missing f3");
+                if (f3 == 0b000) {
+                    if (e.f12 == null) @compileError("ECALL/EBREAK entry missing f12");
+                    continue; // handled inline in decode()
+                }
+                if (t.system_table[f3] != null) @compileError("system table collision");
+                t.system_table[f3] = e.op;
+            },
+            .lui, .auipc, .jal, .jalr, .fence => {}, // handled inline in decode()
+            .illegal => unreachable,
+        }
     }
-    break :blk table;
-};
 
-// ---------------------------------------------------------------------------
-// Level 2b: I-type ALU.
-// Non-shift: funct3 alone → opcode (8 entries).
-// Shift: funct3 selects left/right, funct7 disambiguates variant.
-// ---------------------------------------------------------------------------
+    return t;
+}
 
-const i_alu_base: [8]?Opcode = blk: {
-    var table: [8]?Opcode = [1]?Opcode{null} ** 8;
-    table[0b000] = .{ .i = .ADDI };
-    table[0b010] = .{ .i = .SLTI };
-    table[0b011] = .{ .i = .SLTIU };
-    table[0b100] = .{ .i = .XORI };
-    table[0b110] = .{ .i = .ORI };
-    table[0b111] = .{ .i = .ANDI };
-    // funct3=001, 101 → handled by shift_table
-    break :blk table;
-};
+const gen = generateTables();
+const level1 = gen.level1;
+const r_table = gen.r_table;
+const i_alu_base = gen.i_alu_base;
+const shift_table = gen.shift_table;
+const load_table = gen.load_table;
+const store_table = gen.store_table;
+const branch_table = gen.branch_table;
+const atomic_table = gen.atomic_table;
+const system_table = gen.system_table;
 
-/// Shift sub-table: [left=0 / right=1][funct7] → ?Opcode.
-/// funct3=001 (left):  SLLI @ funct7=0x00
-/// funct3=101 (right): SRLI @ funct7=0x00, SRAI @ funct7=0x20
-const shift_table: [2][128]?Opcode = blk: {
-    var table: [2][128]?Opcode = [1][128]?Opcode{[1]?Opcode{null} ** 128} ** 2;
-    // RV32I shifts
-    table[0][0b0000000] = .{ .i = .SLLI }; // funct3=001
-    table[1][0b0000000] = .{ .i = .SRLI }; // funct3=101
-    table[1][0b0100000] = .{ .i = .SRAI }; // funct3=101
-    // Zbb I-type shift (non-rs2-dependent)
-    table[1][0b0110000] = .{ .zbb = .RORI }; // funct3=101
-    // Zbs I-type shifts
-    table[0][0b0100100] = .{ .zbs = .BCLRI }; // funct3=001
-    table[1][0b0100100] = .{ .zbs = .BEXTI }; // funct3=101
-    table[0][0b0110100] = .{ .zbs = .BINVI }; // funct3=001
-    table[0][0b0010100] = .{ .zbs = .BSETI }; // funct3=001
-    break :blk table;
-};
+// ===========================================================================
+// Rs2-dependent refinement — generated from registry entries with rs2_eq set.
+// ===========================================================================
 
-// ---------------------------------------------------------------------------
-// Level 2c: Load.  [funct3] → ?Opcode.  5 of 8 entries populated.
-// ---------------------------------------------------------------------------
+const Rs2Ref = struct { f3: u3, f7: u7, rs2: u5, op: Opcode };
+const ShiftRs2Ref = struct { idx: u1, f7: u7, rs2: u5, op: Opcode };
 
-const load_table: [8]?Opcode = blk: {
-    var table: [8]?Opcode = [1]?Opcode{null} ** 8;
-    table[0b000] = .{ .i = .LB };
-    table[0b001] = .{ .i = .LH };
-    table[0b010] = .{ .i = .LW };
-    table[0b100] = .{ .i = .LBU };
-    table[0b101] = .{ .i = .LHU };
-    break :blk table;
-};
+fn countRTypeRs2() usize {
+    var n: usize = 0;
+    for (registry) |e| {
+        if (strategyFor(e.opcode7) == .r_type and e.rs2_eq != null) n += 1;
+    }
+    return n;
+}
 
-// ---------------------------------------------------------------------------
-// Level 2d: Store.  [funct3] → ?Opcode.  3 of 8 entries populated.
-// ---------------------------------------------------------------------------
+fn buildRTypeRs2() [countRTypeRs2()]Rs2Ref {
+    var arr: [countRTypeRs2()]Rs2Ref = undefined;
+    var i: usize = 0;
+    for (registry) |e| {
+        if (strategyFor(e.opcode7) == .r_type and e.rs2_eq != null) {
+            arr[i] = .{ .f3 = e.f3.?, .f7 = e.f7.?, .rs2 = e.rs2_eq.?, .op = e.op };
+            i += 1;
+        }
+    }
+    return arr;
+}
 
-const store_table: [8]?Opcode = blk: {
-    var table: [8]?Opcode = [1]?Opcode{null} ** 8;
-    table[0b000] = .{ .i = .SB };
-    table[0b001] = .{ .i = .SH };
-    table[0b010] = .{ .i = .SW };
-    break :blk table;
-};
+fn countShiftRs2() usize {
+    var n: usize = 0;
+    for (registry) |e| {
+        if (strategyFor(e.opcode7) == .i_alu and e.rs2_eq != null) {
+            const f3 = e.f3.?;
+            if (f3 == 0b001 or f3 == 0b101) n += 1;
+        }
+    }
+    return n;
+}
 
-// ---------------------------------------------------------------------------
-// Level 2e: Branch.  [funct3] → ?Opcode.  6 of 8 entries populated.
-// ---------------------------------------------------------------------------
+fn buildShiftRs2() [countShiftRs2()]ShiftRs2Ref {
+    var arr: [countShiftRs2()]ShiftRs2Ref = undefined;
+    var i: usize = 0;
+    for (registry) |e| {
+        if (strategyFor(e.opcode7) == .i_alu and e.rs2_eq != null) {
+            const f3 = e.f3.?;
+            if (f3 == 0b001 or f3 == 0b101) {
+                arr[i] = .{
+                    .idx = if (f3 == 0b001) 0 else 1,
+                    .f7 = e.f7.?,
+                    .rs2 = e.rs2_eq.?,
+                    .op = e.op,
+                };
+                i += 1;
+            }
+        }
+    }
+    return arr;
+}
 
-const branch_table: [8]?Opcode = blk: {
-    var table: [8]?Opcode = [1]?Opcode{null} ** 8;
-    table[0b000] = .{ .i = .BEQ };
-    table[0b001] = .{ .i = .BNE };
-    table[0b100] = .{ .i = .BLT };
-    table[0b101] = .{ .i = .BGE };
-    table[0b110] = .{ .i = .BLTU };
-    table[0b111] = .{ .i = .BGEU };
-    break :blk table;
-};
+const r_rs2_refs = buildRTypeRs2();
+const shift_rs2_refs = buildShiftRs2();
 
-// ---------------------------------------------------------------------------
-// Level 2f: Atomic.  [funct5] → ?Opcode.  11 of 32 entries populated.
-// funct3 must be 0b010 (word); checked in decode().
-// ---------------------------------------------------------------------------
-
-const atomic_table: [32]?Opcode = blk: {
-    var table: [32]?Opcode = [1]?Opcode{null} ** 32;
-    table[0b00010] = .{ .a = .LR_W };
-    table[0b00011] = .{ .a = .SC_W };
-    table[0b00001] = .{ .a = .AMOSWAP_W };
-    table[0b00000] = .{ .a = .AMOADD_W };
-    table[0b00100] = .{ .a = .AMOXOR_W };
-    table[0b01100] = .{ .a = .AMOAND_W };
-    table[0b01000] = .{ .a = .AMOOR_W };
-    table[0b10000] = .{ .a = .AMOMIN_W };
-    table[0b10100] = .{ .a = .AMOMAX_W };
-    table[0b11000] = .{ .a = .AMOMINU_W };
-    table[0b11100] = .{ .a = .AMOMAXU_W };
-    break :blk table;
-};
-
-// ---------------------------------------------------------------------------
-// Level 2g: System/CSR.  [funct3] → ?Opcode.  6 of 8 entries populated.
-// funct3==0 handled inline (ECALL/EBREAK by funct12).
-// ---------------------------------------------------------------------------
-
-const system_table: [8]?Opcode = blk: {
-    var table: [8]?Opcode = [1]?Opcode{null} ** 8;
-    table[0b001] = .{ .csr = .CSRRW };
-    table[0b010] = .{ .csr = .CSRRS };
-    table[0b011] = .{ .csr = .CSRRC };
-    table[0b101] = .{ .csr = .CSRRWI };
-    table[0b110] = .{ .csr = .CSRRSI };
-    table[0b111] = .{ .csr = .CSRRCI };
-    break :blk table;
-};
-
-// ---------------------------------------------------------------------------
-// Zbb rs2-dependent refinement.
-// Called only when the primary table returns null for specific coordinates.
-// ---------------------------------------------------------------------------
-
-/// Refine R-type decode for Zbb rs2-dependent opcodes.
-/// Only one coordinate: f3=0b100, f7=0b0000100 → ZEXT_H if rs2=0.
 fn refineRs2R(f3: u3, f7: u7, r2: u5) ?Opcode {
-    if (f3 == 0b100 and f7 == 0b0000100) {
-        return if (r2 == 0) .{ .zbb = .ZEXT_H } else null;
+    for (r_rs2_refs) |e| {
+        if (e.f3 == f3 and e.f7 == f7 and e.rs2 == r2) return e.op;
     }
     return null;
 }
 
-/// Refine I-type shift decode for Zbb rs2-dependent opcodes.
-/// idx=0 → funct3=001, idx=1 → funct3=101.
 fn refineRs2Shift(idx: u1, f7: u7, r2: u5) ?Opcode {
-    if (idx == 0 and f7 == 0b0110000) return switch (r2) {
-        0 => .{ .zbb = .CLZ },
-        1 => .{ .zbb = .CTZ },
-        2 => .{ .zbb = .CPOP },
-        4 => .{ .zbb = .SEXT_B },
-        5 => .{ .zbb = .SEXT_H },
-        else => null,
-    };
-    if (idx == 1 and f7 == 0b0010100)
-        return if (r2 == 7) .{ .zbb = .ORC_B } else null;
-    if (idx == 1 and f7 == 0b0110100)
-        return if (r2 == 24) .{ .zbb = .REV8 } else null;
+    for (shift_rs2_refs) |e| {
+        if (e.idx == idx and e.f7 == f7 and e.rs2 == r2) return e.op;
+    }
     return null;
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Decoder entry point
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 /// Decode a 32-bit instruction word into an Opcode using comptime lookup tables.
 /// Returns null for unrecognized encodings.
