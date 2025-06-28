@@ -1,6 +1,6 @@
 const std = @import("std");
-const lut = @import("comptime_lut.zig");
-const instructions = @import("instructions.zig");
+const lut = @import("lut_decoder.zig");
+const instructions = @import("../instructions.zig");
 const Opcode = instructions.Opcode;
 const decode = lut.decode;
 
@@ -445,7 +445,7 @@ test "tables are comptime-evaluable" {
 
 // --- Conformance: LUT decodeInstruction matches decoder.decode ---
 
-const decoder = @import("decoder.zig");
+const decoder = @import("branch_decoder.zig");
 const decodeInstruction = lut.decodeInstruction;
 
 fn assertConformance(raw: u32) !void {

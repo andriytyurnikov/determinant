@@ -10,7 +10,7 @@
 //!   LUT decoder: array[opcode] → array[funct3][funct7]  (2-3 loads, zero branches)
 //!   Cost: ~4 KiB read-only data.
 
-const instructions = @import("instructions.zig");
+const instructions = @import("../instructions.zig");
 const bf = @import("bitfields.zig");
 const reg = @import("registry.zig");
 const Opcode = instructions.Opcode;
@@ -283,5 +283,5 @@ fn buildInstruction(op: Opcode, raw: u32) Instruction {
 }
 
 test {
-    _ = @import("comptime_lut_test.zig");
+    _ = @import("lut_decoder_test.zig");
 }

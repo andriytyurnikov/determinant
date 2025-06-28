@@ -40,7 +40,7 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ### Module Structure
 
-See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instructions`, `decoder`, `comptime_lut`.
+See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instructions`, `decoders`.
 
 ### ISA Extension Architecture
 
@@ -61,29 +61,35 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 - `rv32c.zig` lives under `rv32i/rv32c/` and is accessed as `rv32i.rv32c` — it's a decode-time front-end to rv32i, not an independent peer extension. It only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
-- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoder.zig`
+- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/branch_decoder.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
-- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoder.zig, cpu.zig, and main.zig
+- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by branch_decoder.zig, lut_decoder.zig, cpu.zig, and main.zig
 
 ### Comptime LUT Decoder (Primary)
 
-- `comptime_lut.zig` is the **primary decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
+- `decoders/lut_decoder.zig` is the **primary decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
 - **Two-level design**: Level 1 `[128]Strategy` maps opcode[6:0] → decode strategy (1 byte each). Level 2 tables are strategy-specific: `r_table[8][128]`, `shift_table[2][128]`, `load/store/branch/system[8]`, `atomic[32]`, `i_alu_base[8]`
 - **Zbb rs2 refinement**: 1 of 1024 R-type table coordinates (ZEXT_H) and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
-- **Bit-field extraction**: shared `bitfields.zig` module used by both `comptime_lut.zig` and `decoder.zig`
+- **Bit-field extraction**: shared `decoders/bitfields.zig` module used by both `lut_decoder.zig` and `branch_decoder.zig`
 - **RV32C**: 16-bit compressed instructions delegate to `rv32c.expand()` — fundamentally not table-based
-- **Special I-format cases**: ECALL/EBREAK/FENCE use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `decoder.zig` behavior
+- **Special I-format cases**: ECALL/EBREAK/FENCE use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `branch_decoder.zig` behavior
 - **I-ALU shift shamt**: only I-ALU (opcode=0b0010011) with funct3=001/101 uses rs2 field as shamt — other I-format instructions (loads, CSRs) always use full immI
 - Total: ~4 KB read-only data, 94 opcodes covered
 
-### Reference Decoder (decoder.zig)
+### Reference Decoder (decoders/branch_decoder.zig)
 
-- `decoder.zig` is the **reference decoder** — kept for conformance testing and as documentation of the branch-based dispatch logic
+- `decoders/branch_decoder.zig` is the **reference decoder** — kept for conformance testing and as documentation of the branch-based dispatch logic
 - Sub-decoders use semantic names matching their rv32i counterparts: `decodeStore`, `decodeBranch`, `decodeLoad`, `decodeAtomic`, `decodeSystem`
 - **R-type dispatch order matters**: M-extension (funct7=0b0000001) must be checked BEFORE RV32I — both share opcode 0b0110011 and RV32I would false-match on funct3 alone. Order is: M → RV32I → Zba → Zbb → Zbs
 - **I-type ALU shift special case**: for shifts (funct3=001 or 101), the immediate comes from the rs2 field [24:20] (5-bit shamt), NOT the full 12-bit I-immediate. `decodeIAlu()` handles this with a conditional extraction.
 - Decode return types: `rv32m.decodeR()` returns non-optional `Opcode` (all funct3 values valid); other decoders return `?Opcode` (some inputs invalid)
+
+### Decoder Organization
+
+- All decoder-related files live in `src/vm/decoders/` with `decoders.zig` as the namespace hub
+- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `registry`, `bitfields`
+- `vm.zig` exposes `decoders` (not individual decoders); `root.zig` aliases `vm.decoders.branch_decoder` as `decoder` for public API compatibility
 
 ### Atomic Operations & Reservation
 
@@ -170,7 +176,7 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
 4. Add variant to `instructions.zig` `Opcode` tagged union
-5. Add decode dispatch in `decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`
+5. Add decode dispatch in `decoders/branch_decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`
 6. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
 7. Add disassembly case in `main.zig` `printInstruction()`
 8. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`

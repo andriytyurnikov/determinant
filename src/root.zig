@@ -3,7 +3,7 @@ const vm = @import("vm.zig");
 
 pub const cpu = vm.cpu;
 pub const instructions = vm.instructions;
-pub const decoder = vm.decoder;
+pub const decoder = vm.decoders.branch_decoder;
 pub const rv32i = instructions.rv32i;
 pub const rv32m = instructions.rv32m;
 pub const rv32a = instructions.rv32a;

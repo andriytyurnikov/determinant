@@ -2,10 +2,10 @@
 /// These tests convert implicit algorithmic coupling between encoder (test_helpers)
 /// and decoder (decoder.zig) into explicit verified coupling.
 const std = @import("std");
-const decoder = @import("decoder.zig");
-const instructions = @import("instructions.zig");
+const decoder = @import("branch_decoder.zig");
+const instructions = @import("../instructions.zig");
 const Opcode = instructions.Opcode;
-const h = @import("instructions/test_helpers.zig");
+const h = @import("../instructions/test_helpers.zig");
 
 // --- R-type round-trip ---
 

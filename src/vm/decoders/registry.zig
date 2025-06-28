@@ -12,7 +12,7 @@
 //!   f5      — bits [31:27], atomics only
 //!   f12     — bits [31:20], ECALL/EBREAK only
 
-const instructions = @import("instructions.zig");
+const instructions = @import("../instructions.zig");
 pub const Opcode = instructions.Opcode;
 
 pub const Entry = struct {
