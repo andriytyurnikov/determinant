@@ -1,11 +1,43 @@
 const std = @import("std");
 const det = @import("determinant");
 
+const default_max_cycles: u64 = 10_000_000;
+
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
+    var args = std.process.args();
+    _ = args.next(); // skip program name
+
+    if (args.next()) |path| {
+        var max_cycles: u64 = default_max_cycles;
+        // Check for --max-cycles N
+        if (args.next()) |flag| {
+            if (std.mem.eql(u8, flag, "--max-cycles")) {
+                if (args.next()) |val| {
+                    max_cycles = std.fmt.parseInt(u64, val, 10) catch {
+                        try stdout.print("Error: invalid --max-cycles value\n", .{});
+                        try stdout.flush();
+                        return;
+                    };
+                } else {
+                    try stdout.print("Error: --max-cycles requires a value\n", .{});
+                    try stdout.flush();
+                    return;
+                }
+            }
+        }
+        try runFile(stdout, path, max_cycles);
+    } else {
+        try runDemo(stdout);
+    }
+
+    try stdout.flush();
+}
+
+fn runDemo(stdout: anytype) !void {
     try stdout.print("Determinant — RV32I Executor Demo\n\n", .{});
 
     // Hardcoded 5-instruction RV32I program:
@@ -40,11 +72,73 @@ pub fn main() !void {
         }
     }
 
-    // Execute
+    // Execute with finite cycle limit
     try stdout.print("\nExecuting...\n", .{});
-    const result = try vm.run(0);
+    const result = try vm.run(10_000);
 
-    // Print result
+    try printResult(stdout, &vm, result);
+
+    // Show memory at store target
+    const mem_val = std.mem.readInt(u32, vm.memory[100..][0..4], .little);
+    try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
+}
+
+fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
+    try stdout.print("Determinant — Loading {s}\n\n", .{path});
+
+    // Open and read the binary file
+    var file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        try stdout.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
+        try stdout.flush();
+        return;
+    };
+    defer file.close();
+
+    const stat = file.stat() catch |err| {
+        try stdout.print("Error: cannot stat '{s}': {s}\n", .{ path, @errorName(err) });
+        try stdout.flush();
+        return;
+    };
+    const size: usize = @intCast(stat.size);
+
+    if (size == 0) {
+        try stdout.print("Error: file is empty\n", .{});
+        try stdout.flush();
+        return;
+    }
+
+    var vm = det.Cpu.init();
+
+    if (size > vm.memory.len) {
+        try stdout.print("Error: file too large ({d} bytes, max {d})\n", .{ size, vm.memory.len });
+        try stdout.flush();
+        return;
+    }
+
+    const n = file.readAll(vm.memory[0..size]) catch |err| {
+        try stdout.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
+        try stdout.flush();
+        return;
+    };
+
+    if (n != size) {
+        try stdout.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
+        try stdout.flush();
+        return;
+    }
+
+    try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
+
+    const result = vm.run(max_cycles) catch |err| {
+        try stdout.print("\nExecution error after {d} cycles: {s}\n", .{ vm.cycle_count, @errorName(err) });
+        try printResult(stdout, &vm, .Continue);
+        return;
+    };
+
+    try printResult(stdout, &vm, result);
+}
+
+fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
     try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count });
     try stdout.print("\nRegisters:\n", .{});
     for (0..32) |i| {
@@ -53,12 +147,6 @@ pub fn main() !void {
             try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
         }
     }
-
-    // Show memory at store target
-    const mem_val = std.mem.readInt(u32, vm.memory[100..][0..4], .little);
-    try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
-
-    try stdout.flush();
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {

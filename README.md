@@ -34,7 +34,14 @@ zig build
 ## Run
 
 ```sh
+# Run built-in demo program
 zig build run
+
+# Load and execute a flat binary
+zig build run -- program.bin
+
+# Load with custom cycle limit
+zig build run -- program.bin --max-cycles 1000
 ```
 
 ## Test
@@ -64,5 +71,8 @@ The library is available via `@import("determinant")`.
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
-- **`decode(u32)`** — decode an instruction word (16-bit compressed or 32-bit), returns `Instruction` or `DecodeError`
+- **`decode(u32)`** — decode an instruction word using the reference branch-based decoder, returns `Instruction` or `DecodeError`
+- **`decodeLut(u32)`** — decode using the primary comptime LUT decoder (same results, faster), returns `Instruction` or `DecodeError`
+- **`decoders`** — access to both decoder modules (`decoders.branch_decoder`, `decoders.lut_decoder`)
+- **`lut_decoder`** — direct access to the LUT decoder module
 - **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`

@@ -344,3 +344,53 @@ test "step: RORI by zero" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(3));
 }
+
+test "step: SEXT_B with upper bits set" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEAD0080);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 4));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFF80), cpu.readReg(3));
+}
+
+test "step: SEXT_H with upper bits set" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEAD8000);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 5));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFF8000), cpu.readReg(3));
+}
+
+test "step: SEXT_B boundary 0xFF" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x000000FF);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 4));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // 0xFF as i8 = -1
+}
+
+test "step: RORI shamt=31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0110000, 3, 1, 31));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000002), cpu.readReg(3)); // rotate right 31 = rotate left 1
+}
+
+test "step: MIN SIGNED_MIN vs SIGNED_MAX" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000); // SIGNED_MIN
+    cpu.writeReg(2, 0x7FFFFFFF); // SIGNED_MAX
+    loadInst(&cpu, encodeR(0b100, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}
+
+test "step: MAX SIGNED_MIN vs SIGNED_MAX" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000); // SIGNED_MIN
+    cpu.writeReg(2, 0x7FFFFFFF); // SIGNED_MAX
+    loadInst(&cpu, encodeR(0b110, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3));
+}

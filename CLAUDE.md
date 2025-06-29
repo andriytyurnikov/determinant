@@ -88,8 +88,16 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 ### Decoder Organization
 
 - All decoder-related files live in `src/vm/decoders/` with `decoders.zig` as the namespace hub
-- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `registry`, `bitfields`
+- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `registry`, `bitfields`; canonical `DecodeError` with a comptime assertion that both decoders define the same error set
 - `vm.zig` exposes `decoders` (not individual decoders); `root.zig` aliases `vm.decoders.branch_decoder` as `decoder` for public API compatibility
+
+### Dual Decoder Public API
+
+- **`decode()`** (`root.zig`) — reference branch-based decoder (`branch_decoder.decode`), kept for conformance testing and documentation
+- **`decodeLut()`** (`root.zig`) — primary LUT decoder (`lut_decoder.decodeInstruction`), used by `cpu.zig` for execution — faster, same results
+- **`decoders`** (`root.zig`) — full access to both decoder modules
+- Library consumers should prefer `decodeLut()` for performance; `decode()` for readability or reference comparison
+- `DecodeError` is re-exported from `decoders.zig` (canonical) — guaranteed identical between both decoders via comptime check
 
 ### Atomic Operations & Reservation
 
@@ -169,6 +177,16 @@ RISC-V spec requires JALR to clear the LSB of the computed target address:
 ```zig
 next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
+
+### CLI Cycle Limits
+Always use a finite cycle limit in `vm.run()` to prevent infinite loops:
+```zig
+// WRONG — hangs if program has no ECALL/EBREAK:
+const result = try vm.run(0);
+// RIGHT — finite limit with headroom:
+const result = try vm.run(10_000);
+```
+The CLI uses 10,000 for the demo and 10,000,000 for file loading by default.
 
 ## Adding a New Extension
 

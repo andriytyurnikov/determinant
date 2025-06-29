@@ -399,6 +399,32 @@ test "step: backward branch (negative offset)" {
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
 
+// --- Error path tests through step() ---
+
+test "step: illegal instruction 0xFFFFFFFF" {
+    var cpu = Cpu.init();
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0xFFFFFFFF, .little);
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+}
+
+test "step: OOB load via LW causes AddressOutOfBounds" {
+    const h3 = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE); // address out of bounds
+    // LW x2, 0(x1) = encodeI(0b0000011, 0b010, 2, 1, 0)
+    h3.loadInst(&cpu, h3.encodeI(0b0000011, 0b010, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: misaligned LW causes MisalignedAccess" {
+    const h4 = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 3); // misaligned for word access
+    // LW x2, 0(x1)
+    h4.loadInst(&cpu, h4.encodeI(0b0000011, 0b010, 2, 1, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
+
 test "determinism: two VMs with same program produce identical state" {
     var cpu1 = Cpu.init();
     var cpu2 = Cpu.init();

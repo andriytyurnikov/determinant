@@ -156,3 +156,38 @@ test "step: BSET bit 31" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
 }
+
+test "step: BEXT at bit 0" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFE); // bit 0 = 0
+    cpu.writeReg(2, 0);
+    loadInst(&cpu, encodeR(0b101, 0b0100100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: BINVI at bit 31 (immediate)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110100, 3, 1, 31));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}
+
+test "step: BCLR with rs2 >= 32 (masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 32); // masked to bit 0
+    loadInst(&cpu, encodeR(0b001, 0b0100100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFE), cpu.readReg(3)); // bit 0 cleared
+}
+
+test "step: BEXT with rs2 >= 32 (masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001); // bit 0 set
+    cpu.writeReg(2, 32); // masked to bit 0
+    loadInst(&cpu, encodeR(0b101, 0b0100100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // extracts bit 0
+}

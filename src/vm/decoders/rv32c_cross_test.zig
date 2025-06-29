@@ -265,6 +265,69 @@ test "cross: C.SWSP with offset matches SW" {
     try expectSameSemantics(expanded, equiv);
 }
 
+// ============================================================
+// Max-range cross-validation
+// ============================================================
+
+test "cross: C.J large positive offset=+2046" {
+    // C.J +2046 from rv32c_test max-range: 0xAFFD
+    const expanded = try rv32c.expand(0xAFFD);
+    const equiv = try decoder.decode(h.encodeJ(0, 2046));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.J large negative offset=-2048" {
+    // C.J -2048 from rv32c_test max-range: 0xB001
+    const expanded = try rv32c.expand(0xB001);
+    const equiv = try decoder.decode(h.encodeJ(0, -2048));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.JAL large positive offset=+2046" {
+    // C.JAL: funct3=001, same offset encoding as C.J
+    // Construct halfword: take 0xAFFD and change funct3 from 101 to 001
+    // 0xAFFD = 0b101_0_1111_1_1_1_111_1_01
+    // Change bits[15:13] from 101 to 001 → 0b001_0_1111_1_1_1_111_1_01 = 0x2FFD
+    const expanded = try rv32c.expand(0x2FFD);
+    const equiv = try decoder.decode(h.encodeJ(1, 2046));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.BEQZ large positive offset=+254" {
+    // C.BEQZ x8, +254: 0xCC7D from rv32c_test
+    const expanded = try rv32c.expand(0xCC7D);
+    const equiv = try decoder.decode(h.encodeB(0b000, 8, 0, 254));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.BNEZ large negative offset=-256" {
+    // C.BNEZ x8, -256: 0xF001 from rv32c_test
+    const expanded = try rv32c.expand(0xF001);
+    const equiv = try decoder.decode(h.encodeB(0b001, 8, 0, -256));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.LWSP max offset=252" {
+    // C.LWSP x1, 252(x2): 0x50FE from rv32c_test
+    const expanded = try rv32c.expand(0x50FE);
+    const equiv = try decoder.decode(h.encodeI(0b0000011, 0b010, 1, 2, 252));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.SWSP max offset=252" {
+    // C.SWSP x1, 252(x2): 0xDF86 from rv32c_test
+    const expanded = try rv32c.expand(0xDF86);
+    const equiv = try decoder.decode(h.encodeS(0b010, 2, 1, 252));
+    try expectSameSemantics(expanded, equiv);
+}
+
+test "cross: C.LW max offset=124" {
+    // C.LW x8, 124(x8): 0x5C60 from rv32c_test
+    const expanded = try rv32c.expand(0x5C60);
+    const equiv = try decoder.decode(h.encodeI(0b0000011, 0b010, 8, 8, 124));
+    try expectSameSemantics(expanded, equiv);
+}
+
 // Note: C.EBREAK is not cross-validated via encode helpers because EBREAK is detected
 // by exact raw value match (0x00100073), not by field encoding. The existing unit tests
 // in rv32c_test.zig cover this case.

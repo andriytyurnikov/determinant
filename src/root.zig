@@ -3,7 +3,9 @@ const vm = @import("vm.zig");
 
 pub const cpu = vm.cpu;
 pub const instructions = vm.instructions;
+pub const decoders = vm.decoders;
 pub const decoder = vm.decoders.branch_decoder;
+pub const lut_decoder = vm.decoders.lut_decoder;
 pub const rv32i = instructions.rv32i;
 pub const rv32m = instructions.rv32m;
 pub const rv32a = instructions.rv32a;
@@ -19,7 +21,8 @@ pub const Instruction = instructions.Instruction;
 pub const Opcode = instructions.Opcode;
 pub const Format = instructions.Format;
 pub const decode = decoder.decode;
-pub const DecodeError = decoder.DecodeError;
+pub const decodeLut = lut_decoder.decodeInstruction;
+pub const DecodeError = vm.decoders.DecodeError;
 
 test {
     std.testing.refAllDecls(@This());

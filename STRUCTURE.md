@@ -3,13 +3,13 @@
 ```
 src/
   root.zig                — library root, re-exports all submodules and convenience aliases
-  main.zig                — CLI entry point, imports the library as @import("determinant")
+  main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
     cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
     cpu_test.zig          — pipeline infrastructure tests (init, fetch, memory, run)
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
-    decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields
+    decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
       branch_decoder.zig      — reference decoder: branch-based dispatch to extension decoders; wraps rv32c.Expanded → Instruction
       branch_decoder_test.zig — encode/decode round-trip tests for all instruction formats

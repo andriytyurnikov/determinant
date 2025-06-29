@@ -86,3 +86,23 @@ test "step: SH3ADD wrapping" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // (0xE0000000 << 3) +% 1 = 1
 }
+
+test "step: SH1ADD double-wrapping both operands near max" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b010, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    // (0xFFFFFFFF << 1) +% 0xFFFFFFFF = 0xFFFFFFFE +% 0xFFFFFFFF = 0xFFFFFFFD
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFD), cpu.readReg(3));
+}
+
+test "step: SH3ADD double-wrapping both operands near max" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b110, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    // (0xFFFFFFFF << 3) +% 0xFFFFFFFF = 0xFFFFFFF8 +% 0xFFFFFFFF = 0xFFFFFFF7
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFF7), cpu.readReg(3));
+}

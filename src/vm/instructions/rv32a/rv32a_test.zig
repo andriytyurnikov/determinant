@@ -380,3 +380,51 @@ test "step: AMOADD.W signed overflow boundary" {
     try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3)); // old value
     try std.testing.expectEqual(@as(u32, 0x80000000), readWordAt(&cpu, addr)); // wraps to min negative
 }
+
+test "step: AMOMIN.W SIGNED_MIN vs SIGNED_MAX" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0x80000000); // SIGNED_MIN
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 0x7FFFFFFF); // SIGNED_MAX
+    loadInst(&cpu, encodeAtomic(0b10000, 3, 1, 2)); // AMOMIN.W
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 0x80000000), readWordAt(&cpu, addr)); // min(SIGNED_MIN, SIGNED_MAX) = SIGNED_MIN
+}
+
+test "step: AMOMAX.W SIGNED_MIN vs SIGNED_MAX" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0x80000000); // SIGNED_MIN
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 0x7FFFFFFF); // SIGNED_MAX
+    loadInst(&cpu, encodeAtomic(0b10100, 3, 1, 2)); // AMOMAX.W
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), readWordAt(&cpu, addr)); // max(SIGNED_MIN, SIGNED_MAX) = SIGNED_MAX
+}
+
+test "step: AMOMINU.W with zero" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0xFFFFFFFF);
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 0);
+    loadInst(&cpu, encodeAtomic(0b11000, 3, 1, 2)); // AMOMINU.W
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 0), readWordAt(&cpu, addr)); // minu(0xFFFFFFFF, 0) = 0
+}
+
+test "step: AMOMAXU.W at unsigned max boundary" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 0x7FFFFFFF);
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 0x80000000);
+    loadInst(&cpu, encodeAtomic(0b11100, 3, 1, 2)); // AMOMAXU.W
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 0x80000000), readWordAt(&cpu, addr)); // maxu(0x7FFFFFFF, 0x80000000) = 0x80000000
+}

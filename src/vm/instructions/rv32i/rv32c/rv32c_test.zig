@@ -516,6 +516,117 @@ test "C.SRAI: shamt[5]=1 illegal on RV32" {
     try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x9405));
 }
 
+// ============================================================
+// Max-range bit extraction tests
+// ============================================================
+
+test "C.ADDI4SPN max nzuimm=1020" {
+    // nzuimm=1020 = 0b1111111100
+    // Bits: [12:11]→[5:4]=11, [10:7]→[9:6]=1111, [6]→[2]=1, [5]→[3]=1
+    // rd'=0 (x8), funct3=000, op=00
+    // = 0b000_11_1111_1_1_000_00 = 0x1FE0
+    try expectExpand(0x1FE0, .ADDI, 8, 2, 0, 1020);
+}
+
+test "C.LW/SW max offset=124" {
+    // clsw_offset max = 124 = 0b1111100
+    // Bits: [12:10]→offset[5:3]=111, [6]→offset[2]=1, [5]→offset[6]=1
+    // rs1'=0 (x8), rd'=0 (x8), funct3=010, op=00
+    // = 0b010_111_000_1_1_000_00 = 0x5C60
+    try expectExpand(0x5C60, .LW, 8, 8, 0, 124);
+}
+
+test "C.ADDI imm=+31" {
+    // ci_imm: bit[12]→imm[5]=0, bits[6:2]→imm[4:0]=11111
+    // rd=1, funct3=000, op=01
+    // = 0b000_0_00001_11111_01 = 0x00FD
+    try expectExpand(0x00FD, .ADDI, 1, 1, 0, 31);
+}
+
+test "C.ADDI imm=-32" {
+    // ci_imm: bit[12]→imm[5]=1, bits[6:2]→imm[4:0]=00000
+    // -32 as 6-bit = 0b100000
+    // rd=1, funct3=000, op=01
+    // = 0b000_1_00001_00000_01 = 0x1081
+    try expectExpand(0x1081, .ADDI, 1, 1, 0, -32);
+}
+
+test "C.SLLI/SRLI max shamt=31" {
+    // ci_shamt: bit[12]=0, bits[6:2]=11111 → shamt=31
+    // C.SLLI rd=1: funct3=000, op=10
+    // = 0b000_0_00001_11111_10 = 0x00FE
+    try expectExpand(0x00FE, .SLLI, 1, 1, 0, 31);
+}
+
+test "C.ADDI16SP imm=+496" {
+    // ci_addi16sp_imm max positive: 496 = 0b0111110000
+    // bit[12]→imm[9]=0, bit[6]→imm[4]=1, bit[5]→imm[6]=1, bits[4:3]→imm[8:7]=11, bit[2]→imm[5]=1
+    // rd=2, funct3=011, op=01
+    // bits[6:2] = 11111
+    // = 0b011_0_00010_11111_01 = 0x617D
+    try expectExpand(0x617D, .ADDI, 2, 2, 0, 496);
+}
+
+test "C.ADDI16SP imm=-512" {
+    // ci_addi16sp_imm min: -512 = 0b1000000000 (10-bit signed)
+    // bit[12]→imm[9]=1, all others 0
+    // rd=2, funct3=011, op=01
+    // bits[6:2] = 00000
+    // = 0b011_1_00010_00000_01 = 0x7101
+    try expectExpand(0x7101, .ADDI, 2, 2, 0, -512);
+}
+
+test "C.J max positive offset=+2046" {
+    // cj_offset max positive: 2046 = 0b011111111110
+    // bit[12]→offset[11]=0, bit[11]→offset[4]=1, bits[10:9]→offset[9:8]=11,
+    // bit[8]→offset[10]=1, bit[7]→offset[6]=1, bit[6]→offset[7]=1,
+    // bits[5:3]→offset[3:1]=111, bit[2]→offset[5]=1
+    // funct3=101, op=01
+    // = 0b101_0_1111_1_1_1_111_1_01 = 0xAFFD
+    try expectExpand(0xAFFD, .JAL, 0, 0, 0, 2046);
+}
+
+test "C.J max negative offset=-2048" {
+    // cj_offset min: -2048 = 0b100000000000 (12-bit signed)
+    // bit[12]→offset[11]=1, all other offset bits 0
+    // funct3=101, op=01
+    // = 0b101_1_0000_0_0_0_000_0_01 = 0xB001
+    try expectExpand(0xB001, .JAL, 0, 0, 0, -2048);
+}
+
+test "C.BEQZ max positive offset=+254" {
+    // cb_offset max positive: 254 = 0b011111110
+    // bit[12]→offset[8]=0, bits[11:10]→offset[4:3]=11, bits[6:5]→offset[7:6]=11,
+    // bit[2]→offset[5]=1, bits[4:3]→offset[2:1]=11
+    // rs1'=0 (x8), funct3=110, op=01
+    // = 0b110_0_11_000_11_111_01 = 0xCC7D
+    try expectExpand(0xCC7D, .BEQ, 0, 8, 0, 254);
+}
+
+test "C.BNEZ max negative offset=-256" {
+    // cb_offset min: -256 = 0b100000000 (9-bit signed)
+    // bit[12]→offset[8]=1, all other offset bits 0
+    // rs1'=0 (x8), funct3=111, op=01
+    // = 0b111_1_00_000_00_000_01 = 0xF001
+    try expectExpand(0xF001, .BNE, 0, 8, 0, -256);
+}
+
+test "C.LWSP max offset=252" {
+    // ci_lwsp_offset max: 252 = 0b11111100
+    // bit[12]→offset[5]=1, bits[6:4]→offset[4:2]=111, bits[3:2]→offset[7:6]=11
+    // rd=1, funct3=010, op=10
+    // = 0b010_1_00001_11111_10 = 0x50FE
+    try expectExpand(0x50FE, .LW, 1, 2, 0, 252);
+}
+
+test "C.SWSP max offset=252" {
+    // css_swsp_offset max: 252 = 0b11111100
+    // bits[12:9]→offset[5:2]=1111, bits[8:7]→offset[7:6]=11
+    // rs2=1, funct3=110, op=10
+    // = 0b110_111111_00001_10 = 0xDF86
+    try expectExpand(0xDF86, .SW, 0, 2, 1, 252);
+}
+
 test "CPU step: C.BEQZ taken" {
     var cpu = Cpu.init();
     // x8 = 0 by default
