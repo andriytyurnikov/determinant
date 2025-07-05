@@ -191,3 +191,21 @@ test "step: BEXT with rs2 >= 32 (masking)" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // extracts bit 0
 }
+
+test "step: BINV with rs2 >= 32 (masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 32); // masked to bit 0
+    loadInst(&cpu, encodeR(0b001, 0b0110100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000001), cpu.readReg(3)); // bit 0 inverted
+}
+
+test "step: BSET with rs2 >= 32 (masking)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 33); // masked to bit 1
+    loadInst(&cpu, encodeR(0b001, 0b0010100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000002), cpu.readReg(3)); // bit 1 set
+}

@@ -223,7 +223,7 @@ pub fn decode(raw: u32) ?Opcode {
         .store => store_table[f3],
         .branch => branch_table[f3],
         .atomic => if (f3 == 0b010) atomic_table[@as(u5, @truncate(raw >> 27))] else null,
-        .system => if (f3 == 0) switch (@as(u12, @truncate(raw >> 20))) {
+        .system => if (f3 == 0b000) switch (@as(u12, @truncate(raw >> 20))) {
             0x000 => @as(?Opcode, .{ .i = .ECALL }),
             0x001 => @as(?Opcode, .{ .i = .EBREAK }),
             else => null,
@@ -231,8 +231,8 @@ pub fn decode(raw: u32) ?Opcode {
         .lui => .{ .i = .LUI },
         .auipc => .{ .i = .AUIPC },
         .jal => .{ .i = .JAL },
-        .jalr => if (f3 == 0) .{ .i = .JALR } else null,
-        .fence => if (f3 == 0) .{ .i = .FENCE } else null,
+        .jalr => if (f3 == 0b000) .{ .i = .JALR } else null,
+        .fence => if (f3 == 0b000) .{ .i = .FENCE } else null,
     };
 }
 

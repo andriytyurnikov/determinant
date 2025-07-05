@@ -106,3 +106,13 @@ test "step: SH3ADD double-wrapping both operands near max" {
     // (0xFFFFFFFF << 3) +% 0xFFFFFFFF = 0xFFFFFFF8 +% 0xFFFFFFFF = 0xFFFFFFF7
     try std.testing.expectEqual(@as(u32, 0xFFFFFFF7), cpu.readReg(3));
 }
+
+test "step: SH2ADD double-wrapping" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b100, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    // (0xFFFFFFFF << 2) +% 0xFFFFFFFF = 0xFFFFFFFC +% 0xFFFFFFFF = 0xFFFFFFFB
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFB), cpu.readReg(3));
+}

@@ -394,3 +394,77 @@ test "step: MAX SIGNED_MIN vs SIGNED_MAX" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3));
 }
+
+test "step: ROL by 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, encodeR(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
+}
+
+test "step: ROR by 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, encodeR(0b101, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000002), cpu.readReg(3)); // rotate right 31 = rotate left 1
+}
+
+test "step: ORC_B single byte in each position" {
+    var cpu = Cpu.init();
+    // Byte 0 only
+    cpu.writeReg(1, 0x00000001);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0010100, 3, 1, 7));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x000000FF), cpu.readReg(3));
+
+    // Byte 1 only
+    cpu.pc = 0;
+    cpu.writeReg(1, 0x00000100);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0010100, 3, 1, 7));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x0000FF00), cpu.readReg(3));
+
+    // Byte 2 only
+    cpu.pc = 0;
+    cpu.writeReg(1, 0x00010000);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0010100, 3, 1, 7));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00FF0000), cpu.readReg(3));
+
+    // Byte 3 only
+    cpu.pc = 0;
+    cpu.writeReg(1, 0x01000000);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0010100, 3, 1, 7));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFF000000), cpu.readReg(3));
+}
+
+test "step: REV8 palindrome" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xAAAAAAAA);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0110100, 3, 1, 24));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xAAAAAAAA), cpu.readReg(3));
+}
+
+test "step: MINU with zero operand" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0);
+    loadInst(&cpu, encodeR(0b101, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: MAXU equal values" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b111, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
+}

@@ -27,7 +27,16 @@ pub fn main() !void {
                     try stdout.flush();
                     return;
                 }
+            } else {
+                try stdout.print("Error: unknown option '{s}'\n", .{flag});
+                try stdout.flush();
+                return;
             }
+        }
+        if (max_cycles == 0) {
+            try stdout.print("Error: --max-cycles must be > 0\n", .{});
+            try stdout.flush();
+            return;
         }
         try runFile(stdout, path, max_cycles);
     } else {
@@ -60,15 +69,35 @@ fn runDemo(stdout: anytype) !void {
 
     // Decode and display instructions
     try stdout.print("Program:\n", .{});
-    for (0..program.len / 4) |i| {
-        const addr = i * 4;
-        const word = std.mem.readInt(u32, program[addr..][0..4], .little);
-        if (det.decode(word)) |inst| {
-            try stdout.print("  0x{X:0>8}: ", .{addr});
-            try printInstruction(stdout, inst);
-            try stdout.print("\n", .{});
-        } else |err| {
-            try stdout.print("  0x{X:0>8}: ??? (error: {s})\n", .{ addr, @errorName(err) });
+    {
+        var addr: usize = 0;
+        while (addr < program.len) {
+            const remaining = program[addr..];
+            if (remaining.len < 2) break;
+            const half = std.mem.readInt(u16, remaining[0..2], .little);
+            if (det.instructions.isCompressed(@as(u32, half))) {
+                // 16-bit compressed
+                if (det.decode(@as(u32, half))) |inst| {
+                    try stdout.print("  0x{X:0>8}: ", .{addr});
+                    try printInstruction(stdout, inst);
+                    try stdout.print("\n", .{});
+                } else |err| {
+                    try stdout.print("  0x{X:0>8}: ??? (error: {s})\n", .{ addr, @errorName(err) });
+                }
+                addr += 2;
+            } else {
+                // 32-bit
+                if (remaining.len < 4) break;
+                const word = std.mem.readInt(u32, remaining[0..4], .little);
+                if (det.decode(word)) |inst| {
+                    try stdout.print("  0x{X:0>8}: ", .{addr});
+                    try printInstruction(stdout, inst);
+                    try stdout.print("\n", .{});
+                } else |err| {
+                    try stdout.print("  0x{X:0>8}: ??? (error: {s})\n", .{ addr, @errorName(err) });
+                }
+                addr += 4;
+            }
         }
     }
 
@@ -99,9 +128,7 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
         try stdout.flush();
         return;
     };
-    const size: usize = @intCast(stat.size);
-
-    if (size == 0) {
+    if (stat.size == 0) {
         try stdout.print("Error: file is empty\n", .{});
         try stdout.flush();
         return;
@@ -109,11 +136,13 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
 
     var vm = det.Cpu.init();
 
-    if (size > vm.memory.len) {
-        try stdout.print("Error: file too large ({d} bytes, max {d})\n", .{ size, vm.memory.len });
+    if (stat.size > vm.memory.len) {
+        try stdout.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
         try stdout.flush();
         return;
     }
+
+    const size: usize = @intCast(stat.size);
 
     const n = file.readAll(vm.memory[0..size]) catch |err| {
         try stdout.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
@@ -131,7 +160,13 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
 
     const result = vm.run(max_cycles) catch |err| {
         try stdout.print("\nExecution error after {d} cycles: {s}\n", .{ vm.cycle_count, @errorName(err) });
-        try printResult(stdout, &vm, .Continue);
+        try stdout.print("\nRegisters:\n", .{});
+        for (0..32) |i| {
+            const val = vm.readReg(@intCast(i));
+            if (val != 0) {
+                try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
+            }
+        }
         return;
     };
 

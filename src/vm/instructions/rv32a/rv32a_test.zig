@@ -428,3 +428,15 @@ test "step: AMOMAXU.W at unsigned max boundary" {
     try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3)); // old value
     try std.testing.expectEqual(@as(u32, 0x80000000), readWordAt(&cpu, addr)); // maxu(0x7FFFFFFF, 0x80000000) = 0x80000000
 }
+
+test "step: AMOSWAP.W same value (old == new)" {
+    var cpu = Cpu.init();
+    const addr: u32 = 0x100;
+    storeWordAt(&cpu, addr, 42);
+    cpu.writeReg(1, addr);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeAtomic(0b00001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(@as(u32, 42), readWordAt(&cpu, addr)); // same value written
+}

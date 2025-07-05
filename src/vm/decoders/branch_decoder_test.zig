@@ -1,6 +1,6 @@
 /// Round-trip tests verifying decode(encode(x)) == x for all instruction formats.
 /// These tests convert implicit algorithmic coupling between encoder (test_helpers)
-/// and decoder (decoder.zig) into explicit verified coupling.
+/// and decoder (branch_decoder.zig) into explicit verified coupling.
 const std = @import("std");
 const decoder = @import("branch_decoder.zig");
 const instructions = @import("../instructions.zig");
@@ -570,4 +570,47 @@ fn expectRoundTripCsr(f3: u3, expected_op: Opcode) !void {
             }
         }
     }
+}
+
+// --- Negative tests: invalid field combinations ---
+
+test "decode: load invalid funct3=011 is illegal" {
+    const raw = h.encodeI(0b0000011, 0b011, 1, 2, 0);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: store invalid funct3=011 is illegal" {
+    const raw = h.encodeS(0b011, 1, 2, 0);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: branch invalid funct3=010 is illegal" {
+    const raw = h.encodeB(0b010, 1, 2, 0);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: JALR invalid funct3=001 is illegal" {
+    const raw = h.encodeI(0b1100111, 0b001, 1, 2, 0);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: atomic invalid funct3=000 is illegal" {
+    // Encode atomic opcode with funct3=000 instead of 010
+    const raw = @as(u32, 0b0101111) |
+        (@as(u32, 1) << 7) |
+        (@as(u32, 0b000) << 12) |
+        (@as(u32, 2) << 15) |
+        (@as(u32, 3) << 20) |
+        (@as(u32, @as(u7, 0b00010) << 2) << 25);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: atomic invalid funct5=0b11111 is illegal" {
+    const raw = h.encodeAtomic(0b11111, 1, 2, 3);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+}
+
+test "decode: system invalid funct3=0b100 is illegal" {
+    const raw = h.encodeCsr(0b100, 1, 2, 0x340);
+    try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
 }

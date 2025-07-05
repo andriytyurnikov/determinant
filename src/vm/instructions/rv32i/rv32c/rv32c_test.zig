@@ -647,3 +647,94 @@ test "CPU step: C.BEQZ taken" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
+
+// ============================================================
+// HINT forms (deliberate behavior)
+// ============================================================
+
+test "C.ADDI with nzimm=0 rd!=0 is HINT (expands to NOP-like ADDI)" {
+    // C.ADDI x1, 0: funct3=000, bit[12]=0, rd=1, bits[6:2]=00000, op=01
+    // = 0b000_0_00001_00000_01 = 0x0081
+    try expectExpand(0x0081, .ADDI, 1, 1, 0, 0);
+}
+
+test "C.LI rd=0 is HINT (expands to ADDI x0)" {
+    // C.LI x0, 5: funct3=010, bit[12]=0, rd=0, bits[6:2]=00101, op=01
+    // = 0b010_0_00000_00101_01 = 0x4015
+    try expectExpand(0x4015, .ADDI, 0, 0, 0, 5);
+}
+
+test "C.SLLI with shamt=0 is HINT" {
+    // C.SLLI x1, 0: funct3=000, bit[12]=0, rd=1, bits[6:2]=00000, op=10
+    // = 0b000_0_00001_00000_10 = 0x0082
+    // shamt=0 is technically a HINT on RV32
+    try expectExpand(0x0082, .SLLI, 1, 1, 0, 0);
+}
+
+test "C.MV rd=0 is HINT (expands to ADD x0)" {
+    // C.MV x0, x2: funct3=100, bit[12]=0, rd=0, rs2=2, op=10
+    // = 0b100_0_00000_00010_10 = 0x800A
+    try expectExpand(0x800A, .ADD, 0, 0, 2, 0);
+}
+
+test "C.ADD rd=0 is HINT (expands to ADD x0)" {
+    // C.ADD x0, x2: funct3=100, bit[12]=1, rd=0, rs2=2, op=10
+    // = 0b100_1_00000_00010_10 = 0x900A
+    try expectExpand(0x900A, .ADD, 0, 0, 2, 0);
+}
+
+// ============================================================
+// Edge cases: shift amounts
+// ============================================================
+
+test "C.SRLI with shamt=0" {
+    // C.SRLI x8, 0: funct3=100, funct2=00, bit[12]=0, rd'=0(x8), bits[6:2]=00000, op=01
+    // = 0b100_0_00_000_00000_01 = 0x8001
+    try expectExpand(0x8001, .SRLI, 8, 8, 0, 0);
+}
+
+test "C.SRAI with shamt=0" {
+    // C.SRAI x8, 0: funct3=100, funct2=01, bit[12]=0, rd'=0(x8), bits[6:2]=00000, op=01
+    // = 0b100_0_01_000_00000_01 = 0x8401
+    try expectExpand(0x8401, .SRAI, 8, 8, 0, 0);
+}
+
+// ============================================================
+// Q1 ALU bit[12]=1 reserved
+// ============================================================
+
+test "Q1 ALU bit[12]=1 funct2b reserved is illegal" {
+    // funct3=100, bit[12]=1, funct2=11 (bits[11:10]), rd'=0(x8),
+    // funct2b=00 (bits[6:5]), rs2'=0(x8), op=01
+    // This is the reserved encoding with bit[12]=1 in the ALU group
+    // = 0b100_1_11_000_00_000_01 = 0x9C01
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x9C01));
+}
+
+// ============================================================
+// Invalid funct3 in Q0 and Q2
+// ============================================================
+
+test "Q0 invalid funct3=001 is illegal" {
+    // funct3=001, op=00 — FLD (not supported in RV32IC without F)
+    // = 0b001_000_000_00_000_00 = 0x2000
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x2000));
+}
+
+test "Q0 invalid funct3=011 is illegal" {
+    // funct3=011, op=00 — FSD (not supported in RV32IC without F)
+    // = 0b011_000_000_00_000_00 = 0x6000
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6000));
+}
+
+test "Q2 invalid funct3=001 is illegal" {
+    // funct3=001, op=10 — FLDSP (not supported in RV32IC without F)
+    // = 0b001_0_00000_00000_10 = 0x2002
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x2002));
+}
+
+test "Q2 invalid funct3=011 is illegal" {
+    // funct3=011, op=10 — FSDSP (not supported)
+    // = 0b011_0_00000_00000_10 = 0x6002
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6002));
+}

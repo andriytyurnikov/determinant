@@ -1,7 +1,7 @@
 //! Opcode registry — single source of truth for all 94 supported opcodes.
 //!
 //! Each entry specifies the instruction's encoding fields. The comptime
-//! generator in `comptime_lut.zig` derives all lookup tables from this list.
+//! generator in `lut_decoder.zig` derives all lookup tables from this list.
 //!
 //! Fields:
 //!   op      — tagged union variant from instructions.Opcode

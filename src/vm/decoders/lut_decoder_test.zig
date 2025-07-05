@@ -459,7 +459,7 @@ fn assertConformance(raw: u32) !void {
         return error.TestUnexpectedResult;
     };
     // Compare all fields
-    try std.testing.expectEqualStrings(ref.op.name(), got.op.name());
+    try std.testing.expectEqual(ref.op, got.op);
     try std.testing.expectEqual(ref.rd, got.rd);
     try std.testing.expectEqual(ref.rs1, got.rs1);
     try std.testing.expectEqual(ref.rs2, got.rs2);
@@ -620,4 +620,29 @@ test "conformance: atomics with aq/rl bits" {
     try assertConformance(encodeAtomicFull(0b00001, 1, 2, 3, 0, 1)); // AMOSWAP.W.RL
     // aq=1, rl=1
     try assertConformance(encodeAtomicFull(0b00000, 1, 2, 3, 1, 1)); // AMOADD.W.AQRL
+}
+
+test "conformance: compressed instructions (RV32C)" {
+    // C.NOP = 0x0001 (bits[1:0]=01 → compressed)
+    try assertConformance(0x0001);
+    // C.ADDI x1, 1 = 0x0085
+    try assertConformance(0x0085);
+    // C.LI x1, 5 = 0x4095
+    try assertConformance(0x4095);
+    // C.LW x8, 0(x8) = 0x4000
+    try assertConformance(0x4000);
+    // C.J offset=0 = 0xA001
+    try assertConformance(0xA001);
+    // C.BEQZ x8, 0 = 0xC001
+    try assertConformance(0xC001);
+    // C.SLLI x1, 1 = 0x0086
+    try assertConformance(0x0086);
+    // C.LWSP x1, 0(x2) = 0x4082
+    try assertConformance(0x4082);
+    // C.JR x1 = 0x8082
+    try assertConformance(0x8082);
+    // C.ADD x1, x2 = 0x908A
+    try assertConformance(0x908A);
+    // C.SWSP x1, 0(x2) = 0xC006
+    try assertConformance(0xC006);
 }

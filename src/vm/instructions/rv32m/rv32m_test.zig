@@ -255,3 +255,39 @@ test "step: MULHSU SIGNED_MIN × unsigned max" {
     // (-2^31) × (2^32-1) = -9223372034707292160, as u64 = 0x8000000080000000
     try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3));
 }
+
+test "step: DIV negative/negative" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, @as(u32, @bitCast(@as(i32, -20))));
+    cpu.writeReg(2, @as(u32, @bitCast(@as(i32, -6))));
+    loadInst(&cpu, encodeR(0b100, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 3), cpu.readReg(3));
+}
+
+test "step: REM positive/negative" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 20);
+    cpu.writeReg(2, @as(u32, @bitCast(@as(i32, -6))));
+    loadInst(&cpu, encodeR(0b110, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 2), cpu.readReg(3));
+}
+
+test "step: REMU large unsigned" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 2);
+    loadInst(&cpu, encodeR(0b111, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+}
+
+test "step: MULHU with zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0);
+    loadInst(&cpu, encodeR(0b011, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}

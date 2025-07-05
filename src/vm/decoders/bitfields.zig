@@ -1,5 +1,5 @@
 //! Shared bit-field extraction functions for RISC-V instruction words.
-//! Used by both decoder.zig and comptime_lut.zig.
+//! Used by both branch_decoder.zig and lut_decoder.zig.
 
 // --- Register / function fields ---
 

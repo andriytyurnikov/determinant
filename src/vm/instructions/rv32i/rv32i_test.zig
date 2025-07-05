@@ -810,3 +810,35 @@ test "step: LH sign-extension boundary 0x7FFF positive" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x00007FFF), cpu.readReg(2)); // positive, no sign extension
 }
+
+test "step: BEQ self-loop (offset=0)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    cpu.writeReg(2, 42);
+    // BEQ x1, x2, +0 → branch taken, PC unchanged (stays at 0)
+    loadInst(&cpu, encodeB(0b000, 1, 2, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+}
+
+test "step: JALR wrapping target address" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    // JALR x2, 4(x1) → target = (0xFFFFFFFF +% 4) & 0xFFFFFFFE = 3 & 0xFFFFFFFE = 2
+    loadInst(&cpu, encodeI(0b1100111, 0b000, 2, 1, 4));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc);
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(2)); // link = old_pc + 4
+}
+
+test "step: LW with negative offset" {
+    var cpu = Cpu.init();
+    // Store a known value at address 96
+    std.mem.writeInt(u32, cpu.memory[96..][0..4], 0xDEADBEEF, .little);
+    cpu.writeReg(1, 100);
+    // LW x2, -4(x1) → load from address 96
+    // -4 as u12 = 0xFFC
+    loadInst(&cpu, encodeI(0b0000011, 0b010, 2, 1, 0xFFC));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(2));
+}

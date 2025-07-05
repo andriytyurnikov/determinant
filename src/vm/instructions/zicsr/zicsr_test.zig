@@ -307,3 +307,18 @@ test "step: CSRRCI with zimm!=0 to read-only CSR fails" {
     loadInst(&cpu, encodeCsr(0b111, 2, 5, 0xC00));
     try std.testing.expectError(error.IllegalInstruction, cpu.step());
 }
+
+test "step: CSRRW x0 to read-only CSR still fails (write attempted)" {
+    var cpu = Cpu.init();
+    // CSRRW x0, 0xC00, x1 — rd=x0, but write still attempted
+    cpu.writeReg(1, 42);
+    loadInst(&cpu, encodeCsr(0b001, 0, 1, 0xC00));
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+}
+
+test "step: CSRRSI with zimm!=0 to read-only CSR fails" {
+    var cpu = Cpu.init();
+    // CSRRSI x2, 0xC00, 5 — zimm=5 (!=0), attempts set on read-only CSR
+    loadInst(&cpu, encodeCsr(0b110, 2, 5, 0xC00));
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+}
