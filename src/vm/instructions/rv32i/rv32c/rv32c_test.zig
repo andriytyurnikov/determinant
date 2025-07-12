@@ -738,3 +738,192 @@ test "Q2 invalid funct3=011 is illegal" {
     // = 0b011_0_00000_00000_10 = 0x6002
     try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6002));
 }
+
+// ============================================================
+// Phase 2: Additional CPU step tests for compressed instructions
+// ============================================================
+
+test "CPU step: C.J unconditional jump" {
+    var cpu = Cpu.init();
+    // C.J offset=8
+    // offset=8: offset[3]=1 → bit[5] in CJ-format
+    // bits[5:3]→offset[3:1]: offset[3]=1, offset[2]=0, offset[1]=0 → bits[5:3]=100
+    // = 0b101_0_0000_0_0_0_100_0_01 = 0xA021
+    h.storeHalfAt(&cpu, 0, 0xA021);
+    // ECALL at target (offset 8)
+    h.storeWordAt(&cpu, 8, 0x00000073);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0)); // x0 unchanged (C.J links to x0)
+}
+
+test "CPU step: C.BEQZ not-taken (x8 != 0)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 1); // nonzero → branch not taken
+    // C.BEQZ x8, 4
+    h.storeHalfAt(&cpu, 0, 0xC011);
+    // NOP at offset 2
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc); // PC advanced by 2 (not taken)
+}
+
+test "CPU step: C.BNEZ taken (x8 != 0)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 1); // nonzero → branch taken
+    // C.BNEZ x8, 4: offset=4, offset[2]=1 → bit[4]=1 in CB-format
+    // funct3=111, bit[12]=0, bits[11:10]=00, rs1'=0(x8), bits[6:5]=00, bit[4]=1, bit[3]=0, bit[2]=0, op=01
+    // = 0b111_0_00_000_00_100_01 = 0xE011
+    h.storeHalfAt(&cpu, 0, 0xE011);
+    // ECALL at target (offset 4)
+    h.storeWordAt(&cpu, 4, 0x00000073);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc); // branch taken
+}
+
+test "CPU step: C.BNEZ not-taken (x8 == 0)" {
+    var cpu = Cpu.init();
+    // x8 = 0 by default → branch not taken
+    // C.BNEZ x8, 4
+    h.storeHalfAt(&cpu, 0, 0xE011);
+    h.storeHalfAt(&cpu, 2, 0x0001); // NOP at offset 2
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc); // not taken, PC += 2
+}
+
+test "CPU step: C.MV" {
+    var cpu = Cpu.init();
+    cpu.writeReg(2, 42);
+    // C.MV x1, x2: add x1, x0, x2
+    // = 0x808A
+    h.storeHalfAt(&cpu, 0, 0x808A);
+    h.storeHalfAt(&cpu, 2, 0x0001); // NOP
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
+}
+
+test "CPU step: C.EBREAK" {
+    var cpu = Cpu.init();
+    // C.EBREAK = 0x9002
+    h.storeHalfAt(&cpu, 0, 0x9002);
+
+    const result = try cpu.step();
+    try std.testing.expectEqual(cpu_mod.StepResult.Ebreak, result);
+}
+
+test "CPU step: C.SUB" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 20);
+    cpu.writeReg(9, 7);
+    // C.SUB x8, x9 = 0x8C05
+    h.storeHalfAt(&cpu, 0, 0x8C05);
+    h.storeHalfAt(&cpu, 2, 0x0001); // NOP
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 13), cpu.readReg(8)); // 20 - 7
+}
+
+test "CPU step: C.OR" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0xF0);
+    cpu.writeReg(9, 0x0F);
+    // C.OR x8, x9 = 0x8C45
+    h.storeHalfAt(&cpu, 0, 0x8C45);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFF), cpu.readReg(8));
+}
+
+test "CPU step: C.AND" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0xFF);
+    cpu.writeReg(9, 0x0F);
+    // C.AND x8, x9 = 0x8C65
+    h.storeHalfAt(&cpu, 0, 0x8C65);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x0F), cpu.readReg(8));
+}
+
+test "CPU step: C.SLLI" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x01);
+    // C.SLLI x1, 4: funct3=000, bit12=0, rd=1, bits[6:2]=00100, op=10
+    // = 0b000_0_00001_00100_10 = 0x0092
+    h.storeHalfAt(&cpu, 0, 0x0092);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x10), cpu.readReg(1));
+}
+
+test "CPU step: C.SRLI" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0x80);
+    // C.SRLI x8, 4: funct3=100, funct2=00, bit12=0, rd'=0(x8), bits[6:2]=00100, op=01
+    // = 0b100_0_00_000_00100_01 = 0x8011
+    h.storeHalfAt(&cpu, 0, 0x8011);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x08), cpu.readReg(8));
+}
+
+test "CPU step: C.ANDI" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0xFF);
+    // C.ANDI x8, 3 = 0x880D
+    h.storeHalfAt(&cpu, 0, 0x880D);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 3), cpu.readReg(8));
+}
+
+test "CPU step: C.ADDI4SPN" {
+    var cpu = Cpu.init();
+    cpu.writeReg(2, 1000); // sp = 1000
+    // C.ADDI4SPN x8, x2, 8 = 0x0020
+    h.storeHalfAt(&cpu, 0, 0x0020);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1008), cpu.readReg(8)); // sp + 8
+}
+
+test "CPU step: C.ADDI16SP" {
+    var cpu = Cpu.init();
+    cpu.writeReg(2, 1000); // sp = 1000
+    // C.ADDI16SP x2, 16 = 0x6141
+    h.storeHalfAt(&cpu, 0, 0x6141);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1016), cpu.readReg(2)); // sp + 16
+}
+
+test "CPU step: C.LW and C.SW with compact registers" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 256); // base address in compact register
+    cpu.writeReg(9, 0xBEEF); // value to store
+
+    // C.SW x9, 0(x8): funct3=110, rs1'=0(x8), rs2'=1(x9), offset=0
+    // = 0b110_000_000_00_001_00 = 0xC004
+    h.storeHalfAt(&cpu, 0, 0xC004);
+    // C.LW x10, 0(x8): funct3=010, rs1'=0(x8), rd'=2(x10), offset=0
+    // = 0b010_000_000_00_010_00 = 0x4008
+    h.storeHalfAt(&cpu, 2, 0x4008);
+    h.storeWordAt(&cpu, 4, 0x00000073); // ECALL
+
+    _ = try cpu.step(); // C.SW
+    _ = try cpu.step(); // C.LW
+    try std.testing.expectEqual(@as(u32, 0xBEEF), cpu.readReg(10));
+    try std.testing.expectEqual(@as(u32, 0xBEEF), try cpu.readWord(256));
+}
