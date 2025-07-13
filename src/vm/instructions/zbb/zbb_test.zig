@@ -468,3 +468,130 @@ test "step: MAXU equal values" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
 }
+
+// --- Boundary-value tests ---
+
+test "step: CLZ all-ones" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: CTZ all-ones" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 1));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: REV8 zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0110100, 3, 1, 24));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: REV8 all-ones" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0110100, 3, 1, 24));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
+}
+
+test "step: CPOP single bit low" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+}
+
+test "step: CPOP single bit high" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+}
+
+test "step: SEXT_B zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 4));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: SEXT_H zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 5));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: ZEXT_H zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    loadInst(&cpu, encodeR(0b100, 0b0000100, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}
+
+test "step: ZEXT_H max halfword" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x0000FFFF);
+    loadInst(&cpu, encodeR(0b100, 0b0000100, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFF), cpu.readReg(3));
+}
+
+test "step: ANDN identity (mask=0)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEADBEEF);
+    cpu.writeReg(2, 0);
+    loadInst(&cpu, encodeR(0b111, 0b0100000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(3)); // x & ~0 = x
+}
+
+test "step: ORN identity (mask=all-ones)" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEADBEEF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b110, 0b0100000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(3)); // x | ~0xFFFFFFFF = x | 0 = x
+}
+
+test "step: XNOR self" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xDEADBEEF);
+    cpu.writeReg(2, 0xDEADBEEF);
+    loadInst(&cpu, encodeR(0b100, 0b0100000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // ~(x ^ x) = ~0
+}
+
+test "step: MIN equal operands" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b100, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
+}
+
+test "step: MAX equal operands" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b110, 0b0000101, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
+}

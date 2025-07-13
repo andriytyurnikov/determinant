@@ -291,3 +291,32 @@ test "step: MULHU with zero" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
 }
+
+// --- Boundary-value tests ---
+
+test "step: MULHU max times one" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 1);
+    loadInst(&cpu, encodeR(0b011, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3)); // upper 32 of 0xFFFFFFFF * 1 = 0
+}
+
+test "step: DIVU smaller divided by larger" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b101, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3)); // 0x80000000 / 0xFFFFFFFF = 0
+}
+
+test "step: REMU smaller mod larger" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b111, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(3)); // 0x80000000 % 0xFFFFFFFF = 0x80000000
+}

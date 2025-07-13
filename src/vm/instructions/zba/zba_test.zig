@@ -116,3 +116,32 @@ test "step: SH2ADD double-wrapping" {
     // (0xFFFFFFFF << 2) +% 0xFFFFFFFF = 0xFFFFFFFC +% 0xFFFFFFFF = 0xFFFFFFFB
     try std.testing.expectEqual(@as(u32, 0xFFFFFFFB), cpu.readReg(3));
 }
+
+// --- Boundary-value tests ---
+
+test "step: SH1ADD zero rs1" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b010, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3)); // (0 << 1) + 42 = 42
+}
+
+test "step: SH2ADD zero rs1" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b100, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3)); // (0 << 2) + 42 = 42
+}
+
+test "step: SH3ADD zero rs1" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    cpu.writeReg(2, 42);
+    loadInst(&cpu, encodeR(0b110, 0b0010000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3)); // (0 << 3) + 42 = 42
+}
