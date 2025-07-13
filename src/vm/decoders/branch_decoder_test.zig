@@ -614,3 +614,75 @@ test "decode: system invalid funct3=0b100 is illegal" {
     const raw = h.encodeCsr(0b100, 1, 2, 0x340);
     try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
 }
+
+// --- Load variant round-trips ---
+
+test "I-type round-trip: LH" {
+    try expectRoundTripI(0b0000011, 0b001, .{ .i = .LH });
+}
+
+test "I-type round-trip: LBU" {
+    try expectRoundTripI(0b0000011, 0b100, .{ .i = .LBU });
+}
+
+test "I-type round-trip: LHU" {
+    try expectRoundTripI(0b0000011, 0b101, .{ .i = .LHU });
+}
+
+// --- ZEXT_H constraint tests ---
+
+test "R-type round-trip: ZEXT_H (Zbb) with rs2=0" {
+    const test_regs = [_]u5{ 0, 1, 15, 31 };
+    for (test_regs) |rd_v| {
+        for (test_regs) |rs1_v| {
+            const raw = h.encodeR(0b0110011, 0b100, 0b0000100, rd_v, rs1_v, 0);
+            const inst = try decoder.decode(raw);
+            try std.testing.expectEqual(Opcode{ .zbb = .ZEXT_H }, inst.op);
+            try std.testing.expectEqual(rd_v, inst.rd);
+            try std.testing.expectEqual(rs1_v, inst.rs1);
+        }
+    }
+}
+
+test "decode: ZEXT_H encoding with rs2!=0 is illegal" {
+    const test_rs2 = [_]u5{ 1, 15, 31 };
+    for (test_rs2) |rs2_v| {
+        const raw = h.encodeR(0b0110011, 0b100, 0b0000100, 4, 5, rs2_v);
+        try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
+    }
+}
+
+// --- Operand isolation tests ---
+
+test "decode: ECALL operand isolation" {
+    const inst = try decoder.decode(0x00000073);
+    try std.testing.expectEqual(Opcode{ .i = .ECALL }, inst.op);
+    try std.testing.expectEqual(@as(u5, 0), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs2);
+    try std.testing.expectEqual(@as(i32, 0), inst.imm);
+}
+
+test "decode: EBREAK operand isolation" {
+    const inst = try decoder.decode(0x00100073);
+    try std.testing.expectEqual(Opcode{ .i = .EBREAK }, inst.op);
+    try std.testing.expectEqual(@as(u5, 0), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs2);
+}
+
+test "decode: FENCE operand isolation" {
+    const inst = try decoder.decode(0x0FF0000F);
+    try std.testing.expectEqual(Opcode{ .i = .FENCE }, inst.op);
+    try std.testing.expectEqual(@as(u5, 0), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+}
+
+test "decode: minimal non-compressed 0x00000003 decodes as LB x0, 0(x0)" {
+    // bits[1:0]=0b11 → 32-bit instruction, opcode=0b0000011 (LOAD), funct3=000 (LB)
+    const inst = try decoder.decode(0x00000003);
+    try std.testing.expectEqual(Opcode{ .i = .LB }, inst.op);
+    try std.testing.expectEqual(@as(u5, 0), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(i32, 0), inst.imm);
+}
