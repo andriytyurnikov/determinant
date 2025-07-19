@@ -11,7 +11,17 @@ pub fn main() !void {
     var args = std.process.args();
     _ = args.next(); // skip program name
 
-    if (args.next()) |path| {
+    if (args.next()) |first_arg| {
+        if (std.mem.eql(u8, first_arg, "--help") or std.mem.eql(u8, first_arg, "-h")) {
+            try stdout.print("Usage: determinant [<file> [--max-cycles N]]\n\n", .{});
+            try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
+            try stdout.print("  --max-cycles N   Maximum execution cycles (default: {d})\n", .{default_max_cycles});
+            try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
+            try stdout.flush();
+            return;
+        }
+
+        const path = first_arg;
         var max_cycles: u64 = default_max_cycles;
         // Check for --max-cycles N
         if (args.next()) |flag| {
@@ -159,7 +169,7 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
     try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
 
     const result = vm.run(max_cycles) catch |err| {
-        try stdout.print("\nExecution error after {d} cycles: {s}\n", .{ vm.cycle_count, @errorName(err) });
+        try stdout.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
         try stdout.print("\nRegisters:\n", .{});
         for (0..32) |i| {
             const val = vm.readReg(@intCast(i));
@@ -167,6 +177,7 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
                 try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
             }
         }
+        try stdout.flush();
         return;
     };
 
@@ -175,6 +186,7 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
 
 fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
     try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count });
+    try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
     try stdout.print("\nRegisters:\n", .{});
     for (0..32) |i| {
         const val = vm.readReg(@intCast(i));

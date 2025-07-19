@@ -4,7 +4,9 @@ const vm = @import("vm.zig");
 pub const cpu = vm.cpu;
 pub const instructions = vm.instructions;
 pub const decoders = vm.decoders;
+/// Reference decoder (branch-based) — kept for conformance testing and documentation.
 pub const decoder = vm.decoders.branch_decoder;
+/// Primary decoder (LUT-based) — used by cpu.zig for execution. Prefer for performance.
 pub const lut_decoder = vm.decoders.lut_decoder;
 pub const rv32i = instructions.rv32i;
 pub const rv32m = instructions.rv32m;
@@ -20,7 +22,9 @@ pub const StepResult = cpu.StepResult;
 pub const Instruction = instructions.Instruction;
 pub const Opcode = instructions.Opcode;
 pub const Format = instructions.Format;
+/// Decode via reference (branch-based) decoder — for conformance testing and readability.
 pub const decode = decoder.decode;
+/// Decode via primary (LUT-based) decoder — for performance. Same results as decode().
 pub const decodeLut = lut_decoder.decodeInstruction;
 pub const DecodeError = vm.decoders.DecodeError;
 
