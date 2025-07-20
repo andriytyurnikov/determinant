@@ -284,4 +284,5 @@ fn buildInstruction(op: Opcode, raw: u32) Instruction {
 
 test {
     _ = @import("lut_decoder_test.zig");
+    _ = @import("lut_conformance_test.zig");
 }
