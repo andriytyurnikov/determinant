@@ -1,9 +1,9 @@
 /// I-type shift round-trip tests for RV32I/Zbb/Zbs.
 const std = @import("std");
 const decoder = @import("branch_decoder.zig");
-const instructions = @import("../instructions.zig");
+const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
-const h = @import("../instructions/test_helpers.zig");
+const h = @import("../../instructions/test_helpers.zig");
 
 // --- RV32I I-type shift round-trips ---
 

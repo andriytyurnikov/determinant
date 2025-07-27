@@ -1,5 +1,5 @@
 const std = @import("std");
-const instructions = @import("../instructions.zig");
+const instructions = @import("../../instructions.zig");
 pub const Opcode = instructions.Opcode;
 pub const lut = @import("lut_decoder.zig");
 pub const decode = lut.decode;

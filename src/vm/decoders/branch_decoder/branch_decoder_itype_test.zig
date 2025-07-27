@@ -1,9 +1,9 @@
 /// I-type + S-type + B-type round-trip tests.
 const std = @import("std");
 const decoder = @import("branch_decoder.zig");
-const instructions = @import("../instructions.zig");
+const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
-const h = @import("../instructions/test_helpers.zig");
+const h = @import("../../instructions/test_helpers.zig");
 
 // --- I-type round-trip ---
 

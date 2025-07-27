@@ -1,5 +1,5 @@
 const std = @import("std");
-const t = @import("lut_test_helpers.zig");
+const t = @import("lut_decoder/lut_test_helpers.zig");
 const Opcode = t.Opcode;
 const encodeRBase = t.encodeRBase;
 const encodeI = t.encodeI;
@@ -17,7 +17,7 @@ const encodeAtomic = t.encodeAtomic;
 const encodeAtomicFull = t.encodeAtomicFull;
 const encodeSystem = t.encodeSystem;
 
-const decoder = @import("branch_decoder.zig");
+const decoder = @import("branch_decoder/branch_decoder.zig");
 const decodeInstruction = t.lut.decodeInstruction;
 
 fn assertConformance(raw: u32) !void {

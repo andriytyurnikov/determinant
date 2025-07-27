@@ -1,5 +1,5 @@
 const std = @import("std");
-const lut_decoder = @import("decoders/lut_decoder.zig");
+const lut_decoder = @import("decoders/lut_decoder/lut_decoder.zig");
 const instructions = @import("instructions.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;

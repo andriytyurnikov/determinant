@@ -1,6 +1,6 @@
 const std = @import("std");
-const instructions = @import("../instructions.zig");
-const bf = @import("bitfields.zig");
+const instructions = @import("../../instructions.zig");
+const bf = @import("../bitfields.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;
 const rv32a = instructions.rv32a;
@@ -183,6 +183,6 @@ fn decodeSystem(raw: u32) DecodeError!Instruction {
 
 test {
     _ = @import("branch_decoder_test.zig");
-    _ = @import("rv32c_cross_test.zig");
-    _ = @import("lut_decoder.zig");
+    _ = @import("../rv32c_cross_test.zig");
+    _ = @import("../lut_decoder/lut_decoder.zig");
 }

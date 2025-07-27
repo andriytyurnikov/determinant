@@ -6,7 +6,7 @@ const instructions = @import("../instructions.zig");
 const rv32c = instructions.rv32i.rv32c;
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
-const decoder = @import("branch_decoder.zig");
+const decoder = @import("branch_decoder/branch_decoder.zig");
 const h = @import("../instructions/test_helpers.zig");
 
 /// Compare expanded compressed instruction against the equivalent 32-bit decoded instruction.

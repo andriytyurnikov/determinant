@@ -1,9 +1,9 @@
 /// R-type round-trip tests for RV32I/M/Zba/Zbb/Zbs.
 const std = @import("std");
 const decoder = @import("branch_decoder.zig");
-const instructions = @import("../instructions.zig");
+const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
-const h = @import("../instructions/test_helpers.zig");
+const h = @import("../../instructions/test_helpers.zig");
 
 test "R-type round-trip: ADD" {
     try expectRoundTripR(0b0000000, 0b000, .{ .i = .ADD });

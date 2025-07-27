@@ -16,25 +16,27 @@ src/
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
-      branch_decoder.zig      — reference decoder: branch-based dispatch to extension decoders; wraps rv32c.Expanded → Instruction
-      branch_decoder_test.zig — hub → rtype, itype, shift, uj, edge split files
-        branch_decoder_rtype_test.zig  — R-type round-trip tests (RV32I, M, Zba, Zbb, Zbs)
-        branch_decoder_itype_test.zig  — I-type round-trip tests (ALU, loads, CSR, system)
-        branch_decoder_shift_test.zig  — shift instruction round-trip tests
-        branch_decoder_uj_test.zig     — U/J-type and store round-trip tests
-        branch_decoder_edge_test.zig   — edge cases, error paths, FENCE, atomics
-      lut_decoder.zig         — primary decoder: comptime LUT tables (level1 strategy → format-specific tables) derived from registry.zig
-      lut_decoder_test.zig    — hub → rtype, ialu, mem, system split files
-        lut_decoder_rtype_test.zig   — R-type LUT tests (base, M, Zba, Zbb, Zbs)
-        lut_decoder_ialu_test.zig    — I-type ALU LUT tests (shifts, Zbb, Zbs)
-        lut_decoder_mem_test.zig     — load/store/branch/U/J/FENCE LUT tests
-        lut_decoder_system_test.zig  — atomic/system/misc LUT tests
-      lut_test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
-      lut_conformance_test.zig — conformance suite (field-by-field match vs branch_decoder.zig)
       bitfields.zig           — shared bit-field extraction (rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
       registry.zig            — opcode registry: Entry struct, 94-entry registry array, Strategy enum, strategyFor()
+      lut_conformance_test.zig — conformance suite (field-by-field match vs branch_decoder)
       rv32c_cross_test.zig    — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
         rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
+      branch_decoder/
+        branch_decoder.zig      — reference decoder: branch-based dispatch to extension decoders; wraps rv32c.Expanded → Instruction
+        branch_decoder_test.zig — hub → rtype, itype, shift, uj, edge split files
+          branch_decoder_rtype_test.zig  — R-type round-trip tests (RV32I, M, Zba, Zbb, Zbs)
+          branch_decoder_itype_test.zig  — I-type round-trip tests (ALU, loads, CSR, system)
+          branch_decoder_shift_test.zig  — shift instruction round-trip tests
+          branch_decoder_uj_test.zig     — U/J-type and store round-trip tests
+          branch_decoder_edge_test.zig   — edge cases, error paths, FENCE, atomics
+      lut_decoder/
+        lut_decoder.zig         — primary decoder: comptime LUT tables (level1 strategy → format-specific tables) derived from registry.zig
+        lut_decoder_test.zig    — hub → rtype, ialu, mem, system split files
+          lut_decoder_rtype_test.zig   — R-type LUT tests (base, M, Zba, Zbb, Zbs)
+          lut_decoder_ialu_test.zig    — I-type ALU LUT tests (shifts, Zbb, Zbs)
+          lut_decoder_mem_test.zig     — load/store/branch/U/J/FENCE LUT tests
+          lut_decoder_system_test.zig  — atomic/system/misc LUT tests
+        lut_test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
     instructions/
       format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
       test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)

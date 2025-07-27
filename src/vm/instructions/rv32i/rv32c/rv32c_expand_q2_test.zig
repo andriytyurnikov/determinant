@@ -3,7 +3,7 @@ const rv32c = @import("rv32c.zig");
 const rv32i = @import("../rv32i.zig");
 const instructions = @import("../../../instructions.zig");
 const Opcode = instructions.Opcode;
-const decoder = @import("../../../decoders/branch_decoder.zig");
+const decoder = @import("../../../decoders/branch_decoder/branch_decoder.zig");
 
 fn expectExpand(half: u16, expected_op: rv32i.Opcode, expected_rd: u5, expected_rs1: u5, expected_rs2: u5, expected_imm: i32) !void {
     const exp = try rv32c.expand(half);

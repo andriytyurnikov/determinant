@@ -1,7 +1,7 @@
 const std = @import("std");
 const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
-const decoder = @import("../../decoders/branch_decoder.zig");
+const decoder = @import("../../decoders/branch_decoder/branch_decoder.zig");
 const decode = decoder.decode;
 const h = @import("../test_helpers.zig");
 
