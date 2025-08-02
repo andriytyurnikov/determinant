@@ -1,6 +1,7 @@
 const std = @import("std");
 const instructions = @import("../../instructions.zig");
 const bf = @import("../bitfields.zig");
+const expand_mod = @import("../expand.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;
 const rv32a = instructions.rv32a;
@@ -8,7 +9,6 @@ const zicsr = instructions.zicsr;
 const zba = instructions.zba;
 const zbb = instructions.zbb;
 const zbs = instructions.zbs;
-const rv32c = rv32i.rv32c;
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 
@@ -33,7 +33,7 @@ const immJ = bf.immJ;
 pub fn decode(raw: u32) DecodeError!Instruction {
     // Compressed instruction: low 2 bits != 11
     if (instructions.isCompressed(raw)) {
-        return expandCompressed(raw);
+        return expand_mod.expandCompressed(raw);
     }
     const opcode_bits: u7 = @truncate(raw);
     return switch (opcode_bits) {
@@ -51,12 +51,6 @@ pub fn decode(raw: u32) DecodeError!Instruction {
         0b1110011 => decodeSystem(raw),
         else => error.IllegalInstruction,
     };
-}
-
-/// Wrap an rv32c Expanded into a full Instruction.
-fn expandCompressed(raw: u32) DecodeError!Instruction {
-    const exp = try rv32c.expand(@truncate(raw));
-    return .{ .op = .{ .i = exp.op }, .rd = exp.rd, .rs1 = exp.rs1, .rs2 = exp.rs2, .imm = exp.imm, .raw = raw };
 }
 
 // --- Sub-decoders ---

@@ -13,6 +13,7 @@
 const instructions = @import("../../instructions.zig");
 const bf = @import("../bitfields.zig");
 const reg = @import("../registry.zig");
+const expand_mod = @import("../expand.zig");
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 const Entry = reg.Entry;
@@ -240,9 +241,7 @@ pub fn decode(raw: u32) ?Opcode {
 /// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
 pub fn decodeInstruction(raw: u32) DecodeError!Instruction {
     if (instructions.isCompressed(raw)) {
-        const rv32c = instructions.rv32i.rv32c;
-        const exp = try rv32c.expand(@truncate(raw));
-        return .{ .op = .{ .i = exp.op }, .rd = exp.rd, .rs1 = exp.rs1, .rs2 = exp.rs2, .imm = exp.imm, .raw = raw };
+        return expand_mod.expandCompressed(raw);
     }
     const op = decode(raw) orelse return error.IllegalInstruction;
     return buildInstruction(op, raw);

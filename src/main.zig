@@ -197,10 +197,7 @@ fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !voi
 }
 
 fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
-    const op_name = if (det.instructions.isCompressed(inst.raw))
-        if (det.rv32i.rv32c.decode(@truncate(inst.raw))) |c| c.name() else |_| inst.op.name()
-    else
-        inst.op.name();
+    const op_name = if (inst.compressed_op) |c_op| c_op.name() else inst.op.name();
     switch (inst.op) {
         .i => |i_op| switch (i_op) {
             .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),
@@ -208,7 +205,7 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
             .FENCE, .ECALL, .EBREAK => try stdout.print("{s}", .{op_name}),
             .SB, .SH, .SW => try stdout.print("{s} x{d}, {d}(x{d})", .{ op_name, inst.rs2, inst.imm, inst.rs1 }),
             .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rs1, inst.rs2, inst.imm }),
-            .LUI, .AUIPC => try stdout.print("{s} x{d}, 0x{X}", .{ op_name, inst.rd, @as(u32, @bitCast(inst.imm)) >> 12 }),
+            .LUI, .AUIPC => try stdout.print("{s} x{d}, 0x{X}", .{ op_name, inst.rd, inst.immUnsigned() >> 12 }),
             .JAL => try stdout.print("{s} x{d}, {d}", .{ op_name, inst.rd, inst.imm }),
             .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
         },
@@ -219,7 +216,7 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
             else => try stdout.print("{s} x{d}, x{d}, (x{d})", .{ op_name, inst.rd, inst.rs2, inst.rs1 }),
         },
         .csr => |csr_op| {
-            const csr_addr: u12 = @truncate(@as(u32, @bitCast(inst.imm)));
+            const csr_addr = inst.csrAddr();
             switch (csr_op) {
                 .CSRRW, .CSRRS, .CSRRC => try stdout.print("{s} x{d}, 0x{X:0>3}, x{d}", .{ op_name, inst.rd, csr_addr, inst.rs1 }),
                 .CSRRWI, .CSRRSI, .CSRRCI => try stdout.print("{s} x{d}, 0x{X:0>3}, {d}", .{ op_name, inst.rd, csr_addr, inst.rs1 }),

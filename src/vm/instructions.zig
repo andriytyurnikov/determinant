@@ -46,8 +46,24 @@ pub const Instruction = struct {
     rd: u5 = 0,
     rs1: u5 = 0,
     rs2: u5 = 0,
+    /// Decoded immediate, sign-extended to 32 bits.
+    /// For unsigned use (addresses, shifts), call immUnsigned().
+    /// For CSR addresses (I-format), call csrAddr().
     imm: i32 = 0,
     raw: u32,
+    /// Original compressed opcode when this instruction was expanded from RV32C.
+    /// null for 32-bit instructions.
+    compressed_op: ?rv32i.rv32c.Opcode = null,
+
+    /// Return the immediate reinterpreted as an unsigned 32-bit value.
+    pub fn immUnsigned(self: Instruction) u32 {
+        return @bitCast(self.imm);
+    }
+
+    /// Extract the 12-bit CSR address from the immediate field.
+    pub fn csrAddr(self: Instruction) u12 {
+        return @truncate(self.immUnsigned());
+    }
 };
 
 test "opcode format mapping" {
@@ -70,4 +86,25 @@ test "opcode name" {
     try std.testing.expectEqualStrings("SH1ADD", (Opcode{ .zba = .SH1ADD }).name());
     try std.testing.expectEqualStrings("SEXT.B", (Opcode{ .zbb = .SEXT_B }).name());
     try std.testing.expectEqualStrings("BCLR", (Opcode{ .zbs = .BCLR }).name());
+}
+
+test "immUnsigned: negative value" {
+    const inst = Instruction{ .op = .{ .i = .ADDI }, .imm = -1, .raw = 0 };
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), inst.immUnsigned());
+}
+
+test "immUnsigned: positive value" {
+    const inst = Instruction{ .op = .{ .i = .ADDI }, .imm = 42, .raw = 0 };
+    try std.testing.expectEqual(@as(u32, 42), inst.immUnsigned());
+}
+
+test "csrAddr: recovers 0xC00 from sign-extended immediate" {
+    // CSR address 0xC00 is stored as immI sign-extended: 0xFFFFF_C00 as u32, -1024 as i32
+    const inst = Instruction{ .op = .{ .csr = .CSRRS }, .imm = -1024, .raw = 0 };
+    try std.testing.expectEqual(@as(u12, 0xC00), inst.csrAddr());
+}
+
+test "csrAddr: recovers 0x340 (mscratch)" {
+    const inst = Instruction{ .op = .{ .csr = .CSRRW }, .imm = 0x340, .raw = 0 };
+    try std.testing.expectEqual(@as(u12, 0x340), inst.csrAddr());
 }

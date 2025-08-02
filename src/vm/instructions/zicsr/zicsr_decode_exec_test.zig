@@ -47,9 +47,8 @@ test "CSR address field extraction round-trip" {
     const raw = encodeCsr(0b010, 1, 0, 0xC00); // CSRRS x1, 0xC00, x0
     const inst = try decode(raw);
     // immI sign-extends: 0xC00 in bits[31:20] -> sign-extended i32
-    // Truncating back to u12 should recover the original address
-    const recovered: u12 = @truncate(@as(u32, @bitCast(inst.imm)));
-    try std.testing.expectEqual(@as(u12, 0xC00), recovered);
+    // csrAddr() truncates back to u12 to recover the original address
+    try std.testing.expectEqual(@as(u12, 0xC00), inst.csrAddr());
 }
 
 // --- CSRRW execution tests ---

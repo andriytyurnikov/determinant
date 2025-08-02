@@ -6,7 +6,7 @@ src/
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
-    cpu.zig               — Cpu struct: registers, PC, 1 MB memory, step/run executor, memory helpers
+    cpu.zig               — CpuType(comptime memory_size) generic, Cpu = CpuType(1MB) default, step/run executor, memory helpers
     cpu_init_test.zig     — init and register tests
     cpu_memory_test.zig   — memory read/write tests
     cpu_pipeline_test.zig — pipeline infrastructure, run(), branch/error path tests
@@ -17,6 +17,7 @@ src/
     decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
       bitfields.zig           — shared bit-field extraction (rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
+      expand.zig              — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
       registry.zig            — opcode registry: Entry struct, 94-entry registry array, Strategy enum, strategyFor()
       lut_conformance_test.zig — conformance suite (field-by-field match vs branch_decoder)
       rv32c_cross_test.zig    — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
