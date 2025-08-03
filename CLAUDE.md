@@ -93,10 +93,11 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 ### Dual Decoder Public API
 
-- **`decode()`** (`root.zig`) — reference branch-based decoder (`branch_decoder.decode`), kept for conformance testing and documentation
-- **`decodeLut()`** (`root.zig`) — primary LUT decoder (`lut_decoder.decodeInstruction`), used by `cpu.zig` for execution — faster, same results
+- **`decode()`** (`root.zig`) — primary LUT decoder (`lut_decoder.decode`), used by `cpu.zig` for execution — fast, branchless
+- **`decodeBranch()`** (`root.zig`) — reference branch-based decoder (`branch_decoder.decode`), kept for conformance testing and documentation
 - **`decoders`** (`root.zig`) — full access to both decoder modules
-- Library consumers should prefer `decodeLut()` for performance; `decode()` for readability or reference comparison
+- **`branch_decoder`** (`root.zig`) — direct access to the reference decoder module
+- Library consumers should prefer `decode()` for performance; `decodeBranch()` for readability or reference comparison
 - `DecodeError` is re-exported from `decoders.zig` (canonical) — guaranteed identical between both decoders via comptime check
 
 ### Atomic Operations & Reservation

@@ -178,5 +178,4 @@ fn decodeSystem(raw: u32) DecodeError!Instruction {
 test {
     _ = @import("branch_decoder_test.zig");
     _ = @import("../rv32c_cross_test.zig");
-    _ = @import("../lut_decoder/lut_decoder.zig");
 }

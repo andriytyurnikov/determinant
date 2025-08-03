@@ -50,7 +50,7 @@ test "determinism: two VMs with same program produce identical state" {
     );
 
     // Verify expected values
-    try std.testing.expectEqual(StepResult.Ecall, result1);
+    try std.testing.expectEqual(StepResult.ecall, result1);
     try std.testing.expectEqual(@as(u32, 45), cpu1.readReg(5));
     try std.testing.expectEqual(@as(u32, 45), std.mem.readInt(u32, cpu1.memory[256..][0..4], .little));
 }

@@ -2,11 +2,19 @@ const std = @import("std");
 const det = @import("determinant");
 
 const default_max_cycles: u64 = 10_000_000;
+const demo_max_cycles: u64 = 10_000;
 
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
+
+    var stderr_buffer: [4096]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
+    const stderr = &stderr_writer.interface;
+
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     var args = std.process.args();
     _ = args.next(); // skip program name
@@ -28,32 +36,29 @@ pub fn main() !void {
             if (std.mem.eql(u8, flag, "--max-cycles")) {
                 if (args.next()) |val| {
                     max_cycles = std.fmt.parseInt(u64, val, 10) catch {
-                        try stdout.print("Error: invalid --max-cycles value\n", .{});
-                        try stdout.flush();
+                        try stderr.print("Error: invalid --max-cycles value\n", .{});
                         return;
                     };
+                    if (max_cycles == 0) {
+                        try stderr.print("Error: --max-cycles must be > 0\n", .{});
+                        return;
+                    }
                 } else {
-                    try stdout.print("Error: --max-cycles requires a value\n", .{});
-                    try stdout.flush();
+                    try stderr.print("Error: --max-cycles requires a value\n", .{});
                     return;
                 }
             } else {
-                try stdout.print("Error: unknown option '{s}'\n", .{flag});
-                try stdout.flush();
+                try stderr.print("Error: unknown option '{s}'\n", .{flag});
                 return;
             }
         }
-        if (max_cycles == 0) {
-            try stdout.print("Error: --max-cycles must be > 0\n", .{});
-            try stdout.flush();
-            return;
+        if (args.next()) |extra| {
+            try stderr.print("Warning: ignoring extra argument '{s}'\n", .{extra});
         }
-        try runFile(stdout, path, max_cycles);
+        try runFile(stdout, stderr, path, max_cycles);
     } else {
         try runDemo(stdout);
     }
-
-    try stdout.flush();
 }
 
 fn runDemo(stdout: anytype) !void {
@@ -113,7 +118,7 @@ fn runDemo(stdout: anytype) !void {
 
     // Execute with finite cycle limit
     try stdout.print("\nExecuting...\n", .{});
-    const result = try vm.run(10_000);
+    const result = try vm.run(demo_max_cycles);
 
     try printResult(stdout, &vm, result);
 
@@ -122,54 +127,48 @@ fn runDemo(stdout: anytype) !void {
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
 }
 
-fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
+fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
     try stdout.print("Determinant — Loading {s}\n\n", .{path});
 
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
-        try stdout.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
-        try stdout.flush();
+        try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
         return;
     };
     defer file.close();
 
     const stat = file.stat() catch |err| {
-        try stdout.print("Error: cannot stat '{s}': {s}\n", .{ path, @errorName(err) });
-        try stdout.flush();
+        try stderr.print("Error: cannot stat '{s}': {s}\n", .{ path, @errorName(err) });
         return;
     };
     if (stat.size == 0) {
-        try stdout.print("Error: file is empty\n", .{});
-        try stdout.flush();
+        try stderr.print("Error: file is empty\n", .{});
         return;
     }
 
     var vm = det.Cpu.init();
 
     if (stat.size > vm.memory.len) {
-        try stdout.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
-        try stdout.flush();
+        try stderr.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
         return;
     }
 
     const size: usize = @intCast(stat.size);
 
     const n = file.readAll(vm.memory[0..size]) catch |err| {
-        try stdout.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
-        try stdout.flush();
+        try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return;
     };
 
     if (n != size) {
-        try stdout.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
-        try stdout.flush();
+        try stderr.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
         return;
     }
 
     try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
 
     const result = vm.run(max_cycles) catch |err| {
-        try stdout.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
+        try stderr.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
         try stdout.print("\nRegisters:\n", .{});
         for (0..32) |i| {
             const val = vm.readReg(@intCast(i));
@@ -177,7 +176,6 @@ fn runFile(stdout: anytype, path: []const u8, max_cycles: u64) !void {
                 try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
             }
         }
-        try stdout.flush();
         return;
     };
 

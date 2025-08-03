@@ -1,7 +1,7 @@
 const std = @import("std");
 const cpu_mod = @import("cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const MEMORY_SIZE = Cpu.MEMORY_SIZE;
+const MEMORY_SIZE = Cpu.mem_size;
 const StepResult = cpu_mod.StepResult;
 
 // --- CPU integration tests for stores, LUI, AUIPC, atomics, CSR ---
@@ -229,7 +229,7 @@ test "run(0) terminates on ECALL" {
     std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
 
     const result = try cpu.run(0);
-    try std.testing.expectEqual(StepResult.Ecall, result);
+    try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
     try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
 }

@@ -18,7 +18,7 @@ const encodeAtomicFull = t.encodeAtomicFull;
 const encodeSystem = t.encodeSystem;
 
 const decoder = @import("branch_decoder/branch_decoder.zig");
-const decodeInstruction = t.lut.decodeInstruction;
+const decodeInstruction = t.lut.decode;
 
 fn assertConformance(raw: u32) !void {
     const ref = decoder.decode(raw) catch |e| {

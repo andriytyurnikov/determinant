@@ -1,7 +1,7 @@
 const std = @import("std");
 const cpu_mod = @import("cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const MEMORY_SIZE = Cpu.MEMORY_SIZE;
+const MEMORY_SIZE = Cpu.mem_size;
 const StepResult = cpu_mod.StepResult;
 
 // --- Pipeline infrastructure tests ---
@@ -50,12 +50,12 @@ test "step: full demo program" {
     // ECALL
     std.mem.writeInt(u32, cpu.memory[16..][0..4], 0x00000073, .little);
 
-    var result: StepResult = .Continue;
-    while (result == .Continue) {
+    var result: StepResult = .@"continue";
+    while (result == .@"continue") {
         result = try cpu.step();
     }
 
-    try std.testing.expectEqual(StepResult.Ecall, result);
+    try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 100), cpu.readReg(1));
     try std.testing.expectEqual(@as(u32, 10), cpu.readReg(2));
     try std.testing.expectEqual(@as(u32, 110), cpu.readReg(3));
@@ -74,7 +74,7 @@ test "run: stops on ECALL" {
     std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
 
     const result = try cpu.run(100);
-    try std.testing.expectEqual(StepResult.Ecall, result);
+    try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
     try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
 }
@@ -85,7 +85,7 @@ test "run: stops on EBREAK" {
     std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00100073, .little);
 
     const result = try cpu.run(100);
-    try std.testing.expectEqual(StepResult.Ebreak, result);
+    try std.testing.expectEqual(StepResult.ebreak, result);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
 }
 
@@ -100,7 +100,7 @@ test "run: respects max_cycles" {
 
     // Limit to 2 cycles — should stop before ECALL
     const result = try cpu.run(2);
-    try std.testing.expectEqual(StepResult.Continue, result);
+    try std.testing.expectEqual(StepResult.@"continue", result);
     try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
@@ -113,7 +113,7 @@ test "run: max_cycles exactly at ECALL" {
 
     // max_cycles=2: should execute both instructions
     const result = try cpu.run(2);
-    try std.testing.expectEqual(StepResult.Ecall, result);
+    try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
 }
 

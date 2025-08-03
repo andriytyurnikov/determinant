@@ -13,7 +13,7 @@ test "step: ADDI" {
     // ADDI x1, x0, 42 = 0x02A00093
     loadInst(&cpu, 0x02A00093);
     const result = try cpu.step();
-    try std.testing.expectEqual(StepResult.Continue, result);
+    try std.testing.expectEqual(StepResult.@"continue", result);
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);

@@ -19,7 +19,6 @@ pub const Opcode = enum {
 
     pub fn meta(comptime self: Opcode) fmt.Meta {
         return .{
-            .fmt = .R,
             .name_str = switch (self) {
                 .LR_W => "LR.W",
                 .SC_W => "SC.W",
@@ -33,6 +32,7 @@ pub const Opcode = enum {
                 .AMOMINU_W => "AMOMINU.W",
                 .AMOMAXU_W => "AMOMAXU.W",
             },
+            .fmt = .R,
         };
     }
 

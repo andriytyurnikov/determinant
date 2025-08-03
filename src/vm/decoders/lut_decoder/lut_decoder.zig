@@ -186,16 +186,16 @@ fn buildShiftRs2() [countShiftRs2()]ShiftRs2Ref {
 const r_rs2_refs = buildRTypeRs2();
 const shift_rs2_refs = buildShiftRs2();
 
-fn refineRs2R(f3: u3, f7: u7, r2: u5) ?Opcode {
+fn refineRs2R(f3: u3, f7: u7, rs2: u5) ?Opcode {
     for (r_rs2_refs) |e| {
-        if (e.f3 == f3 and e.f7 == f7 and e.rs2 == r2) return e.op;
+        if (e.f3 == f3 and e.f7 == f7 and e.rs2 == rs2) return e.op;
     }
     return null;
 }
 
-fn refineRs2Shift(idx: u1, f7: u7, r2: u5) ?Opcode {
+fn refineRs2Shift(idx: u1, f7: u7, rs2: u5) ?Opcode {
     for (shift_rs2_refs) |e| {
-        if (e.idx == idx and e.f7 == f7 and e.rs2 == r2) return e.op;
+        if (e.idx == idx and e.f7 == f7 and e.rs2 == rs2) return e.op;
     }
     return null;
 }
@@ -206,18 +206,18 @@ fn refineRs2Shift(idx: u1, f7: u7, r2: u5) ?Opcode {
 
 /// Decode a 32-bit instruction word into an Opcode using comptime lookup tables.
 /// Returns null for unrecognized encodings.
-pub fn decode(raw: u32) ?Opcode {
-    const opcode_bits: u7 = @truncate(raw);
-    const f3: u3 = @truncate(raw >> 12);
-    const f7: u7 = @truncate(raw >> 25);
-    const r2: u5 = @truncate(raw >> 20);
+pub fn decodeOpcode(raw: u32) ?Opcode {
+    const opcode_bits = bf.opcode7(raw);
+    const f3 = bf.funct3(raw);
+    const f7 = bf.funct7(raw);
+    const rs2 = bf.rs2(raw);
 
     return switch (level1[opcode_bits]) {
         .illegal => null,
-        .r_type => r_table[f3][f7] orelse refineRs2R(f3, f7, r2),
+        .r_type => r_table[f3][f7] orelse refineRs2R(f3, f7, rs2),
         .i_alu => switch (f3) {
-            0b001 => shift_table[0][f7] orelse refineRs2Shift(0, f7, r2),
-            0b101 => shift_table[1][f7] orelse refineRs2Shift(1, f7, r2),
+            0b001 => shift_table[0][f7] orelse refineRs2Shift(0, f7, rs2),
+            0b101 => shift_table[1][f7] orelse refineRs2Shift(1, f7, rs2),
             else => i_alu_base[f3],
         },
         .load => load_table[f3],
@@ -239,11 +239,11 @@ pub fn decode(raw: u32) ?Opcode {
 
 /// Decode a 32-bit instruction word into a full Instruction using the LUT.
 /// Handles both 16-bit compressed (RV32C) and 32-bit instructions.
-pub fn decodeInstruction(raw: u32) DecodeError!Instruction {
+pub fn decode(raw: u32) DecodeError!Instruction {
     if (instructions.isCompressed(raw)) {
         return expand_mod.expandCompressed(raw);
     }
-    const op = decode(raw) orelse return error.IllegalInstruction;
+    const op = decodeOpcode(raw) orelse return error.IllegalInstruction;
     return buildInstruction(op, raw);
 }
 

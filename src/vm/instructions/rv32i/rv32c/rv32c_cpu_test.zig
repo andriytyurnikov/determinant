@@ -72,7 +72,7 @@ test "CPU step: mixed 16-bit and 32-bit sequence" {
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 
     const result = try cpu.step(); // ECALL → pc=12
-    try std.testing.expectEqual(cpu_mod.StepResult.Ecall, result);
+    try std.testing.expectEqual(cpu_mod.StepResult.ecall, result);
 }
 
 test "CPU step: C.JALR links PC+2" {
@@ -187,7 +187,7 @@ test "CPU step: C.EBREAK" {
     h.storeHalfAt(&cpu, 0, 0x9002);
 
     const result = try cpu.step();
-    try std.testing.expectEqual(cpu_mod.StepResult.Ebreak, result);
+    try std.testing.expectEqual(cpu_mod.StepResult.ebreak, result);
 }
 
 test "CPU step: C.LW and C.SW with compact registers" {

@@ -1,7 +1,7 @@
 const std = @import("std");
 const cpu_mod = @import("cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const MEMORY_SIZE = Cpu.MEMORY_SIZE;
+const MEMORY_SIZE = Cpu.mem_size;
 const StepResult = cpu_mod.StepResult;
 
 // --- CSR cycle_count pipeline invariant test ---

@@ -29,16 +29,16 @@ pub const Opcode = enum {
 
     pub fn meta(comptime self: Opcode) fmt.Meta {
         return .{
-            .fmt = switch (self) {
-                .ANDN, .ORN, .XNOR, .MAX, .MAXU, .MIN, .MINU, .ROL, .ROR, .ZEXT_H => .R,
-                .CLZ, .CTZ, .CPOP, .SEXT_B, .SEXT_H, .RORI, .ORC_B, .REV8 => .I,
-            },
             .name_str = switch (self) {
                 .SEXT_B => "SEXT.B",
                 .SEXT_H => "SEXT.H",
                 .ZEXT_H => "ZEXT.H",
                 .ORC_B => "ORC.B",
                 else => @tagName(self),
+            },
+            .fmt = switch (self) {
+                .ANDN, .ORN, .XNOR, .MAX, .MAXU, .MIN, .MINU, .ROL, .ROR, .ZEXT_H => .R,
+                .CLZ, .CTZ, .CPOP, .SEXT_B, .SEXT_H, .RORI, .ORC_B, .REV8 => .I,
             },
         };
     }

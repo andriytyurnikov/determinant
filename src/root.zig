@@ -5,16 +5,7 @@ pub const cpu = vm.cpu;
 pub const instructions = vm.instructions;
 pub const decoders = vm.decoders;
 /// Reference decoder (branch-based) — kept for conformance testing and documentation.
-pub const decoder = vm.decoders.branch_decoder;
-/// Primary decoder (LUT-based) — used by cpu.zig for execution. Prefer for performance.
-pub const lut_decoder = vm.decoders.lut_decoder;
-pub const rv32i = instructions.rv32i;
-pub const rv32m = instructions.rv32m;
-pub const rv32a = instructions.rv32a;
-pub const zicsr = instructions.zicsr;
-pub const zba = instructions.zba;
-pub const zbb = instructions.zbb;
-pub const zbs = instructions.zbs;
+pub const branch_decoder = vm.decoders.branch_decoder;
 
 // Convenience aliases
 pub const CpuType = cpu.CpuType;
@@ -23,10 +14,10 @@ pub const StepResult = cpu.StepResult;
 pub const Instruction = instructions.Instruction;
 pub const Opcode = instructions.Opcode;
 pub const Format = instructions.Format;
+/// Decode via primary (LUT-based) decoder — used by cpu.zig for execution. Prefer for performance.
+pub const decode = vm.decoders.lut_decoder.decode;
 /// Decode via reference (branch-based) decoder — for conformance testing and readability.
-pub const decode = decoder.decode;
-/// Decode via primary (LUT-based) decoder — for performance. Same results as decode().
-pub const decodeLut = lut_decoder.decodeInstruction;
+pub const decodeBranch = branch_decoder.decode;
 pub const DecodeError = vm.decoders.DecodeError;
 
 test {
@@ -39,7 +30,7 @@ test "integration: load, fetch, decode" {
     const program = [_]u8{ 0x93, 0x00, 0xA0, 0x02 };
     try machine.loadProgram(&program, 0);
     const raw = try machine.fetch();
-    const inst = try decoder.decode(raw);
+    const inst = try decodeBranch(raw);
     try std.testing.expectEqual(instructions.Opcode{ .i = .ADDI }, inst.op);
     try std.testing.expectEqual(@as(u5, 1), inst.rd);
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
@@ -51,7 +42,7 @@ test "regression: demo program second instruction encodes ADDI x2, x0, 10" {
     // Previously had 0x0A/0xA0 transposed, encoding ADDI x2, x20, 0 instead.
     const demo_bytes = [_]u8{ 0x13, 0x01, 0xA0, 0x00 };
     const raw = std.mem.readInt(u32, &demo_bytes, .little);
-    const inst = try decoder.decode(raw);
+    const inst = try decodeBranch(raw);
 
     try std.testing.expectEqual(instructions.Opcode{ .i = .ADDI }, inst.op);
     try std.testing.expectEqual(@as(u5, 2), inst.rd);

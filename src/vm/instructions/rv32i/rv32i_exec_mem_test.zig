@@ -205,7 +205,7 @@ test "step: ECALL" {
     var cpu = Cpu.init();
     loadInst(&cpu, 0x00000073);
     const result = try cpu.step();
-    try std.testing.expectEqual(StepResult.Ecall, result);
+    try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
 
@@ -213,7 +213,7 @@ test "step: EBREAK" {
     var cpu = Cpu.init();
     loadInst(&cpu, 0x00100073);
     const result = try cpu.step();
-    try std.testing.expectEqual(StepResult.Ebreak, result);
+    try std.testing.expectEqual(StepResult.ebreak, result);
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
 
@@ -222,7 +222,7 @@ test "step: FENCE is no-op" {
     // FENCE iorw, iorw = 0x0FF0000F
     loadInst(&cpu, 0x0FF0000F);
     const result = try cpu.step();
-    try std.testing.expectEqual(StepResult.Continue, result);
+    try std.testing.expectEqual(StepResult.@"continue", result);
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
 }

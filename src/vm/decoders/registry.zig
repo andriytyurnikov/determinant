@@ -161,6 +161,7 @@ pub const Strategy = enum(u8) {
     branch, // → branch_table[funct3]
     atomic, // → atomic_table[funct5], funct3==010 guard
     system, // → system_table[funct3], or ECALL/EBREAK by funct12
+    // --- Fixed / guarded single-opcode strategies ---
     lui, // fixed .{ .i = .LUI }
     auipc, // fixed .{ .i = .AUIPC }
     jal, // fixed .{ .i = .JAL }

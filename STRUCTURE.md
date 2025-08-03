@@ -2,7 +2,7 @@
 
 ```
 src/
-  root.zig                — library root, re-exports all submodules and convenience aliases
+  root.zig                — library root; decode() = LUT primary, decodeBranch() = reference; re-exports cpu, instructions, decoders, branch_decoder
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
@@ -16,7 +16,7 @@ src/
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
-      bitfields.zig           — shared bit-field extraction (rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
+      bitfields.zig           — shared bit-field extraction (opcode7, rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
       expand.zig              — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
       registry.zig            — opcode registry: Entry struct, 94-entry registry array, Strategy enum, strategyFor()
       lut_conformance_test.zig — conformance suite (field-by-field match vs branch_decoder)
@@ -46,7 +46,7 @@ src/
         rv32i_test.zig    — hub → decode, exec_alu, exec_mem, boundary split files
         rv32c/
           rv32c.zig       — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only
-          rv32c_test.zig  — hub → expand_q01, expand_q2, maxrange, cpu, cpu_alu split files
+          rv32c_test.zig  — hub → rv32c_expand_q01_test, rv32c_expand_q2_test, rv32c_maxrange_test, rv32c_cpu_test, rv32c_cpu_alu_test
       rv32m/
         rv32m.zig         — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
         rv32m_test.zig    — hub → rv32m_mul_test.zig, rv32m_div_test.zig

@@ -13,5 +13,9 @@ comptime {
 }
 
 test {
+    _ = branch_decoder;
+    _ = lut_decoder;
     _ = expand;
+    _ = registry;
+    _ = bitfields;
 }

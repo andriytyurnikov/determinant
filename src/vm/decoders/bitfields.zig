@@ -31,6 +31,10 @@ pub fn funct12(raw: u32) u12 {
     return @truncate(raw >> 20);
 }
 
+pub fn opcode7(raw: u32) u7 {
+    return @truncate(raw);
+}
+
 // --- Immediate extraction ---
 
 pub fn immI(raw: u32) i32 {
