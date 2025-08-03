@@ -1,5 +1,6 @@
 const std = @import("std");
-const lut_decoder = @import("decoders.zig").lut_decoder;
+const build_options = @import("build_options");
+const decoders = @import("decoders.zig");
 const instructions = @import("instructions.zig");
 const rv32i = instructions.rv32i;
 const rv32m = instructions.rv32m;
@@ -9,13 +10,15 @@ const zba = instructions.zba;
 const zbb = instructions.zbb;
 const zbs = instructions.zbs;
 
+pub const DecodeFn = *const fn (u32) decoders.DecodeError!instructions.Instruction;
+
 pub const StepResult = enum {
     @"continue",
     ecall,
     ebreak,
 };
 
-pub fn CpuType(comptime memory_size: u32) type {
+pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
     comptime {
         if (memory_size < 4) @compileError("memory_size must be >= 4");
         if (memory_size % 4 != 0) @compileError("memory_size must be divisible by 4");
@@ -23,6 +26,7 @@ pub fn CpuType(comptime memory_size: u32) type {
     return struct {
         const Self = @This();
         pub const mem_size: u32 = memory_size;
+        pub const decode = decodeFn;
 
         pc: u32,
         regs: [32]u32,
@@ -146,7 +150,7 @@ pub fn CpuType(comptime memory_size: u32) type {
         ///   6. increment cycle   — AFTER everything, so CSR reads of cycle see the pre-step count
         pub fn step(self: *Self) !StepResult {
             const raw = try self.fetch();
-            const inst = try lut_decoder.decode(raw);
+            const inst = try decodeFn(raw);
             const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
 
             const rs1_val = self.readReg(inst.rs1);
@@ -356,11 +360,17 @@ pub fn CpuType(comptime memory_size: u32) type {
     };
 }
 
+const default_decode: DecodeFn = if (build_options.use_branch_decoder)
+    &decoders.branch_decoder.decode
+else
+    &decoders.lut_decoder.decode;
+
 /// Default Cpu with 1 MB memory — used by the CLI and all existing tests.
-pub const Cpu = CpuType(1024 * 1024);
+/// Decoder backend follows the `-Ddecoder` build option (default: lut).
+pub const Cpu = CpuType(1024 * 1024, default_decode);
 
 test "CpuType: custom memory size" {
-    const SmallCpu = CpuType(4096);
+    const SmallCpu = CpuType(4096, &decoders.lut_decoder.decode);
     var c = SmallCpu.init();
     try std.testing.expectEqual(@as(u32, 4096), SmallCpu.mem_size);
     c.writeReg(1, 42);
@@ -369,7 +379,7 @@ test "CpuType: custom memory size" {
 }
 
 test "CpuType: minimum memory size" {
-    const TinyCpu = CpuType(4);
+    const TinyCpu = CpuType(4, &decoders.lut_decoder.decode);
     var c = TinyCpu.init();
     try c.writeByte(0, 0xFF);
     try std.testing.expectEqual(@as(u8, 0xFF), try c.readByte(0));

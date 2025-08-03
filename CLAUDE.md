@@ -12,6 +12,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - `zig build run` — build and run the CLI executable
 - `zig build test` — run all tests (library + executable)
 - `zig build run -- <args>` — pass arguments to the executable
+- `-Ddecoder=lut|branch` — select decoder backend (default: `lut`). Applies to CLI, tests, and `Cpu` alias. Example: `zig build test -Ddecoder=branch`
 
 ## Determinism Invariants
 
@@ -66,9 +67,16 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
 - `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by branch_decoder.zig, lut_decoder.zig, cpu.zig, and main.zig
 
+### Configurable Decoder
+
+- `CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)` — the decoder is a comptime parameter, no runtime dispatch
+- `DecodeFn = *const fn (u32) DecodeError!Instruction` — function pointer type, re-exported from `root.zig`
+- `Cpu` alias follows the `-Ddecoder` build option (default: LUT). Library consumers can instantiate `CpuType` with either decoder directly
+- `cpu_determinism_test.zig` validates both decoders produce identical CPU state
+
 ### Comptime LUT Decoder (Primary)
 
-- `decoders/lut_decoder.zig` is the **primary decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
+- `decoders/lut_decoder.zig` is the **default decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
 - **Two-level design**: Level 1 `[128]Strategy` maps opcode[6:0] → decode strategy (1 byte each). Level 2 tables are strategy-specific: `r_table[8][128]`, `shift_table[2][128]`, `load/store/branch/system[8]`, `atomic[32]`, `i_alu_base[8]`
 - **Zbb rs2 refinement**: 1 of 1024 R-type table coordinates (ZEXT_H) and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
 - **Bit-field extraction**: shared `decoders/bitfields.zig` module used by both `lut_decoder.zig` and `branch_decoder.zig`

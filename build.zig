@@ -1,8 +1,16 @@
 const std = @import("std");
 
+const Decoder = enum { lut, branch };
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const decoder_choice = b.option(Decoder, "decoder",
+        "Instruction decoder backend (default: lut)") orelse .lut;
+
+    const options = b.addOptions();
+    options.addOption(bool, "use_branch_decoder", decoder_choice == .branch);
 
     // Library module
     const mod = b.addModule("determinant", .{
@@ -10,6 +18,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    mod.addOptions("build_options", options);
 
     // CLI executable
     const exe = b.addExecutable(.{
