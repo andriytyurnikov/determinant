@@ -6,7 +6,7 @@ src/
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
-    cpu.zig               — CpuType(comptime memory_size) generic, Cpu = CpuType(1MB) default, step/run executor, memory helpers
+    cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(1MB, default_decode) default, step/run executor, memory helpers
     cpu_init_test.zig     — init and register tests
     cpu_memory_test.zig   — memory read/write tests
     cpu_pipeline_test.zig — pipeline infrastructure, run(), branch/error path tests

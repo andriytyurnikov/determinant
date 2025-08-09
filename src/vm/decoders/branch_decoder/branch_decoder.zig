@@ -158,6 +158,8 @@ fn decodeFence(raw: u32) DecodeError!Instruction {
 fn decodeAtomic(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b010) return error.IllegalInstruction;
     const a_op = rv32a.decodeR(funct5(raw)) orelse return error.IllegalInstruction;
+    // Note: LR.W spec says rs2 "should be zero" (software convention, not hardware
+    // requirement). We accept non-zero rs2 for forward-compatibility with future extensions.
     return .{ .op = .{ .a = a_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
 

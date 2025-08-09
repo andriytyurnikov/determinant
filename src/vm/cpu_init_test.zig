@@ -18,6 +18,17 @@ test "x0 hardwired to zero" {
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
 }
 
+test "x0 write-protection: ADD to x0 leaves it zero" {
+    const h = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 100);
+    cpu.writeReg(2, 200);
+    // ADD x0, x1, x2 — result should be discarded
+    h.loadInst(&cpu, h.encodeR(0b0110011, 0b000, 0b0000000, 0, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+}
+
 test "register read/write" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0xDEADBEEF);

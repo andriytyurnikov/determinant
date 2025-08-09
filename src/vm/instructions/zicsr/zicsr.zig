@@ -78,7 +78,10 @@ pub const Csr = struct {
 
     pub fn read(self: *const Csr, cycle_count: u64, addr: u12) !u32 {
         return switch (addr) {
+            // cycle (0xC00) and instret (0xC02) are aliased: this VM retires exactly
+            // 1 instruction per cycle, so the counters are always identical.
             0xC00, 0xC02 => @truncate(cycle_count),
+            // cycleh (0xC80) and instreth (0xC82) — upper 32 bits, same aliasing.
             0xC80, 0xC82 => @truncate(cycle_count >> 32),
             0x340 => self.mscratch,
             else => error.IllegalInstruction,

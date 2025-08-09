@@ -29,6 +29,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ```sh
 zig build
+zig build -Ddecoder=branch   # use reference branch-based decoder instead of LUT (default: lut)
 ```
 
 ## Run
@@ -58,7 +59,7 @@ Library core in `src/vm/` with per-extension modules. See [STRUCTURE.md](STRUCTU
 
 The library is available via `@import("determinant")`.
 
-- **`Cpu`** — VM state
+- **`Cpu`** — VM state (decoder backend follows `-Ddecoder` build option, default: LUT)
   - `init()` — create a zeroed VM
   - `readReg(u5) → u32` / `writeReg(u5, u32)` — register access (x0 hardwired to zero)
   - `fetch() → u32` — read instruction word at PC
@@ -67,12 +68,15 @@ The library is available via `@import("determinant")`.
   - `run(max_cycles: u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (0 = unlimited)
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
-- **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`
+- **`CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)`** — generic VM constructor for custom memory size and decoder
+- **`DecodeFn`** — decoder function pointer type (`*const fn (u32) DecodeError!Instruction`)
+- **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`, `compressed_op`
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
-- **`decode(u32)`** — decode an instruction word using the reference branch-based decoder, returns `Instruction` or `DecodeError`
-- **`decodeLut(u32)`** — decode using the primary comptime LUT decoder (same results, faster), returns `Instruction` or `DecodeError`
+- **`decode(u32)`** — decode using the primary comptime LUT decoder (fast, branchless), returns `Instruction` or `DecodeError`
+- **`decodeBranch(u32)`** — decode using the reference branch-based decoder (for conformance testing and readability)
 - **`decoders`** — access to both decoder modules (`decoders.branch_decoder`, `decoders.lut_decoder`)
-- **`lut_decoder`** — direct access to the LUT decoder module
-- **`StepResult`** — enum: `Continue`, `Ecall`, `Ebreak`
+- **`branch_decoder`** — direct access to the reference branch-based decoder module
+- **`DecodeError`** — error set for decode failures
+- **`StepResult`** — enum: `@"continue"`, `ecall`, `ebreak`

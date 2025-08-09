@@ -221,6 +221,50 @@ test "step: write to read-only CSR (cycle counter) returns error" {
     try std.testing.expectError(error.IllegalInstruction, cpu.step());
 }
 
+test "step: AMOMIN.W picks signed minimum" {
+    const h6 = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    // mem[256] = -1 (0xFFFFFFFF), rs2 = 1
+    h6.storeWordAt(&cpu, 256, 0xFFFFFFFF);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 1);
+
+    // AMOMIN.W x3, x2, (x1): funct5=10000
+    h6.loadInst(&cpu, h6.encodeAtomic(0b10000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // old value
+    // signed min(-1, 1) = -1, so memory unchanged
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), try cpu.readWord(256));
+}
+
+test "step: AMOMAXU.W picks unsigned maximum" {
+    const h6 = @import("instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    // mem[256] = 5, rs2 = 0xFFFFFFFF
+    h6.storeWordAt(&cpu, 256, 5);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0xFFFFFFFF);
+
+    // AMOMAXU.W x3, x2, (x1): funct5=11100
+    h6.loadInst(&cpu, h6.encodeAtomic(0b11100, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 5), cpu.readReg(3)); // old value
+    // unsigned max(5, 0xFFFFFFFF) = 0xFFFFFFFF
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), try cpu.readWord(256));
+}
+
+test "step: compressed C.ADDI dispatches through CPU" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 100);
+    // C.ADDI x1, 5 — encoding: [15:13]=000, [12]=0, [11:7]=00001, [6:2]=00101, [1:0]=01
+    // imm[5]=bit12=0, imm[4:0]=bits[6:2]=00101 → imm=5
+    const c_addi: u16 = 0b000_0_00001_00101_01;
+    std.mem.writeInt(u16, cpu.memory[0..][0..2], c_addi, .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 105), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc); // PC advances by 2
+}
+
 test "run(0) terminates on ECALL" {
     var cpu = Cpu.init();
     // ADDI x1, x0, 42

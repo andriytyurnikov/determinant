@@ -169,11 +169,11 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
 
     const result = vm.run(max_cycles) catch |err| {
         try stderr.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
-        try stdout.print("\nRegisters:\n", .{});
+        try stderr.print("\nRegisters:\n", .{});
         for (0..32) |i| {
             const val = vm.readReg(@intCast(i));
             if (val != 0) {
-                try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
+                try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
             }
         }
         return;
@@ -183,7 +183,10 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
 }
 
 fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
-    try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count });
+    switch (result) {
+        .@"continue" => try stdout.print("\nCycle limit reached after {d} cycles (program did not terminate)\n", .{vm.cycle_count}),
+        .ecall, .ebreak => try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count }),
+    }
     try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
     try stdout.print("\nRegisters:\n", .{});
     for (0..32) |i| {
