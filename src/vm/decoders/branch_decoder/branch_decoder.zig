@@ -12,7 +12,7 @@ const zbs = instructions.zbs;
 const Opcode = instructions.Opcode;
 const Instruction = instructions.Instruction;
 
-pub const DecodeError = error{IllegalInstruction};
+pub const DecodeError = bf.DecodeError;
 
 // Import bit-field extractors from shared module.
 const rd = bf.rd;

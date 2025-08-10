@@ -187,15 +187,14 @@ RISC-V spec requires JALR to clear the LSB of the computed target address:
 next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
 
-### CLI Cycle Limits
-Always use a finite cycle limit in `vm.run()` to prevent infinite loops:
+### Cycle Limits
+`run(0)` is a valid library call — it means unlimited cycles (runs until ECALL/EBREAK). The CLI uses finite defaults: 10,000 for the demo, 10,000,000 for file loading, and rejects `--max-cycles 0`.
 ```zig
-// WRONG — hangs if program has no ECALL/EBREAK:
+// Unlimited — valid when the program is guaranteed to terminate:
 const result = try vm.run(0);
-// RIGHT — finite limit with headroom:
+// Finite limit — preferred in application code:
 const result = try vm.run(10_000);
 ```
-The CLI uses 10,000 for the demo and 10,000,000 for file loading by default.
 
 ## Adding a New Extension
 

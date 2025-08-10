@@ -19,7 +19,7 @@ const Instruction = instructions.Instruction;
 const Entry = reg.Entry;
 const Strategy = reg.Strategy;
 
-pub const DecodeError = error{IllegalInstruction};
+pub const DecodeError = bf.DecodeError;
 
 // ===========================================================================
 // Generated tables — all derived from the registry at comptime.

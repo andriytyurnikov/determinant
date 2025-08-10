@@ -137,3 +137,36 @@ test "step: CSRRSI with zimm!=0 to read-only CSR fails" {
     loadInst(&cpu, encodeCsr(0b110, 2, 5, 0xC00));
     try std.testing.expectError(error.IllegalInstruction, cpu.step());
 }
+
+// --- Isolated Csr unit tests (no CPU step) ---
+
+const zicsr = @import("zicsr.zig");
+
+test "Csr.write to read-only address (0xC00) returns IllegalInstruction" {
+    var csr = zicsr.Csr{};
+    try std.testing.expectError(error.IllegalInstruction, csr.write(0xC00, 42));
+}
+
+test "Csr.read cycle counter returns low 32 bits" {
+    const csr = zicsr.Csr{};
+    const val = try csr.read(0x0000_0001_DEAD_BEEF, 0xC00);
+    try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), val);
+}
+
+test "Csr.read cycleh returns high 32 bits" {
+    const csr = zicsr.Csr{};
+    const val = try csr.read(0x0000_0005_0000_0000, 0xC80);
+    try std.testing.expectEqual(@as(u32, 5), val);
+}
+
+test "Csr.read unknown address returns IllegalInstruction" {
+    const csr = zicsr.Csr{};
+    try std.testing.expectError(error.IllegalInstruction, csr.read(0, 0x001));
+}
+
+test "Csr.write and read mscratch round-trip" {
+    var csr = zicsr.Csr{};
+    try csr.write(0x340, 0xCAFE);
+    const val = try csr.read(0, 0x340);
+    try std.testing.expectEqual(@as(u32, 0xCAFE), val);
+}

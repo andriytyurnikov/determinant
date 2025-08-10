@@ -4,8 +4,8 @@ pub const expand = @import("decoders/expand.zig");
 pub const registry = @import("decoders/registry.zig");
 pub const bitfields = @import("decoders/bitfields.zig");
 
-/// Canonical DecodeError — both decoders must define the same error set.
-pub const DecodeError = lut_decoder.DecodeError;
+/// Canonical DecodeError — defined in bitfields.zig, re-exported by both decoders.
+pub const DecodeError = bitfields.DecodeError;
 
 comptime {
     if (branch_decoder.DecodeError != lut_decoder.DecodeError)

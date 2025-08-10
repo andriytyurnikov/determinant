@@ -25,7 +25,6 @@ pub fn main() !void {
             try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
             try stdout.print("  --max-cycles N   Maximum execution cycles (default: {d})\n", .{default_max_cycles});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
-            try stdout.flush();
             return;
         }
 
