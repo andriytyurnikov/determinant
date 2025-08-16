@@ -1,8 +1,7 @@
 const std = @import("std");
 const det = @import("determinant");
 
-const default_max_cycles: u64 = 10_000_000;
-const demo_max_cycles: u64 = 10_000;
+const default_max_cycles: u64 = 0;
 
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
@@ -23,7 +22,7 @@ pub fn main() !void {
         if (std.mem.eql(u8, first_arg, "--help") or std.mem.eql(u8, first_arg, "-h")) {
             try stdout.print("Usage: determinant [<file> [--max-cycles N]]\n\n", .{});
             try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
-            try stdout.print("  --max-cycles N   Maximum execution cycles (default: {d})\n", .{default_max_cycles});
+            try stdout.print("  --max-cycles N   Maximum execution cycles (default: unlimited, 0 = unlimited)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
             return;
         }
@@ -38,11 +37,7 @@ pub fn main() !void {
                         try stderr.print("Error: invalid --max-cycles value\n", .{});
                         return;
                     };
-                    if (max_cycles == 0) {
-                        try stderr.print("Error: --max-cycles must be > 0\n", .{});
-                        return;
-                    }
-                } else {
+} else {
                     try stderr.print("Error: --max-cycles requires a value\n", .{});
                     return;
                 }
@@ -117,7 +112,7 @@ fn runDemo(stdout: anytype) !void {
 
     // Execute with finite cycle limit
     try stdout.print("\nExecuting...\n", .{});
-    const result = try vm.run(demo_max_cycles);
+    const result = try vm.run(default_max_cycles);
 
     try printResult(stdout, &vm, result);
 

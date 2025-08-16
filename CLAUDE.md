@@ -188,11 +188,11 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
 
 ### Cycle Limits
-`run(0)` is a valid library call — it means unlimited cycles (runs until ECALL/EBREAK). The CLI uses finite defaults: 10,000 for the demo, 10,000,000 for file loading, and rejects `--max-cycles 0`.
+`run(0)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. Use `--max-cycles N` to set a finite limit.
 ```zig
-// Unlimited — valid when the program is guaranteed to terminate:
+// Default — unlimited (runs until ECALL/EBREAK):
 const result = try vm.run(0);
-// Finite limit — preferred in application code:
+// Finite limit:
 const result = try vm.run(10_000);
 ```
 
