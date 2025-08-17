@@ -27,6 +27,13 @@ pub fn main() !void {
             return;
         }
 
+        // Detect flags used before file path
+        if (first_arg.len >= 2 and first_arg[0] == '-' and first_arg[1] == '-') {
+            try stderr.print("Error: unexpected option '{s}'. File path must come before options.\n", .{first_arg});
+            try stderr.print("Usage: determinant [<file> [--max-cycles N]]\n", .{});
+            return;
+        }
+
         const path = first_arg;
         var max_cycles: u64 = default_max_cycles;
         // Check for --max-cycles N
@@ -37,7 +44,7 @@ pub fn main() !void {
                         try stderr.print("Error: invalid --max-cycles value\n", .{});
                         return;
                     };
-} else {
+                } else {
                     try stderr.print("Error: --max-cycles requires a value\n", .{});
                     return;
                 }
@@ -149,6 +156,7 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
 
     const size: usize = @intCast(stat.size);
 
+    // Read directly into VM memory (bypasses loadProgram to avoid an extra copy).
     const n = file.readAll(vm.memory[0..size]) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return;
@@ -159,7 +167,11 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
         return;
     }
 
-    try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
+    if (max_cycles > 0) {
+        try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
+    } else {
+        try stdout.print("Loaded {d} bytes, executing (unlimited cycles)...\n", .{size});
+    }
 
     const result = vm.run(max_cycles) catch |err| {
         try stderr.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
@@ -197,7 +209,7 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
         .i => |i_op| switch (i_op) {
             .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),
             .LB, .LH, .LW, .LBU, .LHU, .JALR => try stdout.print("{s} x{d}, {d}(x{d})", .{ op_name, inst.rd, inst.imm, inst.rs1 }),
-            .FENCE, .ECALL, .EBREAK => try stdout.print("{s}", .{op_name}),
+            .FENCE, .FENCE_I, .ECALL, .EBREAK => try stdout.print("{s}", .{op_name}),
             .SB, .SH, .SW => try stdout.print("{s} x{d}, {d}(x{d})", .{ op_name, inst.rs2, inst.imm, inst.rs1 }),
             .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rs1, inst.rs2, inst.imm }),
             .LUI, .AUIPC => try stdout.print("{s} x{d}, 0x{X}", .{ op_name, inst.rd, inst.immUnsigned() >> 12 }),

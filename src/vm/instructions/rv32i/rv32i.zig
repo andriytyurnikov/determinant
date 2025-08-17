@@ -58,8 +58,9 @@ pub const Opcode = enum {
     JAL, // J-type
     JALR, // I-type
 
-    // Memory ordering (no-op on single-hart)
+    // Memory ordering (no-ops on single-hart)
     FENCE,
+    FENCE_I,
 
     // System
     ECALL,
@@ -67,13 +68,16 @@ pub const Opcode = enum {
 
     pub fn meta(comptime self: Opcode) fmt.Meta {
         return .{
-            .name_str = @tagName(self),
+            .name_str = switch (self) {
+                .FENCE_I => "FENCE.I",
+                else => @tagName(self),
+            },
             .fmt = switch (self) {
                 .ADD, .SUB, .SLL, .SLT, .SLTU, .XOR, .SRL, .SRA, .OR, .AND => .R,
                 .ADDI, .SLTI, .SLTIU, .XORI, .ORI, .ANDI, .SLLI, .SRLI, .SRAI => .I,
                 .LB, .LH, .LW, .LBU, .LHU => .I,
                 .JALR => .I,
-                .FENCE => .I,
+                .FENCE, .FENCE_I => .I,
                 .ECALL, .EBREAK => .I,
                 .SB, .SH, .SW => .S,
                 .BEQ, .BNE, .BLT, .BGE, .BLTU, .BGEU => .B,

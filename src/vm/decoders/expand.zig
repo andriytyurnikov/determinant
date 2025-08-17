@@ -13,7 +13,7 @@ pub fn expandCompressed(raw: u32) error{IllegalInstruction}!Instruction {
         .rs1 = exp.rs1,
         .rs2 = exp.rs2,
         .imm = exp.imm,
-        .raw = raw,
+        .raw = exp.raw,
         .compressed_op = exp.compressed_op,
     };
 }

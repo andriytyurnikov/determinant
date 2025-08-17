@@ -18,7 +18,7 @@ src/
     decoders/
       bitfields.zig           — shared bit-field extraction (opcode7, rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
       expand.zig              — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
-      registry.zig            — opcode registry: Entry struct, 94-entry registry array, Strategy enum, strategyFor()
+      registry.zig            — opcode registry: Entry struct, 95-entry registry array, Strategy enum, strategyFor()
       lut_conformance_test.zig — conformance suite (field-by-field match vs branch_decoder)
       rv32c_cross_test.zig    — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
         rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
@@ -42,7 +42,7 @@ src/
       format.zig          — Format enum (R/I/S/B/U/J), shared by all extensions
       test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
       rv32i/
-        rv32i.zig         — RV32I base integer opcodes (40 variants, incl. FENCE), decode helpers, format(); re-exports rv32c
+        rv32i.zig         — RV32I base integer opcodes (41 variants, incl. FENCE/FENCE.I), decode helpers, format(); re-exports rv32c
         rv32i_test.zig    — hub → decode, exec_alu, exec_mem, boundary split files
         rv32c/
           rv32c.zig       — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only

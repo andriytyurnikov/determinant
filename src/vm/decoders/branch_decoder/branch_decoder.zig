@@ -151,8 +151,11 @@ fn decodeJalr(raw: u32) DecodeError!Instruction {
 }
 
 fn decodeFence(raw: u32) DecodeError!Instruction {
-    if (funct3(raw) != 0b000) return error.IllegalInstruction;
-    return .{ .op = .{ .i = .FENCE }, .raw = raw };
+    return switch (funct3(raw)) {
+        0b000 => .{ .op = .{ .i = .FENCE }, .raw = raw },
+        0b001 => .{ .op = .{ .i = .FENCE_I }, .raw = raw },
+        else => error.IllegalInstruction,
+    };
 }
 
 fn decodeAtomic(raw: u32) DecodeError!Instruction {

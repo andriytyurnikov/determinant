@@ -22,7 +22,7 @@ These are load-bearing constraints — violating any one breaks deterministic ex
 - **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`. Never use `std.mem.sliceAsBytes` on typed arrays — it reinterprets in native byte order. See "Endianness" in Traps to Avoid.
 - **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct). Zero allocation failure modes.
 - **No floating-point** — intentional; FP non-determinism (rounding modes, NaN payloads) is avoided entirely.
-- **Single-hart** — no threading, FENCE is a no-op.
+- **Single-hart** — no threading, FENCE/FENCE.I are no-ops.
 
 ## Pipeline Invariant
 
@@ -81,9 +81,9 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 - **Zbb rs2 refinement**: 1 of 1024 R-type table coordinates (ZEXT_H) and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
 - **Bit-field extraction**: shared `decoders/bitfields.zig` module used by both `lut_decoder.zig` and `branch_decoder.zig`
 - **RV32C**: 16-bit compressed instructions delegate to `rv32c.expand()` — fundamentally not table-based
-- **Special I-format cases**: ECALL/EBREAK/FENCE use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `branch_decoder.zig` behavior
+- **Special I-format cases**: ECALL/EBREAK/FENCE/FENCE.I use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `branch_decoder.zig` behavior
 - **I-ALU shift shamt**: only I-ALU (opcode=0b0010011) with funct3=001/101 uses rs2 field as shamt — other I-format instructions (loads, CSRs) always use full immI
-- Total: ~4 KB read-only data, 94 opcodes covered
+- Total: ~6 KB read-only data, 95 opcodes covered
 
 ### Reference Decoder (decoders/branch_decoder.zig)
 

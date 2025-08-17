@@ -1,4 +1,4 @@
-//! Opcode registry — single source of truth for all 94 supported opcodes.
+//! Opcode registry — single source of truth for all 95 supported opcodes.
 //!
 //! Each entry specifies the instruction's encoding fields. The comptime
 //! generator in `lut_decoder.zig` derives all lookup tables from this list.
@@ -149,6 +149,7 @@ pub const registry = [_]Entry{
     .{ .op = .{ .i = .JAL }, .opcode7 = 0b1101111 },
     .{ .op = .{ .i = .JALR }, .opcode7 = 0b1100111, .f3 = 0b000 },
     .{ .op = .{ .i = .FENCE }, .opcode7 = 0b0001111, .f3 = 0b000 },
+    .{ .op = .{ .i = .FENCE_I }, .opcode7 = 0b0001111, .f3 = 0b001 },
 };
 
 /// Decode strategies — what sub-table to consult after level-1 lookup.

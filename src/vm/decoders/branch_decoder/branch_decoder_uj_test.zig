@@ -135,8 +135,15 @@ test "FENCE round-trip" {
     try std.testing.expectEqual(Opcode{ .i = .FENCE }, inst.op);
 }
 
-test "FENCE with invalid funct3 is illegal" {
-    // opcode=0b0001111, funct3=001 (FENCE.I, not implemented)
+test "FENCE.I round-trip" {
+    // opcode=0b0001111, funct3=001 (Zifencei)
     const raw: u32 = (0b001 << 12) | 0b0001111;
+    const inst = try decoder.decode(raw);
+    try std.testing.expectEqual(Opcode{ .i = .FENCE_I }, inst.op);
+}
+
+test "FENCE with invalid funct3 is illegal" {
+    // opcode=0b0001111, funct3=010 (undefined)
+    const raw: u32 = (0b010 << 12) | 0b0001111;
     try std.testing.expectError(error.IllegalInstruction, decoder.decode(raw));
 }

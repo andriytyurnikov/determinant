@@ -280,8 +280,8 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                     self.writeReg(rd, return_addr);
                 },
 
-                // Memory ordering (no-op on single-hart)
-                .FENCE => {},
+                // Memory ordering (no-ops on single-hart)
+                .FENCE, .FENCE_I => {},
 
                 // System
                 .ECALL => return .ecall,

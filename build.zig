@@ -59,4 +59,22 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    // Test-all step: runs library tests with both decoder backends
+    const alt_options = b.addOptions();
+    alt_options.addOption(bool, "use_branch_decoder", decoder_choice != .branch);
+
+    const alt_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    alt_mod.addOptions("build_options", alt_options);
+
+    const alt_mod_tests = b.addTest(.{ .root_module = alt_mod });
+
+    const test_all_step = b.step("test-all", "Run tests with both decoder backends");
+    test_all_step.dependOn(&run_mod_tests.step);
+    test_all_step.dependOn(&run_exe_tests.step);
+    test_all_step.dependOn(&b.addRunArtifact(alt_mod_tests).step);
 }

@@ -1,6 +1,6 @@
 //! Comptime decoder lookup table.
 //!
-//! The opcode registry (94 entries) lives in `registry.zig`.
+//! The opcode registry (95 entries) lives in `registry.zig`.
 //! This module derives lookup tables from that registry at comptime:
 //!   Level 1: opcode[6:0] → decode strategy  (128 entries, 1 byte each)
 //!   Level 2: strategy-specific tables indexed by funct3, funct7, or funct5
@@ -8,7 +8,7 @@
 //! Trade-off vs branch-based decoder:
 //!   Reference decoder: switch(opcode) → chain of if(extension) → switch(funct3/funct7)
 //!   LUT decoder: array[opcode] → array[funct3][funct7]  (2-3 loads, zero branches)
-//!   Cost: ~4 KiB read-only data.
+//!   Cost: ~6 KiB read-only data.
 
 const instructions = @import("../../instructions.zig");
 const bf = @import("../bitfields.zig");
@@ -235,7 +235,11 @@ pub fn decodeOpcode(raw: u32) ?Opcode {
         .auipc => .{ .i = .AUIPC },
         .jal => .{ .i = .JAL },
         .jalr => if (f3 == 0b000) .{ .i = .JALR } else null,
-        .fence => if (f3 == 0b000) .{ .i = .FENCE } else null,
+        .fence => switch (f3) {
+            0b000 => .{ .i = .FENCE },
+            0b001 => .{ .i = .FENCE_I },
+            else => null,
+        },
     };
 }
 
@@ -252,10 +256,10 @@ pub fn decode(raw: u32) DecodeError!Instruction {
 /// Build a full Instruction from a decoded Opcode and raw instruction word.
 /// Extracts operand fields based on the instruction's format.
 fn buildInstruction(op: Opcode, raw: u32) Instruction {
-    // ECALL, EBREAK, FENCE use I-format encoding but carry no operand fields.
+    // ECALL, EBREAK, FENCE, FENCE.I use I-format encoding but carry no operand fields.
     switch (op) {
         .i => |i_op| switch (i_op) {
-            .ECALL, .EBREAK, .FENCE => return .{ .op = op, .raw = raw },
+            .ECALL, .EBREAK, .FENCE, .FENCE_I => return .{ .op = op, .raw = raw },
             else => {},
         },
         else => {},
