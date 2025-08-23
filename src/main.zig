@@ -24,6 +24,7 @@ pub fn main() !void {
             try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
             try stdout.print("  --max-cycles N   Maximum execution cycles (default: unlimited, 0 = unlimited)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
+            try stdout.print("Compiled with {d} KB VM memory.\n", .{det.Cpu.mem_size / 1024});
             return;
         }
 
@@ -63,7 +64,7 @@ pub fn main() !void {
 }
 
 fn runDemo(stdout: anytype) !void {
-    try stdout.print("Determinant — RV32I Executor Demo\n\n", .{});
+    try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
     // Hardcoded 5-instruction RV32I program:
     //   ADDI x1, x0, 100    — x1 = 100
@@ -129,7 +130,7 @@ fn runDemo(stdout: anytype) !void {
 }
 
 fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
-    try stdout.print("Determinant — Loading {s}\n\n", .{path});
+    try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
 
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {

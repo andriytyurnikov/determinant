@@ -10,6 +10,7 @@ pub const branch_decoder = vm.decoders.branch_decoder;
 // Convenience aliases
 pub const CpuType = cpu.CpuType;
 pub const Cpu = cpu.Cpu;
+pub const default_memory_size = cpu.default_memory_size;
 pub const DecodeFn = cpu.DecodeFn;
 pub const StepResult = cpu.StepResult;
 pub const Instruction = instructions.Instruction;

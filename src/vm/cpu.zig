@@ -365,9 +365,11 @@ const default_decode: DecodeFn = if (build_options.use_branch_decoder)
 else
     &decoders.lut_decoder.decode;
 
-/// Default Cpu with 1 MB memory — used by the CLI and all existing tests.
-/// Decoder backend follows the `-Ddecoder` build option (default: lut).
-pub const Cpu = CpuType(1024 * 1024, default_decode);
+/// Default memory size — follows the `-Dmemory_size` build option (default: 64 KB).
+pub const default_memory_size: u32 = build_options.memory_size;
+
+/// Default Cpu — memory size follows `-Dmemory_size`, decoder follows `-Ddecoder`.
+pub const Cpu = CpuType(default_memory_size, default_decode);
 
 test "CpuType: custom memory size" {
     const SmallCpu = CpuType(4096, &decoders.lut_decoder.decode);

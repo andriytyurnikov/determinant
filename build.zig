@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Decoder = enum { lut, branch };
+const default_memory_size: u32 = 64 * 1024;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -8,9 +9,12 @@ pub fn build(b: *std.Build) void {
 
     const decoder_choice = b.option(Decoder, "decoder",
         "Instruction decoder backend (default: lut)") orelse .lut;
+    const memory_size: u32 = b.option(u32, "memory_size",
+        "VM memory size in bytes (default: 65536, must be >= 4 and divisible by 4)") orelse default_memory_size;
 
     const options = b.addOptions();
     options.addOption(bool, "use_branch_decoder", decoder_choice == .branch);
+    options.addOption(u32, "memory_size", memory_size);
 
     // Library module
     const mod = b.addModule("determinant", .{
@@ -63,6 +67,7 @@ pub fn build(b: *std.Build) void {
     // Test-all step: runs library tests with both decoder backends
     const alt_options = b.addOptions();
     alt_options.addOption(bool, "use_branch_decoder", decoder_choice != .branch);
+    alt_options.addOption(u32, "memory_size", memory_size);
 
     const alt_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
