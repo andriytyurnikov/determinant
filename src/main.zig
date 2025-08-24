@@ -1,7 +1,7 @@
 const std = @import("std");
 const det = @import("determinant");
 
-const default_max_cycles: u64 = 0;
+const unlimited_cycles: u64 = 0;
 
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
@@ -29,14 +29,14 @@ pub fn main() !void {
         }
 
         // Detect flags used before file path
-        if (first_arg.len >= 2 and first_arg[0] == '-' and first_arg[1] == '-') {
+        if (first_arg.len >= 2 and first_arg[0] == '-') {
             try stderr.print("Error: unexpected option '{s}'. File path must come before options.\n", .{first_arg});
             try stderr.print("Usage: determinant [<file> [--max-cycles N]]\n", .{});
             return;
         }
 
         const path = first_arg;
-        var max_cycles: u64 = default_max_cycles;
+        var max_cycles: u64 = unlimited_cycles;
         // Check for --max-cycles N
         if (args.next()) |flag| {
             if (std.mem.eql(u8, flag, "--max-cycles")) {
@@ -118,9 +118,9 @@ fn runDemo(stdout: anytype) !void {
         }
     }
 
-    // Execute with finite cycle limit
+    // Execute — unlimited cycles (demo terminates via ECALL)
     try stdout.print("\nExecuting...\n", .{});
-    const result = try vm.run(default_max_cycles);
+    const result = try vm.run(unlimited_cycles);
 
     try printResult(stdout, &vm, result);
 
@@ -157,7 +157,9 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
 
     const size: usize = @intCast(stat.size);
 
-    // Read directly into VM memory (bypasses loadProgram to avoid an extra copy).
+    // Read directly into VM memory — equivalent to loadProgram() but avoids
+    // an intermediate buffer. If loadProgram() gains side effects beyond memcpy,
+    // this must be updated to match.
     const n = file.readAll(vm.memory[0..size]) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return;
@@ -180,7 +182,7 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
         for (0..32) |i| {
             const val = vm.readReg(@intCast(i));
             if (val != 0) {
-                try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
+                try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
             }
         }
         return;
@@ -199,7 +201,7 @@ fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !voi
     for (0..32) |i| {
         const val = vm.readReg(@intCast(i));
         if (val != 0) {
-            try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, val, val });
+            try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
         }
     }
 }

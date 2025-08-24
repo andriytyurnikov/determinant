@@ -143,7 +143,7 @@ pub const registry = [_]Entry{
     .{ .op = .{ .csr = .CSRRSI }, .opcode7 = 0b1110011, .f3 = 0b110 },
     .{ .op = .{ .csr = .CSRRCI }, .opcode7 = 0b1110011, .f3 = 0b111 },
 
-    // ---- Fixed opcodes (5) ----
+    // ---- Fixed opcodes (6) ----
     .{ .op = .{ .i = .LUI }, .opcode7 = 0b0110111 },
     .{ .op = .{ .i = .AUIPC }, .opcode7 = 0b0010111 },
     .{ .op = .{ .i = .JAL }, .opcode7 = 0b1101111 },
@@ -167,7 +167,7 @@ pub const Strategy = enum(u8) {
     auipc, // fixed .{ .i = .AUIPC }
     jal, // fixed .{ .i = .JAL }
     jalr, // funct3==0 guard, fixed .{ .i = .JALR }
-    fence, // funct3==0 guard, fixed .{ .i = .FENCE }
+    fence, // funct3 switch: FENCE (0b000) / FENCE_I (0b001)
 };
 
 pub fn strategyFor(opcode7: u7) Strategy {

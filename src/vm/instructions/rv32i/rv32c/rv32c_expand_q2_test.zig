@@ -12,7 +12,6 @@ fn expectExpand(half: u16, expected_op: rv32i.Opcode, expected_rd: u5, expected_
     try std.testing.expectEqual(expected_rs1, exp.rs1);
     try std.testing.expectEqual(expected_rs2, exp.rs2);
     try std.testing.expectEqual(expected_imm, exp.imm);
-    try std.testing.expectEqual(@as(u32, half), exp.raw);
 }
 
 // ============================================================

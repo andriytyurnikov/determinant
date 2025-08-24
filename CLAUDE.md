@@ -63,7 +63,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 - `rv32c.zig` lives under `rv32i/rv32c/` and is accessed as `rv32i.rv32c` — it's a decode-time front-end to rv32i, not an independent peer extension. It only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
-- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/branch_decoder.zig`
+- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/expand.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
 - `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by branch_decoder.zig, lut_decoder.zig, cpu.zig, and main.zig
@@ -84,7 +84,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 - **RV32C**: 16-bit compressed instructions delegate to `rv32c.expand()` — fundamentally not table-based
 - **Special I-format cases**: ECALL/EBREAK/FENCE/FENCE.I use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `branch_decoder.zig` behavior
 - **I-ALU shift shamt**: only I-ALU (opcode=0b0010011) with funct3=001/101 uses rs2 field as shamt — other I-format instructions (loads, CSRs) always use full immI
-- Total: ~6 KB read-only data, 95 opcodes covered
+- Total: ~5.5 KB read-only data, 95 opcodes covered
 
 ### Reference Decoder (decoders/branch_decoder.zig)
 
@@ -97,8 +97,8 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 ### Decoder Organization
 
 - All decoder-related files live in `src/vm/decoders/` with `decoders.zig` as the namespace hub
-- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `registry`, `bitfields`; canonical `DecodeError` with a comptime assertion that both decoders define the same error set
-- `vm.zig` exposes `decoders` (not individual decoders); `root.zig` aliases `vm.decoders.branch_decoder` as `decoder` for public API compatibility
+- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `expand`, `registry`, `bitfields`; canonical `DecodeError` with a comptime assertion that both decoders define the same error set
+- `vm.zig` exposes `decoders` (not individual decoders); `root.zig` re-exports `vm.decoders.branch_decoder` as `branch_decoder`
 
 ### Dual Decoder Public API
 

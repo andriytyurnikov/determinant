@@ -8,7 +8,7 @@
 //! Trade-off vs branch-based decoder:
 //!   Reference decoder: switch(opcode) → chain of if(extension) → switch(funct3/funct7)
 //!   LUT decoder: array[opcode] → array[funct3][funct7]  (2-3 loads, zero branches)
-//!   Cost: ~6 KiB read-only data.
+//!   Cost: ~5.5 KiB read-only data.
 
 const instructions = @import("../../instructions.zig");
 const bf = @import("../bitfields.zig");

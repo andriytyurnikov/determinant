@@ -5,7 +5,7 @@ const Format = fmt.Format;
 
 pub const rv32c = @import("rv32c/rv32c.zig");
 
-/// RV32I opcodes (40 variants).
+/// RV32I opcodes (41 variants, including FENCE.I from Zifencei).
 pub const Opcode = enum {
     // R-type ALU
     ADD,

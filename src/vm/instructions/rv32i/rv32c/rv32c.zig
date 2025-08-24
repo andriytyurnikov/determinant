@@ -84,7 +84,6 @@ pub const Expanded = struct {
     rs1: u5 = 0,
     rs2: u5 = 0,
     imm: i32 = 0,
-    raw: u32,
     compressed_op: Opcode,
 };
 
@@ -133,7 +132,7 @@ fn decodeQ1Alu(half: u16) error{IllegalInstruction}!Opcode {
         0b10 => .C_ANDI,
         0b11 => {
             const funct1: u1 = @truncate(half >> 12);
-            if (funct1 != 0) return error.IllegalInstruction; // bit 12=1 reserved on RV32C
+            if (funct1 != 0) return error.IllegalInstruction; // bit 12=1 is RV64C encoding space (C.SUBW/C.ADDW)
             const funct2b: u2 = @truncate(half >> 5);
             return switch (funct2b) {
                 0b00 => .C_SUB,
@@ -169,10 +168,8 @@ fn decodeQ2(half: u16) error{IllegalInstruction}!Opcode {
 }
 
 /// Expand a 16-bit compressed instruction into its equivalent Expanded form.
-/// The `raw` field stores the 16-bit value zero-extended to u32.
 pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
     const op = try decode(half);
-    const raw: u32 = half;
     return switch (op) {
         .C_ADDI4SPN => {
             const nzu = ciw_nzuimm(half);
@@ -182,7 +179,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = cReg(@truncate(half >> 2)),
                 .rs1 = 2, // x2 = sp
                 .imm = @intCast(nzu),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -191,7 +187,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .rd = cReg(@truncate(half >> 2)),
             .rs1 = cReg(@truncate(half >> 7)),
             .imm = @intCast(clsw_offset(half)),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_SW => .{
@@ -199,7 +194,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = cReg(@truncate(half >> 2)),
             .imm = @intCast(clsw_offset(half)),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_ADDI => {
@@ -209,7 +203,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_val,
                 .rs1 = rd_val,
                 .imm = ci_imm(half),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -217,7 +210,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .op = .JAL,
             .rd = 1, // ra
             .imm = cj_offset(half),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_LI => {
@@ -227,7 +219,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_val,
                 .rs1 = 0,
                 .imm = ci_imm(half),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -239,7 +230,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = 2,
                 .rs1 = 2,
                 .imm = imm,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -250,7 +240,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .op = .LUI,
                 .rd = @truncate(half >> 7),
                 .imm = imm,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -263,7 +252,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = @intCast(shamt & 0x1F),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -276,7 +264,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = @intCast(shamt & 0x1F),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -287,7 +274,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .imm = ci_imm(half),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -301,13 +287,12 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .C_AND => .AND,
                 else => unreachable,
             };
-            return .{ .op = base_op, .rd = rd_rs1, .rs1 = rd_rs1, .rs2 = rs2_val, .raw = raw, .compressed_op = op };
+            return .{ .op = base_op, .rd = rd_rs1, .rs1 = rd_rs1, .rs2 = rs2_val, .compressed_op = op };
         },
         .C_J => .{
             .op = .JAL,
             .rd = 0,
             .imm = cj_offset(half),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_BEQZ => .{
@@ -315,7 +300,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = 0,
             .imm = cb_offset(half),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_BNEZ => .{
@@ -323,7 +307,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .rs1 = cReg(@truncate(half >> 7)),
             .rs2 = 0,
             .imm = cb_offset(half),
-            .raw = raw,
             .compressed_op = op,
         },
         .C_SLLI => {
@@ -335,7 +318,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_val,
                 .rs1 = rd_val,
                 .imm = @intCast(shamt & 0x1F),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -347,7 +329,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_val,
                 .rs1 = 2, // sp
                 .imm = @intCast(ci_lwsp_offset(half)),
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -359,7 +340,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = 0,
                 .rs1 = rd_rs1,
                 .imm = 0,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -371,13 +351,11 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_rs1,
                 .rs1 = 0,
                 .rs2 = rs2_val,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
         .C_EBREAK => .{
             .op = .EBREAK,
-            .raw = raw,
             .compressed_op = op,
         },
         .C_JALR => {
@@ -387,7 +365,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = 1, // ra
                 .rs1 = rd_rs1,
                 .imm = 0,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -399,7 +376,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
                 .rd = rd_rs1,
                 .rs1 = rd_rs1,
                 .rs2 = rs2_val,
-                .raw = raw,
                 .compressed_op = op,
             };
         },
@@ -408,7 +384,6 @@ pub fn expand(half: u16) error{IllegalInstruction}!Expanded {
             .rs1 = 2, // sp
             .rs2 = @truncate(half >> 2),
             .imm = @intCast(css_swsp_offset(half)),
-            .raw = raw,
             .compressed_op = op,
         },
     };

@@ -30,6 +30,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 ```sh
 zig build
 zig build -Ddecoder=branch   # use reference branch-based decoder instead of LUT (default: lut)
+zig build -Dmemory_size=1048576  # use 1 MB VM memory instead of default 64 KB
 ```
 
 ## Run
@@ -48,7 +49,8 @@ zig build run -- program.bin --max-cycles 1000
 ## Test
 
 ```sh
-zig build test
+zig build test          # run tests with default decoder backend
+zig build test-all      # run tests with both decoder backends (LUT + branch)
 ```
 
 ## Architecture
@@ -80,3 +82,4 @@ The library is available via `@import("determinant")`.
 - **`branch_decoder`** — direct access to the reference branch-based decoder module
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"`, `ecall`, `ebreak`
+- **`default_memory_size`** — configured VM memory size in bytes (follows `-Dmemory_size` build option, default: 65536)

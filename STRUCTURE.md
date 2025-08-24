@@ -6,7 +6,7 @@ src/
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
-    cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(1MB, default_decode) default, step/run executor, memory helpers
+    cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(default_memory_size, default_decode) default (64KB via -Dmemory_size), step/run executor, memory helpers
     cpu_init_test.zig     — init and register tests
     cpu_memory_test.zig   — memory read/write tests
     cpu_pipeline_test.zig — pipeline infrastructure, run(), branch/error path tests
@@ -14,7 +14,7 @@ src/
     cpu_boundary_test.zig — boundary-value tests
     cpu_integration_test.zig — integration tests (extension dispatch, compressed instructions)
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
-    decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, registry, bitfields; canonical DecodeError with comptime divergence assertion
+    decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, expand, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
       bitfields.zig           — shared bit-field extraction (opcode7, rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
       expand.zig              — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)

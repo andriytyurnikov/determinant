@@ -66,7 +66,7 @@ pub fn build(b: *std.Build) void {
 
     // Test-all step: runs library tests with both decoder backends
     const alt_options = b.addOptions();
-    alt_options.addOption(bool, "use_branch_decoder", decoder_choice != .branch);
+    alt_options.addOption(bool, "use_branch_decoder", decoder_choice == .lut);
     alt_options.addOption(u32, "memory_size", memory_size);
 
     const alt_mod = b.createModule(.{
