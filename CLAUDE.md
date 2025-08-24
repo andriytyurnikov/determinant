@@ -40,13 +40,11 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ## Key Patterns
 
-### Module Structure
-
-See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and import patterns. Key insight: `vm.zig` is the namespace hub — `root.zig` imports it and re-exports `cpu`, `instructions`, `decoders`.
+See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and naming conventions.
 
 ### ISA Extension Architecture
 
-- ISA extensions live in `src/vm/instructions/` — each owns a subdirectory (`ext/ext.zig` + `ext/ext_test.zig`) with its own `Opcode` enum (with `name()`, `format()`, and comptime `meta()` methods), decode, and execute logic
+- Each extension has its own `Opcode` enum with `name()`, `format()`, and comptime `meta()` methods, plus decode and execute logic
 - `instructions.zig` imports all execution extensions; composes `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }` (rv32c is accessed via `rv32i.rv32c`, not directly from instructions.zig)
 - `instructions.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
@@ -61,7 +59,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 
 ### Compressed Instructions (RV32C)
 
-- `rv32c.zig` lives under `rv32i/rv32c/` and is accessed as `rv32i.rv32c` — it's a decode-time front-end to rv32i, not an independent peer extension. It only imports `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
+- RV32C is a decode-time front-end to rv32i, not an independent extension — it imports only `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
 - `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/expand.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
@@ -94,18 +92,11 @@ See [STRUCTURE.md](STRUCTURE.md) for the full file tree, module conventions, and
 - **I-type ALU shift special case**: for shifts (funct3=001 or 101), the immediate comes from the rs2 field [24:20] (5-bit shamt), NOT the full 12-bit I-immediate. `decodeIAlu()` handles this with a conditional extraction.
 - Decode return types: `rv32m.decodeR()` returns non-optional `Opcode` (all funct3 values valid); other decoders return `?Opcode` (some inputs invalid)
 
-### Decoder Organization
-
-- All decoder-related files live in `src/vm/decoders/` with `decoders.zig` as the namespace hub
-- `decoders.zig` re-exports: `branch_decoder`, `lut_decoder`, `expand`, `registry`, `bitfields`; canonical `DecodeError` with a comptime assertion that both decoders define the same error set
-- `vm.zig` exposes `decoders` (not individual decoders); `root.zig` re-exports `vm.decoders.branch_decoder` as `branch_decoder`
-
 ### Dual Decoder Public API
 
 - **`decode()`** (`root.zig`) — primary LUT decoder (`lut_decoder.decode`), used by `cpu.zig` for execution — fast, branchless
 - **`decodeBranch()`** (`root.zig`) — reference branch-based decoder (`branch_decoder.decode`), kept for conformance testing and documentation
 - **`decoders`** (`root.zig`) — full access to both decoder modules
-- **`branch_decoder`** (`root.zig`) — direct access to the reference decoder module
 - Library consumers should prefer `decode()` for performance; `decodeBranch()` for readability or reference comparison
 - `DecodeError` is re-exported from `decoders.zig` (canonical) — guaranteed identical between both decoders via comptime check
 

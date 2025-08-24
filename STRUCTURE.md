@@ -76,7 +76,7 @@ build.zig.zon             — package metadata (name, version, dependencies, fin
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
 - `src/` holds entry points (`root.zig`, `main.zig`); `src/vm/` holds the VM library implementation
 - `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instructions`, `decoders`
-- `decoders.zig` is the namespace hub for the `decoders/` directory — re-exports `branch_decoder`, `lut_decoder`, `registry`, `bitfields`
+- `decoders.zig` is the namespace hub for the `decoders/` directory — re-exports `branch_decoder`, `lut_decoder`, `expand`, `registry`, `bitfields`
 - Each ISA extension owns a subdirectory (`ext/ext.zig` + `ext/ext_test.zig`); tests are pulled in via `test { _ = @import("ext_test.zig"); }` blocks
 - **Test hub pattern**: large test files are split into semantic groups under a 250-line hard limit. The original `*_test.zig` becomes a hub with only `comptime { _ = @import("split_test.zig"); }` blocks — source files keep their single `@import("..._test.zig")` unchanged
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
