@@ -46,6 +46,7 @@ pub fn decodeR(f3: u3) Opcode {
 }
 
 /// Execute an M-extension instruction, returning the result for rd.
+/// INVARIANT: wrapping multiplication (*%) — overflow must wrap, not trap.
 pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
     return switch (op) {
         .MUL => rs1_val *% rs2_val,

@@ -34,6 +34,7 @@ pub fn decodeR(f3: u3, f7: u7) ?Opcode {
 }
 
 /// Execute a Zba instruction, returning the result for rd.
+/// INVARIANT: wrapping addition (+%) — shifted-adds must wrap, not trap.
 pub fn execute(op: Opcode, rs1_val: u32, rs2_val: u32) u32 {
     return switch (op) {
         .SH1ADD => (rs1_val << 1) +% rs2_val,

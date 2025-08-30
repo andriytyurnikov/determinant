@@ -78,6 +78,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         }
 
         // --- Memory helpers ---
+        // INVARIANT: all multi-byte access uses explicit .little endianness — never .native
 
         pub fn readByte(self: *const Self, addr: u32) !u8 {
             if (addr >= mem_size) return error.AddressOutOfBounds;
@@ -171,8 +172,8 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 .zbs => |op| self.executeZbs(op, inst.rd, rs1_val, rs2_val, inst.immUnsigned()),
             }
 
-            self.pc = next_pc;
-            self.cycle_count +%= 1;
+            self.pc = next_pc; // Pipeline step 5: PC updated AFTER execution
+            self.cycle_count +%= 1; // Pipeline step 6: cycle incremented last (CSR reads see pre-step value)
             return result;
         }
 
@@ -182,6 +183,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             const imm_u: u32 = @bitCast(imm);
             switch (op) {
                 // R-type ALU
+                // INVARIANT: wrapping arithmetic (+%, -%) — overflow must wrap, not trap
                 .ADD => self.writeReg(rd, rs1_val +% rs2_val),
                 .SUB => self.writeReg(rd, rs1_val -% rs2_val),
                 .SLL => self.writeReg(rd, rs1_val << @truncate(rs2_val & 0x1F)),
@@ -204,7 +206,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 .SRLI => self.writeReg(rd, rs1_val >> @truncate(imm_u & 0x1F)),
                 .SRAI => self.writeReg(rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(imm_u & 0x1F))),
 
-                // Loads
+                // Loads — INVARIANT: wrapping address calc (+%); sign-extend via cascading bitcasts
                 .LB => {
                     const addr = rs1_val +% imm_u;
                     const byte = try self.readByte(addr);
@@ -245,7 +247,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                     try self.writeWord(addr, rs2_val);
                 },
 
-                // Branches
+                // Branches — INVARIANT: wrapping target calc (pc +% imm)
                 .BEQ => {
                     if (rs1_val == rs2_val) next_pc.* = self.pc +% imm_u;
                 },
@@ -276,7 +278,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 },
                 .JALR => {
                     const return_addr = self.pc +% inst_size;
-                    next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
+                    next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE; // INVARIANT: clear bit[0] per RISC-V spec
                     self.writeReg(rd, return_addr);
                 },
 
@@ -352,6 +354,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 .CSRRW, .CSRRS, .CSRRC => rs1_val,
                 .CSRRWI, .CSRRSI, .CSRRCI => @intCast(rs1_field),
             };
+            // Pipeline invariant: pre-step cycle_count so CSR reads see pre-increment value
             const result = try self.csrs.execute(op, self.cycle_count, csr_addr, src_val, rd != 0, rs1_field != 0);
             if (result.rd_val) |val| {
                 self.writeReg(rd, val);

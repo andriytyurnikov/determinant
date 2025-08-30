@@ -66,6 +66,7 @@ pub fn decodeR(f5: u5) ?Opcode {
 
 /// Compute the result of an AMO operation given the old memory value and rs2.
 /// Only valid for AMO opcodes (not LR_W/SC_W).
+/// INVARIANT: AMOADD uses wrapping addition (+%).
 pub fn execute(op: Opcode, old: u32, rs2_val: u32) u32 {
     return switch (op) {
         .AMOSWAP_W => rs2_val,

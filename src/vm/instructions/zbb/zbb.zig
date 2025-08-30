@@ -124,12 +124,12 @@ pub fn execute(op: Opcode, rs1_val: u32, src2: u32) u32 {
         .ZEXT_H => rs1_val & 0xFFFF,
         .ROL => blk: {
             const shamt: u5 = @truncate(src2);
-            const compl: u5 = 0 -% shamt;
+            const compl: u5 = 0 -% shamt; // INVARIANT: wrapping subtraction for rotate complement
             break :blk (rs1_val << shamt) | (rs1_val >> compl);
         },
         .ROR, .RORI => blk: {
             const shamt: u5 = @truncate(src2);
-            const compl: u5 = 0 -% shamt;
+            const compl: u5 = 0 -% shamt; // INVARIANT: wrapping subtraction for rotate complement
             break :blk (rs1_val >> shamt) | (rs1_val << compl);
         },
         .ORC_B => blk: {
