@@ -1,5 +1,4 @@
 /// RV32A atomic extension opcodes, decode, and execute.
-
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

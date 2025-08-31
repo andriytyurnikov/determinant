@@ -14,6 +14,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as 
 - `zig build run -- <args>` — pass arguments to the executable
 - `-Ddecoder=lut|branch` — select decoder backend (default: `lut`). Applies to CLI, tests, and `Cpu` alias. Example: `zig build test -Ddecoder=branch`
 - `-Dmemory_size=N` — VM memory size in bytes (default: `65536`). Must be >= 4 and divisible by 4. Example: `zig build run -Dmemory_size=1048576`
+- `zig fmt src/` — format all source files (run after editing)
 
 ## Determinism Invariants
 

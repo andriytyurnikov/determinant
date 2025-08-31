@@ -1,5 +1,4 @@
 /// Zicsr extension: Control and Status Register instructions (6 variants).
-
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

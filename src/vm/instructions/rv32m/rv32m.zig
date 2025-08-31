@@ -1,5 +1,4 @@
 /// RV32M multiply/divide extension opcodes, decode, and execute.
-
 const std = @import("std");
 const fmt = @import("../format.zig");
 const Format = fmt.Format;

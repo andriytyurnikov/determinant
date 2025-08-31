@@ -8,7 +8,6 @@ pub const zba = @import("instructions/zba/zba.zig");
 pub const zbb = @import("instructions/zbb/zbb.zig");
 pub const zbs = @import("instructions/zbs/zbs.zig");
 
-
 pub const Format = @import("instructions/format.zig").Format;
 
 /// Tagged union opcode spanning all supported ISA extensions.

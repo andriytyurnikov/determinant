@@ -20,7 +20,9 @@ pub const Meta = struct {
 /// extension's `meta()` method on a comptime-known enum value, producing a
 /// direct lookup with zero runtime branches.
 pub fn opcodeName(comptime OpcodeType: type, self: OpcodeType) []const u8 {
-    return switch (self) { inline else => |v| comptime OpcodeType.meta(v).name_str };
+    return switch (self) {
+        inline else => |v| comptime OpcodeType.meta(v).name_str,
+    };
 }
 
 /// Return the instruction format (R/I/S/B/U/J) for any extension Opcode value.
@@ -28,5 +30,7 @@ pub fn opcodeName(comptime OpcodeType: type, self: OpcodeType) []const u8 {
 /// Same `inline else` comptime dispatch as `opcodeName` — the compiler
 /// generates a perfect jump table from enum discriminant to format constant.
 pub fn opcodeFormat(comptime OpcodeType: type, self: OpcodeType) Format {
-    return switch (self) { inline else => |v| comptime OpcodeType.meta(v).fmt };
+    return switch (self) {
+        inline else => |v| comptime OpcodeType.meta(v).fmt,
+    };
 }
