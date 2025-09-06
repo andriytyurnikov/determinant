@@ -1,3 +1,5 @@
+//! CLI executable: loads flat binary, runs VM, prints disassembly and register dump.
+
 const std = @import("std");
 const det = @import("determinant");
 

@@ -49,7 +49,7 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 - `instructions.zig` imports all execution extensions; composes `Opcode = union(enum) { i: rv32i.Opcode, m: rv32m.Opcode, a: rv32a.Opcode, csr: zicsr.Opcode, zba: zba.Opcode, zbb: zbb.Opcode, zbs: zbs.Opcode }` (rv32c is accessed via `rv32i.rv32c`, not directly from instructions.zig)
 - `instructions.Opcode` delegates `name()` and `format()` to extensions via `inline else`
 - CPU dispatch methods named after tagged union fields: `executeI`, `executeM`, `executeA`, `executeCsr`, `executeZba`, `executeZbb`, `executeZbs`
-- Each extension's execution is delegated: `executeI()` (RV32I in cpu.zig), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`, `zba.execute()`, `zbb.execute()`, `zbs.execute()`
+- Each extension's execution is delegated: `cpu_exec_i.executeI()` (RV32I in cpu_exec_i.zig), `rv32m.execute()`, `rv32a.execute()`, `zicsr.Csr.execute()`, `zba.execute()`, `zbb.execute()`, `zbs.execute()`
 
 ### Comptime Metadata System
 
@@ -62,8 +62,9 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 
 - RV32C is a decode-time front-end to rv32i, not an independent extension — it imports only `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
 - `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
-- `expand()` returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm, raw) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/expand.zig`
+- `expand()` (in `rv32c_expand.zig`, re-exported by `rv32c.zig`) returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/expand.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
+- Immediate extraction helpers live in `rv32c_imm.zig` — pure stateless functions with no dependencies
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
 - `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by branch_decoder.zig, lut_decoder.zig, cpu.zig, and main.zig
 
@@ -192,11 +193,13 @@ const result = try vm.run(10_000);
 ## Adding a New Extension
 
 1. Create `src/vm/instructions/newext/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
-2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests
+2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests. If tests exceed 250 lines, split into semantic files (e.g., `newext_decode_test.zig`, `newext_exec_test.zig`) and use the hub pattern with `comptime { _ = @import("split.zig"); }` blocks
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
 4. Add variant to `instructions.zig` `Opcode` tagged union
 5. Add decode dispatch in `decoders/branch_decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`
-6. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
-7. Add disassembly case in `main.zig` `printInstruction()`
-8. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
-9. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved
+6. Add opcode entries to `decoders/registry.zig` — one `Entry` per opcode with correct opcode7, f3, f7, and optional rs2_eq/f5/f12 fields. This is the single source of truth for the LUT decoder
+7. If adding many opcodes, check that `@setEvalBranchQuota` in `lut_decoder.zig` is sufficient — increase if comptime eval exceeds the budget
+8. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
+9. Add disassembly case in `main.zig` `printInstruction()`
+10. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
+11. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved

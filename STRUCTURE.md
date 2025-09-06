@@ -7,6 +7,7 @@ src/
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
     cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(default_memory_size, default_decode) default (64KB via -Dmemory_size), step/run executor, memory helpers
+    cpu_exec_i.zig        — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
     cpu_init_test.zig     — init and register tests
     cpu_memory_test.zig   — memory read/write tests
     cpu_pipeline_test.zig — pipeline infrastructure, run(), branch/error path tests
@@ -45,8 +46,10 @@ src/
         rv32i.zig         — RV32I base integer opcodes (41 variants, incl. FENCE/FENCE.I), decode helpers, format(); re-exports rv32c
         rv32i_test.zig    — hub → decode, exec_alu, exec_mem, boundary split files
         rv32c/
-          rv32c.zig       — RV32C compressed instruction Opcode (26 variants), decode(), expand() (16-bit → Expanded); imports rv32i and format only
-          rv32c_test.zig  — hub → rv32c_expand_q01_test, rv32c_expand_q2_test, rv32c_maxrange_test, rv32c_cpu_test, rv32c_cpu_alu_test
+          rv32c.zig         — RV32C compressed instruction Opcode (26 variants), decode() (16-bit → Opcode); re-exports expand from rv32c_expand.zig
+          rv32c_expand.zig  — expand() function: maps Opcode + halfword → Expanded (validates constraints, builds fields)
+          rv32c_imm.zig     — pure stateless immediate extraction helpers (10 functions) + cReg() + funct3()
+          rv32c_test.zig    — hub → rv32c_expand_q01_test, rv32c_expand_q2_test, rv32c_maxrange_test, rv32c_cpu_test, rv32c_cpu_alu_test
       rv32m/
         rv32m.zig         — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
         rv32m_test.zig    — hub → rv32m_mul_test.zig, rv32m_div_test.zig
@@ -70,6 +73,22 @@ src/
 build.zig                 — build system configuration (library module, executable, test and run steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
+
+## Module Dependencies
+
+All edges point downward — no cycles exist and none should be introduced.
+
+```
+main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
+                      ↘ decoders.zig ─→ lut_decoder / branch_decoder
+                                     ↘ bitfields.zig, expand.zig, registry.zig
+```
+
+- `cpu.zig` imports `cpu_exec_i.zig` (RV32I execute logic) — same level, no upward dependency
+- Extensions (rv32i, rv32m, rv32a, zicsr, zba, zbb, zbs) import only `format.zig` — never cpu, decoders, or instructions
+- RV32C imports only `rv32i.zig` and `format.zig` (decode-time frontend, no upward dependency)
+- `rv32c_expand.zig` imports `rv32c.zig`, `rv32i.zig`, and `rv32c_imm.zig` — no upward dependency
+- `rv32c_imm.zig` has zero dependencies (pure stateless helpers)
 
 ## Module Conventions
 

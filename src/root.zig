@@ -1,3 +1,5 @@
+//! Public API for the Determinant RISC-V VM library.
+
 const std = @import("std");
 const vm = @import("vm.zig");
 

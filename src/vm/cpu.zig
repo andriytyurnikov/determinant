@@ -9,14 +9,11 @@ const zicsr = instructions.zicsr;
 const zba = instructions.zba;
 const zbb = instructions.zbb;
 const zbs = instructions.zbs;
+const cpu_exec_i = @import("cpu_exec_i.zig");
 
 pub const DecodeFn = *const fn (u32) decoders.DecodeError!instructions.Instruction;
 
-pub const StepResult = enum {
-    @"continue",
-    ecall,
-    ebreak,
-};
+pub const StepResult = cpu_exec_i.Result;
 
 pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
     comptime {
@@ -121,7 +118,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         /// Contract: every write method MUST call this.
         fn invalidateReservation(self: *Self, addr: u32) void {
             if (self.reservation) |res_addr| {
-                if ((addr & 0xFFFFFFFC) == res_addr) {
+                if ((addr & 0xFFFFFFFC) == res_addr) { // word-aligned address comparison (clear lower 2 bits)
                     self.reservation = null;
                 }
             }
@@ -162,7 +159,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
 
             switch (inst.op) {
                 .i => |i_op| {
-                    result = try self.executeI(i_op, inst.rd, inst.imm, rs1_val, rs2_val, inst_size, &next_pc);
+                    result = try cpu_exec_i.executeI(self, i_op, inst.rd, inst.imm, rs1_val, rs2_val, inst_size, &next_pc);
                 },
                 .m => |m_op| self.executeM(m_op, inst.rd, rs1_val, rs2_val),
                 .a => |a_op| try self.executeA(a_op, inst.rd, rs1_val, rs2_val),
@@ -175,121 +172,6 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             self.pc = next_pc; // Pipeline step 5: PC updated AFTER execution
             self.cycle_count +%= 1; // Pipeline step 6: cycle incremented last (CSR reads see pre-step value)
             return result;
-        }
-
-        // --- RV32I execution ---
-
-        fn executeI(self: *Self, op: rv32i.Opcode, rd: u5, imm: i32, rs1_val: u32, rs2_val: u32, inst_size: u32, next_pc: *u32) !StepResult {
-            const imm_u: u32 = @bitCast(imm);
-            switch (op) {
-                // R-type ALU
-                // INVARIANT: wrapping arithmetic (+%, -%) — overflow must wrap, not trap
-                .ADD => self.writeReg(rd, rs1_val +% rs2_val),
-                .SUB => self.writeReg(rd, rs1_val -% rs2_val),
-                .SLL => self.writeReg(rd, rs1_val << @truncate(rs2_val & 0x1F)),
-                .SLT => self.writeReg(rd, if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) 1 else 0),
-                .SLTU => self.writeReg(rd, if (rs1_val < rs2_val) 1 else 0),
-                .XOR => self.writeReg(rd, rs1_val ^ rs2_val),
-                .SRL => self.writeReg(rd, rs1_val >> @truncate(rs2_val & 0x1F)),
-                .SRA => self.writeReg(rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(rs2_val & 0x1F))),
-                .OR => self.writeReg(rd, rs1_val | rs2_val),
-                .AND => self.writeReg(rd, rs1_val & rs2_val),
-
-                // I-type ALU
-                .ADDI => self.writeReg(rd, rs1_val +% imm_u),
-                .SLTI => self.writeReg(rd, if (@as(i32, @bitCast(rs1_val)) < imm) 1 else 0),
-                .SLTIU => self.writeReg(rd, if (rs1_val < imm_u) 1 else 0),
-                .XORI => self.writeReg(rd, rs1_val ^ imm_u),
-                .ORI => self.writeReg(rd, rs1_val | imm_u),
-                .ANDI => self.writeReg(rd, rs1_val & imm_u),
-                .SLLI => self.writeReg(rd, rs1_val << @truncate(imm_u & 0x1F)),
-                .SRLI => self.writeReg(rd, rs1_val >> @truncate(imm_u & 0x1F)),
-                .SRAI => self.writeReg(rd, @bitCast(@as(i32, @bitCast(rs1_val)) >> @truncate(imm_u & 0x1F))),
-
-                // Loads — INVARIANT: wrapping address calc (+%); sign-extend via cascading bitcasts
-                .LB => {
-                    const addr = rs1_val +% imm_u;
-                    const byte = try self.readByte(addr);
-                    self.writeReg(rd, @bitCast(@as(i32, @as(i8, @bitCast(byte)))));
-                },
-                .LH => {
-                    const addr = rs1_val +% imm_u;
-                    const half = try self.readHalfword(addr);
-                    self.writeReg(rd, @bitCast(@as(i32, @as(i16, @bitCast(half)))));
-                },
-                .LW => {
-                    const addr = rs1_val +% imm_u;
-                    const word = try self.readWord(addr);
-                    self.writeReg(rd, word);
-                },
-                .LBU => {
-                    const addr = rs1_val +% imm_u;
-                    const byte = try self.readByte(addr);
-                    self.writeReg(rd, @as(u32, byte));
-                },
-                .LHU => {
-                    const addr = rs1_val +% imm_u;
-                    const half = try self.readHalfword(addr);
-                    self.writeReg(rd, @as(u32, half));
-                },
-
-                // Stores
-                .SB => {
-                    const addr = rs1_val +% imm_u;
-                    try self.writeByte(addr, @truncate(rs2_val));
-                },
-                .SH => {
-                    const addr = rs1_val +% imm_u;
-                    try self.writeHalfword(addr, @truncate(rs2_val));
-                },
-                .SW => {
-                    const addr = rs1_val +% imm_u;
-                    try self.writeWord(addr, rs2_val);
-                },
-
-                // Branches — INVARIANT: wrapping target calc (pc +% imm)
-                .BEQ => {
-                    if (rs1_val == rs2_val) next_pc.* = self.pc +% imm_u;
-                },
-                .BNE => {
-                    if (rs1_val != rs2_val) next_pc.* = self.pc +% imm_u;
-                },
-                .BLT => {
-                    if (@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))) next_pc.* = self.pc +% imm_u;
-                },
-                .BGE => {
-                    if (@as(i32, @bitCast(rs1_val)) >= @as(i32, @bitCast(rs2_val))) next_pc.* = self.pc +% imm_u;
-                },
-                .BLTU => {
-                    if (rs1_val < rs2_val) next_pc.* = self.pc +% imm_u;
-                },
-                .BGEU => {
-                    if (rs1_val >= rs2_val) next_pc.* = self.pc +% imm_u;
-                },
-
-                // Upper immediates
-                .LUI => self.writeReg(rd, imm_u),
-                .AUIPC => self.writeReg(rd, self.pc +% imm_u),
-
-                // Jumps
-                .JAL => {
-                    self.writeReg(rd, self.pc +% inst_size);
-                    next_pc.* = self.pc +% imm_u;
-                },
-                .JALR => {
-                    const return_addr = self.pc +% inst_size;
-                    next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE; // INVARIANT: clear bit[0] per RISC-V spec
-                    self.writeReg(rd, return_addr);
-                },
-
-                // Memory ordering (no-ops on single-hart)
-                .FENCE, .FENCE_I => {},
-
-                // System
-                .ECALL => return .ecall,
-                .EBREAK => return .ebreak,
-            }
-            return .@"continue";
         }
 
         // --- RV32M helpers ---
