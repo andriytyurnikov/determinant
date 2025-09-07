@@ -1,3 +1,5 @@
+//! CpuType — parameterized RISC-V CPU core (memory size × decoder as comptime args).
+
 const std = @import("std");
 const build_options = @import("build_options");
 const decoders = @import("decoders.zig");
@@ -32,6 +34,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         reservation: ?u32,
         csrs: zicsr.Csr,
 
+        /// INVARIANT: no allocators — all state is fixed-size (registers, memory, CSR struct).
         pub fn init() Self {
             return .{
                 .pc = 0,
@@ -115,7 +118,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         }
 
         /// Invalidate reservation if write overlaps reserved word.
-        /// Contract: every write method MUST call this.
+        /// INVARIANT: every write method (writeByte/writeHalfword/writeWord) MUST call this.
         fn invalidateReservation(self: *Self, addr: u32) void {
             if (self.reservation) |res_addr| {
                 if ((addr & 0xFFFFFFFC) == res_addr) { // word-aligned address comparison (clear lower 2 bits)
@@ -151,6 +154,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             const inst = try decodeFn(raw);
             const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
 
+            // INVARIANT: pipeline step 3 — register reads BEFORE execution
             const rs1_val = self.readReg(inst.rs1);
             const rs2_val = self.readReg(inst.rs2);
 
@@ -169,8 +173,8 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 .zbs => |op| self.executeZbs(op, inst.rd, rs1_val, rs2_val, inst.immUnsigned()),
             }
 
-            self.pc = next_pc; // Pipeline step 5: PC updated AFTER execution
-            self.cycle_count +%= 1; // Pipeline step 6: cycle incremented last (CSR reads see pre-step value)
+            self.pc = next_pc; // INVARIANT: pipeline step 5 — PC updated AFTER execution
+            self.cycle_count +%= 1; // INVARIANT: pipeline step 6 — cycle incremented last (CSR reads see pre-step value)
             return result;
         }
 
@@ -236,7 +240,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                 .CSRRW, .CSRRS, .CSRRC => rs1_val,
                 .CSRRWI, .CSRRSI, .CSRRCI => @intCast(rs1_field),
             };
-            // Pipeline invariant: pre-step cycle_count so CSR reads see pre-increment value
+            // INVARIANT: pass pre-step cycle_count so CSR reads see pre-increment value
             const result = try self.csrs.execute(op, self.cycle_count, csr_addr, src_val, rd != 0, rs1_field != 0);
             if (result.rd_val) |val| {
                 self.writeReg(rd, val);

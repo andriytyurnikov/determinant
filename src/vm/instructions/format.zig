@@ -1,3 +1,5 @@
+//! Format enum (R/I/S/B/U/J), Meta struct, and comptime opcode name/format helpers.
+
 /// RV32 instruction formats.
 pub const Format = enum {
     R,

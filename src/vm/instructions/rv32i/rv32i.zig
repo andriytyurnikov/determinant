@@ -1,4 +1,5 @@
-/// RV32I base integer instruction set opcodes and decode helpers.
+//! RV32I base integer instruction set opcodes and decode helpers.
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

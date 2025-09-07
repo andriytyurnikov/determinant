@@ -1,5 +1,5 @@
-CLAUDE.md
-.claude/
+# Claude Code — project settings tracked, personal settings local-only
+.claude/settings.local.json
 
 # Zig build artifacts
 .zig-cache/

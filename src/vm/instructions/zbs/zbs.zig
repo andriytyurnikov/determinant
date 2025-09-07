@@ -1,4 +1,5 @@
-/// Zbs single-bit manipulation extension opcodes, decode, and execute.
+//! Zbs single-bit manipulation extension — 8 opcodes (4 R-type + 4 I-type).
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

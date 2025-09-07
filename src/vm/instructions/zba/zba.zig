@@ -1,4 +1,5 @@
-/// Zba address generation extension opcodes, decode, and execute.
+//! Zba address generation extension — SH1ADD, SH2ADD, SH3ADD.
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

@@ -1,3 +1,5 @@
+//! Shared expandCompressed(): wraps rv32c.Expanded into a full Instruction (used by both decoders).
+
 const std = @import("std");
 const instructions = @import("../instructions.zig");
 const rv32c = instructions.rv32i.rv32c;

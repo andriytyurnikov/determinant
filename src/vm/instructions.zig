@@ -1,3 +1,5 @@
+//! Tagged union Opcode spanning all ISA extensions, plus Instruction struct.
+
 const std = @import("std");
 
 pub const rv32i = @import("instructions/rv32i/rv32i.zig");
@@ -35,6 +37,7 @@ pub const Opcode = union(enum) {
 
 /// Returns true if the raw instruction bits represent a 16-bit compressed (RV32C) instruction.
 /// Compressed instructions have bits [1:0] != 0b11.
+/// INVARIANT: single source of truth for 16-bit vs 32-bit detection — all call sites use this.
 pub fn isCompressed(raw: u32) bool {
     return (raw & 0b11) != 0b11;
 }

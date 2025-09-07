@@ -1,4 +1,5 @@
-/// Zbb basic bit manipulation extension opcodes, decode, and execute.
+//! Zbb basic bit manipulation extension — 18 opcodes (R-type and I-type).
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

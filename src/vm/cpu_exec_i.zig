@@ -1,3 +1,5 @@
+//! RV32I execute logic — free function operating on anytype CPU.
+
 const rv32i = @import("instructions.zig").rv32i;
 
 pub const Result = enum {

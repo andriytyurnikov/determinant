@@ -1,4 +1,5 @@
-/// Pure stateless immediate extraction helpers for RV32C compressed instructions.
+//! Pure stateless immediate extraction helpers for RV32C compressed instructions.
+
 /// Map 3-bit compressed register field to x8-x15.
 pub fn cReg(r: u3) u5 {
     return @as(u5, r) + 8;

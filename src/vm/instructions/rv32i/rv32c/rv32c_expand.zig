@@ -1,3 +1,5 @@
+//! RV32C expand() — maps compressed Opcode + halfword into Expanded (validates constraints, builds fields).
+
 const rv32c = @import("rv32c.zig");
 const rv32i = @import("../rv32i.zig");
 const imm = @import("rv32c_imm.zig");

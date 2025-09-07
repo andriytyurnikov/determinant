@@ -1,4 +1,5 @@
-/// RV32A atomic extension opcodes, decode, and execute.
+//! RV32A atomic extension — 11 opcodes (LR/SC + 9 AMOs), decode and ALU compute.
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 

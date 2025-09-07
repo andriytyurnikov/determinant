@@ -1,3 +1,5 @@
+//! Reference decoder — branch-based dispatch for conformance testing and documentation.
+
 const std = @import("std");
 const instructions = @import("../../instructions.zig");
 const bf = @import("../bitfields.zig");

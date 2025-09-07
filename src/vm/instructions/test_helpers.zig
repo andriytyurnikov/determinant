@@ -1,3 +1,5 @@
+//! Shared test utilities — loadInst, storeWordAt, readWordAt, encode helpers for all formats.
+
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.Cpu;

@@ -1,4 +1,5 @@
-/// Zicsr extension: Control and Status Register instructions (6 variants).
+//! Zicsr extension — 6 CSR instructions. Owns Csr struct with read/write/execute.
+
 const fmt = @import("../format.zig");
 const Format = fmt.Format;
 
