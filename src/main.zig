@@ -17,6 +17,17 @@ pub fn main() !void {
     defer stdout.flush() catch {};
     defer stderr.flush() catch {};
 
+    mainInner(stdout, stderr) catch |err| switch (err) {
+        error.UserError => {
+            stdout.flush() catch {};
+            stderr.flush() catch {};
+            std.process.exit(1);
+        },
+        else => return err,
+    };
+}
+
+fn mainInner(stdout: anytype, stderr: anytype) !void {
     var args = std.process.args();
     _ = args.next(); // skip program name
 
@@ -34,7 +45,7 @@ pub fn main() !void {
         if (first_arg.len >= 2 and first_arg[0] == '-') {
             try stderr.print("Error: unexpected option '{s}'. File path must come before options.\n", .{first_arg});
             try stderr.print("Usage: determinant [<file> [--max-cycles N]]\n", .{});
-            return;
+            return error.UserError;
         }
 
         const path = first_arg;
@@ -45,15 +56,15 @@ pub fn main() !void {
                 if (args.next()) |val| {
                     max_cycles = std.fmt.parseInt(u64, val, 10) catch {
                         try stderr.print("Error: invalid --max-cycles value\n", .{});
-                        return;
+                        return error.UserError;
                     };
                 } else {
                     try stderr.print("Error: --max-cycles requires a value\n", .{});
-                    return;
+                    return error.UserError;
                 }
             } else {
                 try stderr.print("Error: unknown option '{s}'\n", .{flag});
-                return;
+                return error.UserError;
             }
         }
         if (args.next()) |extra| {
@@ -132,29 +143,27 @@ fn runDemo(stdout: anytype) !void {
 }
 
 fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
-    try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
-
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
-        return;
+        return error.UserError;
     };
     defer file.close();
 
     const stat = file.stat() catch |err| {
         try stderr.print("Error: cannot stat '{s}': {s}\n", .{ path, @errorName(err) });
-        return;
+        return error.UserError;
     };
     if (stat.size == 0) {
         try stderr.print("Error: file is empty\n", .{});
-        return;
+        return error.UserError;
     }
 
     var vm = det.Cpu.init();
 
     if (stat.size > vm.memory.len) {
         try stderr.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
-        return;
+        return error.UserError;
     }
 
     const size: usize = @intCast(stat.size);
@@ -164,13 +173,15 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
     // this must be updated to match.
     const n = file.readAll(vm.memory[0..size]) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
-        return;
+        return error.UserError;
     };
 
     if (n != size) {
         try stderr.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
-        return;
+        return error.UserError;
     }
+
+    try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
 
     if (max_cycles > 0) {
         try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
@@ -187,7 +198,7 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
                 try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
             }
         }
-        return;
+        return error.UserError;
     };
 
     try printResult(stdout, &vm, result);

@@ -150,7 +150,7 @@ test "conformance: invalid encodings" {
     try assertConformance(encodeStore(0b111, 1, 2, 0)); // invalid store funct3
     try assertConformance(encodeBranch(0b010, 1, 2)); // invalid branch funct3
     try assertConformance(encodeI(0b1100111, 0b001, 1, 2, 0)); // JALR bad funct3
-    try assertConformance(encodeI(0b0001111, 0b001, 0, 0, 0)); // FENCE bad funct3
+    try assertConformance(encodeI(0b0001111, 0b001, 0, 0, 0)); // FENCE_I (valid, funct3=001)
     try assertConformance(encodeSystem(0b000, 0, 0, 0x002)); // invalid funct12
     // Zbb rs2-dependent invalid cases
     try assertConformance(encodeRBase(0b100, 0b0000100, 1, 2, 1)); // ZEXT_H with rs2=1
