@@ -171,8 +171,3 @@ test "step: CPOP single bit high" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
 }
-
-// SEXT_B/SEXT_H/ZEXT_H tests in split file
-comptime {
-    _ = @import("zbb_sext_test.zig");
-}

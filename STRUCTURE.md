@@ -8,12 +8,18 @@ src/
   vm/
     cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(default_memory_size, default_decode) default (64KB via -Dmemory_size), step/run executor, memory helpers
     cpu_exec_i.zig        — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
-    cpu_init_test.zig     — init and register tests
-    cpu_memory_test.zig   — memory read/write tests
-    cpu_pipeline_test.zig — pipeline infrastructure, run(), branch/error path tests
-    cpu_determinism_test.zig — determinism: identical programs → identical state
-    cpu_boundary_test.zig — boundary-value tests
-    cpu_integration_test.zig — integration tests (extension dispatch, compressed instructions)
+    cpu_test.zig          — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant
+      cpu_init_test.zig       — init and register tests
+      cpu_memory_test.zig     — memory read/write tests
+      cpu_pipeline_test.zig   — pipeline infrastructure, branch/error path tests
+      cpu_run_test.zig        — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited)
+      cpu_determinism_test.zig — determinism: identical programs → identical state
+      cpu_dispatch_test.zig   — CSR pipeline invariant, extension dispatch (MUL, SH1ADD, CLZ, BSET)
+      cpu_boundary_test.zig   — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0])
+      cpu_store_upper_test.zig — CPU-level SB, SH, LUI, AUIPC tests
+      cpu_atomic_test.zig     — LR/SC scenarios, AMO operations, reservation invalidation
+      cpu_csr_test.zig        — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
+      cpu_invariant_test.zig  — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, expand, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
@@ -44,12 +50,20 @@ src/
       test_helpers.zig    — shared test utilities (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers)
       rv32i/
         rv32i.zig         — RV32I base integer opcodes (41 variants, incl. FENCE/FENCE.I), decode helpers, format(); re-exports rv32c
-        rv32i_test.zig    — hub → decode, exec_alu, exec_mem, boundary split files
+        rv32i_test.zig    — hub → decode, exec_alu, exec_mem, exec_branch, exec_jump, exec_system, boundary
+          rv32i_exec_mem_test.zig     — load/store execute tests (LW, SW, LB, LBU, LH, LHU, SB, SH)
+          rv32i_exec_branch_test.zig  — branch execute tests (BEQ, BNE, BLT, BGE, BLTU, BGEU)
+          rv32i_exec_jump_test.zig    — upper-immediate and jump tests (LUI, AUIPC, JAL, JALR)
+          rv32i_exec_system_test.zig  — system instruction tests (ECALL, EBREAK, FENCE)
         rv32c/
           rv32c.zig         — RV32C compressed instruction Opcode (26 variants), decode() (16-bit → Opcode); re-exports expand from rv32c_expand.zig
           rv32c_expand.zig  — expand() function: maps Opcode + halfword → Expanded (validates constraints, builds fields)
           rv32c_imm.zig     — pure stateless immediate extraction helpers (10 functions) + cReg() + funct3()
-          rv32c_test.zig    — hub → rv32c_expand_q01_test, rv32c_expand_q2_test, rv32c_maxrange_test, rv32c_cpu_test, rv32c_cpu_alu_test
+          rv32c_test.zig    — hub → expand_q01, expand_q2, maxrange, cpu_alu, cpu_flow, cpu_loadstore, cpu_branch, cpu_misc
+            rv32c_cpu_flow_test.zig      — C.LI, C.ADDI, C.JAL, C.JALR, C.J, mixed 16/32-bit sequence
+            rv32c_cpu_loadstore_test.zig — C.LW, C.SW, C.LWSP, C.SWSP, compact register variants
+            rv32c_cpu_branch_test.zig    — C.BEQZ taken/not-taken, C.BNEZ taken/not-taken
+            rv32c_cpu_misc_test.zig      — C.MV, C.EBREAK
       rv32m/
         rv32m.zig         — RV32M multiply/divide opcodes (8 variants), decodeR(), execute(), format()
         rv32m_test.zig    — hub → rv32m_mul_test.zig, rv32m_div_test.zig
@@ -64,8 +78,8 @@ src/
         zba_test.zig      — Zba decode + execute tests
       zbb/
         zbb.zig           — Zbb basic bit-manipulation opcodes (18 variants), decodeR(), decodeIAlu(), execute()
-        zbb_test.zig      — hub → zbb_arith_test.zig, zbb_bitcount_test.zig, zbb_rotate_test.zig
-          zbb_bitcount_test.zig — decode + CLZ/CTZ/CPOP tests; imports zbb_sext_test.zig
+        zbb_test.zig      — hub → zbb_arith_test.zig, zbb_bitcount_test.zig, zbb_sext_test.zig, zbb_rotate_test.zig
+          zbb_bitcount_test.zig — decode + CLZ/CTZ/CPOP tests
           zbb_sext_test.zig     — SEXT_B/SEXT_H/ZEXT_H execute tests
       zbs/
         zbs.zig           — Zbs single-bit opcodes (8 variants), decodeR(), decodeIAlu(), execute()
@@ -97,7 +111,7 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 - `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instructions`, `decoders`
 - `decoders.zig` is the namespace hub for the `decoders/` directory — re-exports `branch_decoder`, `lut_decoder`, `expand`, `registry`, `bitfields`
 - Each ISA extension owns a subdirectory (`ext/ext.zig` + `ext/ext_test.zig`); tests are pulled in via `test { _ = @import("ext_test.zig"); }` blocks
-- **Test hub pattern**: large test files are split into semantic groups under a 250-line hard limit. The original `*_test.zig` becomes a hub with only `comptime { _ = @import("split_test.zig"); }` blocks — source files keep their single `@import("..._test.zig")` unchanged
+- **Test hub pattern**: test files are split into semantic groups by topic (e.g., `*_branch_test.zig`, `*_atomic_test.zig`). The hub `*_test.zig` contains only `comptime { _ = @import("split_test.zig"); }` blocks — source files import only the hub
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
 - Shared test utilities live in `test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)

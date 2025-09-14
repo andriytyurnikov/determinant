@@ -118,6 +118,8 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 ### Testing Patterns
 
 - Each extension has comprehensive execute tests with edge cases (overflow, sign-extension boundaries, spec-mandated special cases like DIV-by-zero → -1)
+- Test files are grouped semantically (by topic, not by size): `*_branch_test.zig`, `*_atomic_test.zig`, `*_csr_test.zig`, etc.
+- CPU tests use `cpu_test.zig` as a hub; extension tests use `ext_test.zig` hubs — source files import only the hub
 
 ## Traps to Avoid
 
@@ -193,7 +195,7 @@ const result = try vm.run(10_000);
 ## Adding a New Extension
 
 1. Create `src/vm/instructions/newext/newext.zig` with `Opcode` enum, `meta()`, `name()`, `format()`, `decodeR()`/`decodeIAlu()`, and `execute()`
-2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests. If tests exceed 250 lines, split into semantic files (e.g., `newext_decode_test.zig`, `newext_exec_test.zig`) and use the hub pattern with `comptime { _ = @import("split.zig"); }` blocks
+2. Create `src/vm/instructions/newext/newext_test.zig` with decode + execute tests. Split into semantic files by topic (e.g., `newext_decode_test.zig`, `newext_exec_test.zig`) and use the hub pattern with `comptime { _ = @import("split.zig"); }` blocks
 3. Add `test { _ = @import("newext_test.zig"); }` in the source file
 4. Add variant to `instructions.zig` `Opcode` tagged union
 5. Add decode dispatch in `decoders/branch_decoder.zig` — respect priority order in `decodeR()`/`decodeIAlu()`

@@ -278,9 +278,5 @@ test "CpuType: minimum memory size" {
 }
 
 test {
-    _ = @import("cpu_init_test.zig");
-    _ = @import("cpu_memory_test.zig");
-    _ = @import("cpu_pipeline_test.zig");
-    _ = @import("cpu_boundary_test.zig");
-    _ = @import("cpu_integration_test.zig");
+    _ = @import("cpu_test.zig");
 }

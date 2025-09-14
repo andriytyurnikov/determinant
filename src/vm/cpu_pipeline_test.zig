@@ -64,73 +64,16 @@ test "step: full demo program" {
     try std.testing.expectEqual(@as(u32, 110), std.mem.readInt(u32, cpu.memory[100..][0..4], .little));
 }
 
-// --- run() tests ---
-
-test "run: stops on ECALL" {
-    var cpu = Cpu.init();
-    // ADDI x1, x0, 42
-    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x02A00093, .little);
-    // ECALL
-    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
-
-    const result = try cpu.run(100);
-    try std.testing.expectEqual(StepResult.ecall, result);
-    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
-    try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
-}
-
-test "run: stops on EBREAK" {
-    var cpu = Cpu.init();
-    // EBREAK
-    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00100073, .little);
-
-    const result = try cpu.run(100);
-    try std.testing.expectEqual(StepResult.ebreak, result);
-    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
-}
-
-test "run: respects max_cycles" {
-    var cpu = Cpu.init();
-    // 4 NOPs then ECALL
-    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[8..][0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[12..][0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[16..][0..4], 0x00000073, .little);
-
-    // Limit to 2 cycles — should stop before ECALL
-    const result = try cpu.run(2);
-    try std.testing.expectEqual(StepResult.@"continue", result);
-    try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
-    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
-}
-
-test "run: max_cycles exactly at ECALL" {
-    var cpu = Cpu.init();
-    // NOP then ECALL
-    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
-    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
-
-    // max_cycles=2: should execute both instructions
-    const result = try cpu.run(2);
-    try std.testing.expectEqual(StepResult.ecall, result);
-    try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count);
-}
-
 // --- Branch and error path tests ---
 
 test "step: branch beyond memory causes PCOutOfBounds on next fetch" {
     const h = @import("instructions/test_helpers.zig");
     var cpu = Cpu.init();
-    // BEQ x0, x0, +4094 (large forward branch, always taken since x0==x0)
-    // Target = 0 + 4094 = 4094, still in memory — but let's target beyond MEMORY_SIZE
-    // Place instruction near end of memory, branch forward past it
+    // BEQ x0, x0, +16 → target beyond MEMORY_SIZE → out of bounds
     const pc: u32 = MEMORY_SIZE - 8;
     cpu.pc = pc;
-    // BEQ x0, x0, +16 → target = (MEMORY_SIZE - 8) + 16 = MEMORY_SIZE + 8 → out of bounds
     h.loadInst(&cpu, h.encodeB(0b000, 0, 0, 16));
     _ = try cpu.step(); // branch is taken, sets next_pc beyond memory
-    // PC is now MEMORY_SIZE + 8 (wrapped via +%)
     // Next fetch should fail
     try std.testing.expectError(error.PCOutOfBounds, cpu.step());
 }
@@ -140,7 +83,7 @@ test "step: JAL beyond memory causes PCOutOfBounds on next fetch" {
     var cpu = Cpu.init();
     const pc: u32 = MEMORY_SIZE - 4;
     cpu.pc = pc;
-    // JAL x1, +8 → target = (MEMORY_SIZE - 4) + 8 = MEMORY_SIZE + 4 → out of bounds
+    // JAL x1, +8 → target beyond MEMORY_SIZE → out of bounds
     h.loadInst(&cpu, h.encodeJ(1, 8));
     _ = try cpu.step(); // JAL taken, link saved, next_pc beyond memory
     // Verify link register saved correctly
@@ -196,9 +139,4 @@ test "step: misaligned LW causes MisalignedAccess" {
     // LW x2, 0(x1)
     h4.loadInst(&cpu, h4.encodeI(0b0000011, 0b010, 2, 1, 0));
     try std.testing.expectError(error.MisalignedAccess, cpu.step());
-}
-
-// Determinism test in separate file
-comptime {
-    _ = @import("cpu_determinism_test.zig");
 }
