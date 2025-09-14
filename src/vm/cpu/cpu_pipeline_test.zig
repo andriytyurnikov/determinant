@@ -67,7 +67,7 @@ test "step: full demo program" {
 // --- Branch and error path tests ---
 
 test "step: branch beyond memory causes PCOutOfBounds on next fetch" {
-    const h = @import("instructions/test_helpers.zig");
+    const h = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     // BEQ x0, x0, +16 → target beyond MEMORY_SIZE → out of bounds
     const pc: u32 = MEMORY_SIZE - 8;
@@ -79,7 +79,7 @@ test "step: branch beyond memory causes PCOutOfBounds on next fetch" {
 }
 
 test "step: JAL beyond memory causes PCOutOfBounds on next fetch" {
-    const h = @import("instructions/test_helpers.zig");
+    const h = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     const pc: u32 = MEMORY_SIZE - 4;
     cpu.pc = pc;
@@ -102,7 +102,7 @@ test "step: cycle_count wrapping at u64 max" {
 }
 
 test "step: backward branch (negative offset)" {
-    const h2 = @import("instructions/test_helpers.zig");
+    const h2 = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     // NOP at address 0
     std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
@@ -124,7 +124,7 @@ test "step: illegal instruction 0xFFFFFFFF" {
 }
 
 test "step: OOB load via LW causes AddressOutOfBounds" {
-    const h3 = @import("instructions/test_helpers.zig");
+    const h3 = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     cpu.writeReg(1, MEMORY_SIZE); // address out of bounds
     // LW x2, 0(x1) = encodeI(0b0000011, 0b010, 2, 1, 0)
@@ -133,7 +133,7 @@ test "step: OOB load via LW causes AddressOutOfBounds" {
 }
 
 test "step: misaligned LW causes MisalignedAccess" {
-    const h4 = @import("instructions/test_helpers.zig");
+    const h4 = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     cpu.writeReg(1, 3); // misaligned for word access
     // LW x2, 0(x1)

@@ -19,7 +19,7 @@ test "x0 hardwired to zero" {
 }
 
 test "x0 write-protection: ADD to x0 leaves it zero" {
-    const h = @import("instructions/test_helpers.zig");
+    const h = @import("../instructions/test_helpers.zig");
     var cpu = Cpu.init();
     cpu.writeReg(1, 100);
     cpu.writeReg(2, 200);

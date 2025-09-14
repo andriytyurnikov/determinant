@@ -1,6 +1,6 @@
 const std = @import("std");
 const cpu_mod = @import("cpu.zig");
-const decoders = @import("decoders.zig");
+const decoders = @import("../decoders.zig");
 const Cpu = cpu_mod.Cpu;
 const CpuType = cpu_mod.CpuType;
 const StepResult = cpu_mod.StepResult;

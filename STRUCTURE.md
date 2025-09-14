@@ -6,20 +6,22 @@ src/
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant")
   vm.zig                  — namespace hub for vm/ directory; re-exports cpu, instructions, decoders
   vm/
-    cpu.zig               — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(default_memory_size, default_decode) default (64KB via -Dmemory_size), step/run executor, memory helpers
-    cpu_exec_i.zig        — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
-    cpu_test.zig          — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant
-      cpu_init_test.zig       — init and register tests
-      cpu_memory_test.zig     — memory read/write tests
-      cpu_pipeline_test.zig   — pipeline infrastructure, branch/error path tests
-      cpu_run_test.zig        — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited)
-      cpu_determinism_test.zig — determinism: identical programs → identical state
-      cpu_dispatch_test.zig   — CSR pipeline invariant, extension dispatch (MUL, SH1ADD, CLZ, BSET)
-      cpu_boundary_test.zig   — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0])
-      cpu_store_upper_test.zig — CPU-level SB, SH, LUI, AUIPC tests
-      cpu_atomic_test.zig     — LR/SC scenarios, AMO operations, reservation invalidation
-      cpu_csr_test.zig        — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
-      cpu_invariant_test.zig  — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
+    cpu.zig               — namespace hub for cpu/; re-exports CpuType, Cpu, StepResult, DecodeFn, default_memory_size
+    cpu/
+      cpu.zig             — CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) generic, Cpu = CpuType(default_memory_size, default_decode) default (64KB via -Dmemory_size), step/run executor, memory helpers
+      exec_i.zig          — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
+      cpu_test.zig        — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant
+        cpu_init_test.zig       — init and register tests
+        cpu_memory_test.zig     — memory read/write tests
+        cpu_pipeline_test.zig   — pipeline infrastructure, branch/error path tests
+        cpu_run_test.zig        — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited)
+        cpu_determinism_test.zig — determinism: identical programs → identical state
+        cpu_dispatch_test.zig   — CSR pipeline invariant, extension dispatch (MUL, SH1ADD, CLZ, BSET)
+        cpu_boundary_test.zig   — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0])
+        cpu_store_upper_test.zig — CPU-level SB, SH, LUI, AUIPC tests
+        cpu_atomic_test.zig     — LR/SC scenarios, AMO operations, reservation invalidation
+        cpu_csr_test.zig        — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
+        cpu_invariant_test.zig  — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
     instructions.zig      — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction
     decoders.zig          — namespace hub for decoders/; re-exports branch_decoder, lut_decoder, expand, registry, bitfields; canonical DecodeError with comptime divergence assertion
     decoders/
@@ -93,12 +95,12 @@ build.zig.zon             — package metadata (name, version, dependencies, fin
 All edges point downward — no cycles exist and none should be introduced.
 
 ```
-main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
+main.zig ─→ root.zig ─→ cpu.zig (hub) ─→ cpu/cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
                       ↘ decoders.zig ─→ lut_decoder / branch_decoder
                                      ↘ bitfields.zig, expand.zig, registry.zig
 ```
 
-- `cpu.zig` imports `cpu_exec_i.zig` (RV32I execute logic) — same level, no upward dependency
+- `cpu.zig` is the namespace hub; `cpu/cpu.zig` is the implementation (imports `exec_i.zig` for RV32I execute logic — same directory, no upward dependency)
 - Extensions (rv32i, rv32m, rv32a, zicsr, zba, zbb, zbs) import only `format.zig` — never cpu, decoders, or instructions
 - RV32C imports only `rv32i.zig` and `format.zig` (decode-time frontend, no upward dependency)
 - `rv32c_expand.zig` imports `rv32c.zig`, `rv32i.zig`, and `rv32c_imm.zig` — no upward dependency
@@ -109,6 +111,7 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
 - `src/` holds entry points (`root.zig`, `main.zig`); `src/vm/` holds the VM library implementation
 - `vm.zig` is the namespace hub for the `vm/` directory module — `root.zig` imports it via `@import("vm.zig")` and re-exports `cpu`, `instructions`, `decoders`
+- `cpu.zig` is the namespace hub for the `cpu/` directory — re-exports `CpuType`, `Cpu`, `StepResult`, `DecodeFn`, `default_memory_size`
 - `decoders.zig` is the namespace hub for the `decoders/` directory — re-exports `branch_decoder`, `lut_decoder`, `expand`, `registry`, `bitfields`
 - Each ISA extension owns a subdirectory (`ext/ext.zig` + `ext/ext_test.zig`); tests are pulled in via `test { _ = @import("ext_test.zig"); }` blocks
 - **Test hub pattern**: test files are split into semantic groups by topic (e.g., `*_branch_test.zig`, `*_atomic_test.zig`). The hub `*_test.zig` contains only `comptime { _ = @import("split_test.zig"); }` blocks — source files import only the hub

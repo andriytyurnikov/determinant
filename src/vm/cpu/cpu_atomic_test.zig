@@ -1,7 +1,7 @@
 const std = @import("std");
 const cpu_mod = @import("cpu.zig");
 const Cpu = cpu_mod.Cpu;
-const h = @import("instructions/test_helpers.zig");
+const h = @import("../instructions/test_helpers.zig");
 
 // --- Atomic operation tests (LR/SC, AMO) ---
 
