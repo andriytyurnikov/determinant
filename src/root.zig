@@ -1,13 +1,12 @@
 //! Public API for the Determinant RISC-V VM library.
 
 const std = @import("std");
-const vm = @import("vm.zig");
 
-pub const cpu = vm.cpu;
-pub const instructions = vm.instructions;
-pub const decoders = vm.decoders;
+pub const cpu = @import("cpu.zig");
+pub const instructions = @import("instructions.zig");
+pub const decoders = @import("decoders.zig");
 /// Reference decoder (branch-based) — kept for conformance testing and documentation.
-pub const branch_decoder = vm.decoders.branch_decoder;
+pub const branch_decoder = decoders.branch;
 
 // Convenience aliases
 pub const CpuType = cpu.CpuType;
@@ -19,10 +18,10 @@ pub const Instruction = instructions.Instruction;
 pub const Opcode = instructions.Opcode;
 pub const Format = instructions.Format;
 /// Decode via primary (LUT-based) decoder — used by cpu.zig for execution. Prefer for performance.
-pub const decode = vm.decoders.lut_decoder.decode;
+pub const decode = decoders.lut.decode;
 /// Decode via reference (branch-based) decoder — for conformance testing and readability.
 pub const decodeBranch = branch_decoder.decode;
-pub const DecodeError = vm.decoders.DecodeError;
+pub const DecodeError = decoders.DecodeError;
 
 test {
     std.testing.refAllDecls(@This());
