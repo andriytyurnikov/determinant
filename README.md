@@ -55,7 +55,7 @@ zig build test-all      # run tests with both decoder backends (LUT + branch)
 
 ## Architecture
 
-Library core in `src/vm/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the full annotated file tree and module conventions.
+Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the full annotated file tree and module conventions.
 
 ## Public API
 
@@ -78,7 +78,7 @@ The library is available via `@import("determinant")`.
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
 - **`decode(u32)`** — decode using the primary comptime LUT decoder (fast, branchless), returns `Instruction` or `DecodeError`
 - **`decodeBranch(u32)`** — decode using the reference branch-based decoder (for conformance testing and readability)
-- **`decoders`** — access to both decoder modules (`decoders.branch_decoder`, `decoders.lut_decoder`)
+- **`decoders`** — access to both decoder modules (`decoders.branch`, `decoders.lut`)
 - **`branch_decoder`** — direct access to the reference branch-based decoder module
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"`, `ecall`, `ebreak`

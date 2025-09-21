@@ -83,7 +83,7 @@ src/
     registry.zig          — opcode registry: Entry struct, 95-entry registry array, Strategy enum, strategyFor()
     conformance_test.zig  — conformance suite (field-by-field match vs branch decoder)
     rv32c_cross_test.zig  — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
-      rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
+    rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
     branch.zig            — reference decoder: branch-based dispatch to extension decoders (companion file for branch/)
     branch/
       tests.zig           — hub → rtype, itype, shift, uj, edge split files
