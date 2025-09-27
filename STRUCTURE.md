@@ -86,20 +86,26 @@ src/
     rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
     branch.zig            — reference decoder: branch-based dispatch to extension decoders (companion file for branch/)
     branch/
-      tests.zig           — hub → rtype, itype, shift, uj, edge split files
+      test_helpers.zig    — shared branch decoder test helpers (expectRoundTripI/S/B/U/Csr)
+      tests.zig           — hub → rtype, alu, shift, load_store, branch, jump, atomic, system, edge
         rtype_test.zig          — R-type round-trip tests (RV32I, M, Zba, Zbb, Zbs)
-        itype_test.zig          — I-type round-trip tests (ALU, loads, CSR, system)
+        alu_test.zig            — I-type ALU round-trip tests (ADDI, SLTI, XORI, ORI, SLTIU, ANDI)
         shift_test.zig          — shift instruction round-trip tests
-        uj_test.zig             — U/J-type and store round-trip tests
-        edge_test.zig           — edge cases, error paths, FENCE, atomics
+        load_store_test.zig     — load/store round-trip tests (LB, LW, SB, SH, SW)
+        branch_test.zig         — B-type branch round-trip tests (BEQ, BNE, BLT, BGE, BLTU, BGEU)
+        jump_test.zig           — U/J-type and JALR round-trip tests (LUI, AUIPC, JAL, JALR)
+        atomic_test.zig         — RV32A atomic round-trip tests (all 11 opcodes)
+        system_test.zig         — CSR and FENCE round-trip tests
+        edge_test.zig           — edge cases, invalid encodings, load variants, ZEXT_H, operand isolation
     lut.zig               — primary decoder: comptime LUT tables (level1 strategy → format-specific tables) derived from registry.zig (companion file for lut/)
     lut/
-      tests.zig           — hub → rtype, ialu, mem, system split files
+      test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
+      tests.zig           — hub → rtype, ialu, load_store_branch, jump, system
         rtype_test.zig          — R-type LUT tests (base, M, Zba, Zbb, Zbs)
         ialu_test.zig           — I-type ALU LUT tests (shifts, Zbb, Zbs)
-        mem_test.zig            — load/store/branch/U/J/FENCE LUT tests
-        system_test.zig         — atomic/system/misc LUT tests
-      test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
+        load_store_branch_test.zig — load/store/branch valid+invalid LUT tests
+        jump_test.zig           — LUI/AUIPC, JAL, JALR LUT tests
+        system_test.zig         — atomic/system/FENCE/misc LUT tests
 build.zig                 — build system configuration (library module, executable, test and run steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```

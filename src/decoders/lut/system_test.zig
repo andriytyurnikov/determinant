@@ -6,8 +6,10 @@ const expectOp = t.expectOp;
 const expectNull = t.expectNull;
 const encodeRBase = t.encodeRBase;
 const encodeIAlu = t.encodeIAlu;
+const encodeI = t.encodeI;
 const encodeAtomic = t.encodeAtomic;
 const encodeSystem = t.encodeSystem;
+const encodeFence = t.encodeFence;
 
 // --- Atomic ---
 
@@ -66,6 +68,21 @@ test "System: CSR all 6 instructions" {
 
 test "System: funct3=100 → null" {
     try expectNull(decode(encodeSystem(0b100, 1, 2, 0x300)));
+}
+
+// --- FENCE ---
+
+test "FENCE: funct3=0 → FENCE" {
+    try expectOp(.{ .i = .FENCE }, decode(encodeFence()));
+}
+
+test "FENCE.I: funct3=001 → FENCE_I" {
+    try expectOp(.{ .i = .FENCE_I }, decode(encodeI(0b0001111, 0b001, 0, 0, 0)));
+}
+
+test "FENCE: funct3≥2 → null" {
+    try expectNull(decode(encodeI(0b0001111, 0b010, 0, 0, 0)));
+    try expectNull(decode(encodeI(0b0001111, 0b111, 0, 0, 0)));
 }
 
 // --- Misc ---

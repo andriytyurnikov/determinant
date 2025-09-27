@@ -1,9 +1,9 @@
 /// Edge cases, invalid encodings, load variants, ZEXT_H, operand isolation tests.
 const std = @import("std");
+const t = @import("test_helpers.zig");
 const decoder = @import("../branch.zig");
-const instructions = @import("../../instructions.zig");
-const Opcode = instructions.Opcode;
-const h = @import("../../instructions/test_helpers.zig");
+const Opcode = t.Opcode;
+const h = t.h;
 
 // --- Edge cases ---
 
@@ -94,23 +94,7 @@ test "I-type round-trip: LHU" {
     try expectRoundTripI(0b0000011, 0b101, .{ .i = .LHU });
 }
 
-fn expectRoundTripI(opcode: u7, f3: u3, expected_op: Opcode) !void {
-    const test_regs = [_]u5{ 0, 1, 15, 31 };
-    const test_imms = [_]u12{ 0, 1, 0x7FF, 0x800, 0xFFF };
-    for (test_regs) |rd_v| {
-        for (test_regs) |rs1_v| {
-            for (test_imms) |imm12| {
-                const raw = h.encodeI(opcode, f3, rd_v, rs1_v, imm12);
-                const inst = try decoder.decode(raw);
-                try std.testing.expectEqual(expected_op, inst.op);
-                try std.testing.expectEqual(rd_v, inst.rd);
-                try std.testing.expectEqual(rs1_v, inst.rs1);
-                const expected_imm: i32 = @as(i12, @bitCast(imm12));
-                try std.testing.expectEqual(expected_imm, inst.imm);
-            }
-        }
-    }
-}
+const expectRoundTripI = t.expectRoundTripI;
 
 // --- ZEXT_H constraint tests ---
 
