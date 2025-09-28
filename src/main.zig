@@ -17,7 +17,8 @@ pub fn main() !void {
     defer stdout.flush() catch {};
     defer stderr.flush() catch {};
 
-    mainInner(stdout, stderr) catch |err| switch (err) {
+    var args = std.process.args();
+    mainInner(stdout, stderr, &args) catch |err| switch (err) {
         error.UserError => {
             stdout.flush() catch {};
             stderr.flush() catch {};
@@ -27,8 +28,7 @@ pub fn main() !void {
     };
 }
 
-fn mainInner(stdout: anytype, stderr: anytype) !void {
-    var args = std.process.args();
+pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
     _ = args.next(); // skip program name
 
     if (args.next()) |first_arg| {
@@ -76,7 +76,7 @@ fn mainInner(stdout: anytype, stderr: anytype) !void {
     }
 }
 
-fn runDemo(stdout: anytype) !void {
+pub fn runDemo(stdout: anytype) !void {
     try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
     // Hardcoded 5-instruction RV32I program:
@@ -142,7 +142,7 @@ fn runDemo(stdout: anytype) !void {
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
 }
 
-fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
+pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
@@ -204,7 +204,7 @@ fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) 
     try printResult(stdout, &vm, result);
 }
 
-fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
+pub fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
     switch (result) {
         .@"continue" => try stdout.print("\nCycle limit reached after {d} cycles (program did not terminate)\n", .{vm.cycle_count}),
         .ecall, .ebreak => try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count }),
@@ -219,7 +219,7 @@ fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !voi
     }
 }
 
-fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
+pub fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
     const op_name = if (inst.compressed_op) |c_op| c_op.name() else inst.op.name();
     switch (inst.op) {
         .i => |i_op| switch (i_op) {
@@ -256,4 +256,8 @@ fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
             .BCLRI, .BEXTI, .BINVI, .BSETI => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
         },
     }
+}
+
+test {
+    _ = @import("main/tests.zig");
 }
