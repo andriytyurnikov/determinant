@@ -149,3 +149,18 @@ test "readWord: one past last valid address fails" {
     // MEMORY_SIZE is out of bounds
     try std.testing.expectError(error.AddressOutOfBounds, cpu.readWord(MEMORY_SIZE));
 }
+
+test "writeByte out of bounds" {
+    var cpu = Cpu.init();
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.writeByte(MEMORY_SIZE, 0));
+}
+
+test "readHalfword out of bounds" {
+    var cpu = Cpu.init();
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.readHalfword(MEMORY_SIZE));
+}
+
+test "writeHalfword out of bounds" {
+    var cpu = Cpu.init();
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.writeHalfword(MEMORY_SIZE, 0));
+}
