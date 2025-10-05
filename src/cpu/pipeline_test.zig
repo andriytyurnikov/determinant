@@ -140,3 +140,95 @@ test "step: misaligned LW causes MisalignedAccess" {
     h4.loadInst(&cpu, h4.encodeI(0b0000011, 0b010, 2, 1, 0));
     try std.testing.expectError(error.MisalignedAccess, cpu.step());
 }
+
+// --- Store error propagation tests ---
+
+test "step: OOB SB causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeS(0b000, 1, 2, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: OOB SH causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeS(0b001, 1, 2, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: misaligned SH causes MisalignedAccess" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 3);
+    h.loadInst(&cpu, h.encodeS(0b001, 1, 2, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
+
+test "step: OOB SW causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeS(0b010, 1, 2, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: misaligned SW causes MisalignedAccess" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 3);
+    h.loadInst(&cpu, h.encodeS(0b010, 1, 2, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
+
+// --- Remaining load error propagation tests ---
+
+test "step: OOB LB causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b000, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: OOB LBU causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b100, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: OOB LH causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b001, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: misaligned LH causes MisalignedAccess" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 3);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b001, 2, 1, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
+
+test "step: OOB LHU causes AddressOutOfBounds" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b101, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: misaligned LHU causes MisalignedAccess" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 3);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b101, 2, 1, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
