@@ -155,3 +155,95 @@ test "step: LR.W + SB invalidates reservation + SC.W fails" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5)); // failure
 }
+
+test "step: LR.W + SH invalidates reservation + SC.W fails" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 256, 0x42);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0x99);
+    cpu.writeReg(3, 0xBEEF);
+
+    // LR.W x4, (x1)
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x42), cpu.readReg(4));
+
+    // SH x3, 0(x1) — halfword store to same word-aligned address
+    h.loadInst(&cpu, h.encodeS(0b001, 1, 3, 0));
+    _ = try cpu.step();
+
+    // SC.W x5, x2, (x1) — should fail
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 5, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5));
+}
+
+test "step: failed SC.W clears reservation" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 256, 0x42);
+    h.storeWordAt(&cpu, 260, 0x00);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(5, 260);
+    cpu.writeReg(2, 0x99);
+
+    // LR.W x3, (x1) — reserve address 256
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
+    _ = try cpu.step();
+
+    // SC.W x4, x2, (x5) — different address → fails
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 5, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4));
+
+    // SC.W x6, x2, (x1) — original address, but reservation was cleared
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 6, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(6));
+    try std.testing.expectEqual(@as(u32, 0x42), try cpu.readWord(256)); // unchanged
+}
+
+test "step: AMO invalidates reservation + SC.W fails" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 256, 100);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0x99);
+    cpu.writeReg(3, 50);
+
+    // LR.W x4, (x1)
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 100), cpu.readReg(4));
+
+    // AMOADD.W x5, x3, (x1) — atomic add, also writes to same word
+    h.loadInst(&cpu, h.encodeAtomic(0b00000, 5, 1, 3));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 150), try cpu.readWord(256));
+
+    // SC.W x6, x2, (x1) — should fail (AMO invalidated reservation)
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 6, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(6));
+    try std.testing.expectEqual(@as(u32, 150), try cpu.readWord(256)); // AMO value preserved
+}
+
+test "step: SB to byte within reserved word invalidates reservation" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 256, 0x42);
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0x99);
+    cpu.writeReg(7, 258); // byte 2 of the same word
+    cpu.writeReg(3, 0xFF);
+
+    // LR.W x4, (x1)
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
+    _ = try cpu.step();
+
+    // SB x3, 0(x7) — store byte at address 258, same word as 256
+    h.loadInst(&cpu, h.encodeS(0b000, 7, 3, 0));
+    _ = try cpu.step();
+
+    // SC.W x5, x2, (x1) — should fail
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 5, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5));
+}
