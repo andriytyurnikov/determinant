@@ -232,3 +232,83 @@ test "step: misaligned LHU causes MisalignedAccess" {
     h.loadInst(&cpu, h.encodeI(0b0000011, 0b101, 2, 1, 0));
     try std.testing.expectError(error.MisalignedAccess, cpu.step());
 }
+
+// --- Post-error CPU state consistency tests ---
+
+test "step: decode error preserves PC and cycle_count" {
+    var cpu = Cpu.init();
+    // NOP at address 0
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+
+    // Illegal instruction at address 4
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0xFFFFFFFF, .little);
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+
+    // PC and cycle_count unchanged after error
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+}
+
+test "step: load error preserves PC, cycle_count, and rd" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    // ADDI x2, x0, 42 at address 0
+    h.loadInst(&cpu, h.encodeI(0b0010011, 0b000, 2, 0, 42));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(2));
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+
+    // Set x1 = MEMORY_SIZE (OOB), then LW x2, 0(x1) at address 4
+    cpu.writeReg(1, MEMORY_SIZE);
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b010, 2, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+
+    // PC, cycle_count, and x2 unchanged after error
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(2));
+}
+
+test "step: store error preserves PC, cycle_count, and memory" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    // ADDI x1, x0, 100 at address 0
+    h.loadInst(&cpu, h.encodeI(0b0010011, 0b000, 1, 0, 100));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 100), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+
+    // Write known value at memory[100], then point x1 OOB for SW
+    cpu.memory[100] = 0xAA;
+    cpu.writeReg(1, MEMORY_SIZE);
+    // SW x2, 0(x1) at address 4 — OOB store
+    h.loadInst(&cpu, h.encodeS(0b010, 1, 2, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+
+    // PC, cycle_count, and memory unchanged after error
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+    try std.testing.expectEqual(@as(u8, 0xAA), cpu.memory[100]);
+}
+
+test "step: fetch error preserves PC and cycle_count" {
+    var cpu = Cpu.init();
+    // NOP at address 0
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+
+    // Set PC out of bounds directly
+    cpu.pc = MEMORY_SIZE;
+    try std.testing.expectError(error.PCOutOfBounds, cpu.step());
+
+    // PC and cycle_count unchanged after error
+    try std.testing.expectEqual(@as(u32, MEMORY_SIZE), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+}
