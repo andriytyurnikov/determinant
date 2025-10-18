@@ -6,6 +6,8 @@ const h = @import("../test_helpers.zig");
 const encodeR = h.encodeR;
 const encodeI = h.encodeI;
 const encodeB = h.encodeB;
+const encodeS = h.encodeS;
+const encodeU = h.encodeU;
 const loadInst = h.loadInst;
 
 // === Boundary value tests (wrapping arithmetic, shift masking, sign extension) ===
@@ -168,4 +170,57 @@ test "step: LW with negative offset" {
     loadInst(&cpu, encodeI(0b0000011, 0b010, 2, 1, 0xFFC));
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xDEADBEEF), cpu.readReg(2));
+}
+
+// === PC/address wrapping arithmetic tests ===
+
+test "step: JALR wraps past u32::MAX to zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    // JALR x2, 2(x1) → target = (0xFFFFFFFF +% 2) & 0xFFFFFFFE = 1 & 0xFFFFFFFE = 0
+    loadInst(&cpu, encodeI(0b1100111, 0b000, 2, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(2)); // link = old_pc + 4
+}
+
+test "step: JALR large base + sign-extended negative imm wraps" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    // JALR x2, -1(x1) → imm=0xFFF sign-extended to 0xFFFFFFFF
+    // target = (0x80000000 +% 0xFFFFFFFF) & 0xFFFFFFFE = 0x7FFFFFFF & 0xFFFFFFFE = 0x7FFFFFFE
+    loadInst(&cpu, encodeI(0b1100111, 0b000, 2, 1, 0xFFF));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFE), cpu.pc);
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(2)); // link = old_pc + 4
+}
+
+test "step: LBU with address wrapping into valid memory" {
+    var cpu = Cpu.init();
+    cpu.memory[8] = 0xAB;
+    cpu.writeReg(1, 0xFFFFFFFF);
+    // LBU x2, 9(x1) → addr = 0xFFFFFFFF +% 9 = 8
+    loadInst(&cpu, encodeI(0b0000011, 0b100, 2, 1, 9));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xAB), cpu.readReg(2));
+}
+
+test "step: SB with address wrapping into valid memory" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0x42);
+    // SB x2, 9(x1) → addr = 0xFFFFFFFF +% 9 = 8
+    loadInst(&cpu, encodeS(0b000, 1, 2, 9));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u8, 0x42), cpu.memory[8]);
+}
+
+test "step: AUIPC wraps past u32::MAX" {
+    var cpu = Cpu.init();
+    cpu.pc = 0x1000;
+    // AUIPC x1, 0xFFFFF → result = 0x1000 +% 0xFFFFF000 = 0
+    loadInst(&cpu, encodeU(0b0010111, 1, 0xFFFFF));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 0x1004), cpu.pc);
 }
