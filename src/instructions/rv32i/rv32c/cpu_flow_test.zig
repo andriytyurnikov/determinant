@@ -5,6 +5,18 @@ const h = @import("../../test_helpers.zig");
 
 // === CPU step tests: compressed flow control (LI, ADDI, jumps, mixed sequences) ===
 
+test "CPU step: C.LUI loads upper immediate" {
+    var cpu = Cpu.init();
+    // C.LUI x1, 1 = 0x6085
+    h.storeHalfAt(&cpu, 0, 0x6085);
+    h.storeHalfAt(&cpu, 2, 0x0001); // NOP
+
+    _ = try cpu.step();
+    // nzimm=1 placed in bits[16:12], result = 1 << 12 = 0x1000
+    try std.testing.expectEqual(@as(u32, 0x1000), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 2), cpu.pc);
+}
+
 test "CPU step: C.LI sets register, PC advances by 2" {
     var cpu = Cpu.init();
     // C.LI x1, 5 = 0x4095
@@ -58,6 +70,23 @@ test "CPU step: C.JALR links PC+2" {
     _ = try cpu.step(); // C.JALR x1 → pc=8, ra=4
 
     try std.testing.expectEqual(@as(u32, 4), cpu.readReg(1)); // ra = old_pc(2) + 2
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}
+
+test "CPU step: C.JR jumps without linking" {
+    var cpu = Cpu.init();
+    // C.LI x1, 8 = 0x40A1
+    h.storeHalfAt(&cpu, 0, 0x40A1);
+    // C.JR x1 at offset 2 = 0x8082
+    h.storeHalfAt(&cpu, 2, 0x8082);
+    // ECALL at offset 8 (the jump target)
+    h.storeWordAt(&cpu, 8, 0x00000073);
+
+    _ = try cpu.step(); // C.LI x1, 8 → pc=2
+    _ = try cpu.step(); // C.JR x1 → pc=8
+
+    // No link: rd=x0, so x1 retains its value (unlike C.JALR which writes ra)
+    try std.testing.expectEqual(@as(u32, 8), cpu.readReg(1));
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
 

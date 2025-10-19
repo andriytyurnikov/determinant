@@ -43,6 +43,18 @@ test "CPU step: C.AND" {
     try std.testing.expectEqual(@as(u32, 0x0F), cpu.readReg(8));
 }
 
+test "CPU step: C.XOR" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0xFF00FF00);
+    cpu.writeReg(9, 0x0F0F0F0F);
+    // C.XOR x8, x9 = 0x8C25
+    h.storeHalfAt(&cpu, 0, 0x8C25);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xF00FF00F), cpu.readReg(8));
+}
+
 test "CPU step: C.SLLI" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0x01);
@@ -63,6 +75,18 @@ test "CPU step: C.SRLI" {
 
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x08), cpu.readReg(8));
+}
+
+test "CPU step: C.SRAI" {
+    var cpu = Cpu.init();
+    cpu.writeReg(8, 0x80000000);
+    // C.SRAI x8, 1 = 0x8405
+    h.storeHalfAt(&cpu, 0, 0x8405);
+    h.storeHalfAt(&cpu, 2, 0x0001);
+
+    _ = try cpu.step();
+    // Arithmetic right shift preserves sign bit: 0x80000000 >> 1 = 0xC0000000
+    try std.testing.expectEqual(@as(u32, 0xC0000000), cpu.readReg(8));
 }
 
 test "CPU step: C.ANDI" {
