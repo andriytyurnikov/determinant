@@ -217,4 +217,36 @@ test "conformance: compressed instructions (RV32C)" {
     try assertConformance(0x908A);
     // C.SWSP x1, 0(x2) = 0xC006
     try assertConformance(0xC006);
+    // C.ADDI4SPN x8, sp, 4 = 0x0040
+    try assertConformance(0x0040);
+    // C.SW x8, 0(x8) = 0xC000
+    try assertConformance(0xC000);
+    // C.JAL offset=0 = 0x2001
+    try assertConformance(0x2001);
+    // C.ADDI16SP sp, 16 = 0x6141
+    try assertConformance(0x6141);
+    // C.LUI x3, 1 = 0x6185
+    try assertConformance(0x6185);
+    // C.SRLI x8, 1 = 0x8005
+    try assertConformance(0x8005);
+    // C.SRAI x8, 1 = 0x8405
+    try assertConformance(0x8405);
+    // C.ANDI x8, 3 = 0x880D
+    try assertConformance(0x880D);
+    // C.SUB x8, x9 = 0x8C05
+    try assertConformance(0x8C05);
+    // C.XOR x8, x9 = 0x8C25
+    try assertConformance(0x8C25);
+    // C.OR x8, x9 = 0x8C45
+    try assertConformance(0x8C45);
+    // C.AND x8, x9 = 0x8C65
+    try assertConformance(0x8C65);
+    // C.BNEZ x8, 0 = 0xE001
+    try assertConformance(0xE001);
+    // C.MV x3, x4 = 0x8192
+    try assertConformance(0x8192);
+    // C.EBREAK = 0x9002
+    try assertConformance(0x9002);
+    // C.JALR x1 = 0x9082
+    try assertConformance(0x9082);
 }
