@@ -35,6 +35,16 @@ test "step: JAL" {
     try std.testing.expectEqual(@as(u32, 0x108), cpu.pc); // jumped to pc+8
 }
 
+test "step: JAL backward" {
+    var cpu = Cpu.init();
+    cpu.pc = 0x100;
+    // JAL x1, -8 = 0xFF9FF0EF
+    std.mem.writeInt(u32, cpu.memory[0x100..][0..4], 0xFF9FF0EF, .little);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x104), cpu.readReg(1)); // link address
+    try std.testing.expectEqual(@as(u32, 0x0F8), cpu.pc); // 0x100 - 8
+}
+
 test "step: JALR clears LSB" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0x103); // odd address

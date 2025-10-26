@@ -37,6 +37,16 @@ test "step: BNE taken" {
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
 
+test "step: BNE not taken" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    cpu.writeReg(2, 42);
+    // BNE x1, x2, +8 = 0x00209463
+    loadInst(&cpu, 0x00209463);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}
+
 test "step: BLT signed" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0xFFFFFFFF); // -1
@@ -67,6 +77,16 @@ test "step: BLTU unsigned" {
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
 
+test "step: BLTU not taken" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 2);
+    cpu.writeReg(2, 1);
+    // BLTU x1, x2, +8 = 0x0020E463
+    loadInst(&cpu, 0x0020E463);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}
+
 test "step: BGEU unsigned" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0xFFFFFFFF);
@@ -75,4 +95,14 @@ test "step: BGEU unsigned" {
     loadInst(&cpu, 0x0020F463);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}
+
+test "step: BGEU not taken" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 1);
+    cpu.writeReg(2, 2);
+    // BGEU x1, x2, +8 = 0x0020F463
+    loadInst(&cpu, 0x0020F463);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
