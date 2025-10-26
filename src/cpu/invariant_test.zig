@@ -51,6 +51,102 @@ test "step: C.NOP advances PC by 2 with no side effects" {
     }
 }
 
+// --- x0 hardwired-zero write protection tests ---
+
+test "step: LUI x0 — x0 stays zero" {
+    var cpu = Cpu.init();
+    h.loadInst(&cpu, h.encodeU(0b0110111, 0, 0xABCDE));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+}
+
+test "step: JAL x0 — link discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    h.loadInst(&cpu, h.encodeJ(0, 8));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}
+
+test "step: JALR x0 — link discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 100);
+    // JALR x0, x1, 0: opcode=1100111, funct3=000, rd=0, rs1=1, imm=0
+    h.loadInst(&cpu, h.encodeI(0b1100111, 0b000, 0, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 100), cpu.pc);
+}
+
+test "step: AMOSWAP.W x0 — old value discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 256); // address
+    cpu.writeReg(2, 0xBEEF); // new value
+    h.storeWordAt(&cpu, 256, 0xDEAD);
+    // AMOSWAP.W x0, x2, (x1): funct5=00001
+    h.loadInst(&cpu, h.encodeAtomic(0b00001, 0, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xBEEF), h.readWordAt(&cpu, 256));
+}
+
+test "step: SC.W x0 — success code discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 256); // address
+    cpu.writeReg(2, 0xCAFE); // value to store
+    h.storeWordAt(&cpu, 256, 0x1234);
+    // LR.W x3, (x1): funct5=00010, rs2=0
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
+    _ = try cpu.step();
+    // SC.W x0, x2, (x1): funct5=00011
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 0, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xCAFE), h.readWordAt(&cpu, 256));
+}
+
+test "step: CSRRS x0 — old CSR value discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.csrs.mscratch = 0xF0;
+    cpu.writeReg(1, 0x0F);
+    // CSRRS x0, mscratch, x1
+    h.loadInst(&cpu, h.encodeCsr(0b010, 0, 1, 0x340));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xFF), cpu.csrs.mscratch);
+}
+
+test "step: CSRRC x0 — old CSR value discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.csrs.mscratch = 0xFF;
+    cpu.writeReg(1, 0x0F);
+    // CSRRC x0, mscratch, x1
+    h.loadInst(&cpu, h.encodeCsr(0b011, 0, 1, 0x340));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xF0), cpu.csrs.mscratch);
+}
+
+test "step: CSRRSI x0 — old CSR value discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.csrs.mscratch = 0xF0;
+    // CSRRSI x0, mscratch, 15 (zimm=15 in rs1 field)
+    h.loadInst(&cpu, h.encodeCsr(0b110, 0, 15, 0x340));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xFF), cpu.csrs.mscratch);
+}
+
+test "step: CSRRCI x0 — old CSR value discarded, x0 stays zero" {
+    var cpu = Cpu.init();
+    cpu.csrs.mscratch = 0xFF;
+    // CSRRCI x0, mscratch, 15 (zimm=15 in rs1 field)
+    h.loadInst(&cpu, h.encodeCsr(0b111, 0, 15, 0x340));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0xF0), cpu.csrs.mscratch);
+}
+
 test "step: compressed C.ADDI dispatches through CPU" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 100);
