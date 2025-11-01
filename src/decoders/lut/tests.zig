@@ -5,4 +5,5 @@ comptime {
     _ = @import("load_store_branch_test.zig");
     _ = @import("jump_test.zig");
     _ = @import("system_test.zig");
+    _ = @import("operand_test.zig");
 }

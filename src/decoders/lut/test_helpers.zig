@@ -3,6 +3,7 @@ const instructions = @import("../../instructions.zig");
 pub const Opcode = instructions.Opcode;
 pub const lut = @import("../lut.zig");
 pub const decode = lut.decodeOpcode;
+pub const decodeFull = lut.decode;
 
 // --- Instruction encoding helpers ---
 
