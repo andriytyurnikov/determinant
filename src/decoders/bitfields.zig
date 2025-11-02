@@ -81,3 +81,7 @@ pub fn immJ(raw: u32) i32 {
     const shifted: i32 = @as(i32, @bitCast(imm_raw << 11)) >> 11;
     return shifted;
 }
+
+test {
+    _ = @import("bitfields_test.zig");
+}

@@ -87,6 +87,7 @@ src/
   decoders.zig            — namespace for decoders/; re-exports branch, lut, expand, registry, bitfields; canonical DecodeError with comptime divergence assertion (companion file for decoders/)
   decoders/
     bitfields.zig         — shared bit-field extraction (opcode7, rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
+    bitfields_test.zig    — standalone bit-field extraction tests (register fields, immediate extractors)
     expand.zig            — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
     registry.zig          — opcode registry: Entry struct, 95-entry registry array, Strategy enum, strategyFor()
     conformance_test.zig  — conformance suite (field-by-field match vs branch decoder)
