@@ -247,3 +247,80 @@ test "step: SB to byte within reserved word invalidates reservation" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5));
 }
+
+// --- Atomic bad-address tests ---
+
+const MEMORY_SIZE = Cpu.mem_size;
+
+test "step: LR.W out of bounds" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE); // address = MEMORY_SIZE (one past end)
+
+    // LR.W x3, (x1): funct5=00010
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: LR.W misaligned leaves reservation unchanged" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x101); // misaligned for word access
+
+    // LR.W x3, (x1)
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+    // Reservation must remain null after the error
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
+
+test "step: AMOADD.W misaligned address" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x103); // misaligned
+    cpu.writeReg(2, 50);
+
+    // AMOADD.W x3, x2, (x1): funct5=00000
+    h.loadInst(&cpu, h.encodeAtomic(0b00000, 3, 1, 2));
+    try std.testing.expectError(error.MisalignedAccess, cpu.step());
+}
+
+test "step: AMOSWAP.W out of bounds" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE); // out of bounds
+    cpu.writeReg(2, 0xBBBB);
+
+    // AMOSWAP.W x3, x2, (x1): funct5=00001
+    h.loadInst(&cpu, h.encodeAtomic(0b00001, 3, 1, 2));
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+}
+
+test "step: SC.W to misaligned address fails without error" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 0x100, 0x42);
+    cpu.writeReg(1, 0x100); // aligned address for LR
+    cpu.writeReg(2, 0x99); // value to store
+
+    // LR.W x3, (x1) — reserve address 0x100
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
+    _ = try cpu.step();
+
+    // Change rs1 to misaligned address for SC
+    cpu.writeReg(1, 0x103);
+
+    // SC.W x4, x2, (x1) — reservation(0x100) != 0x103, so fails with rd=1 (no memory error)
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
+    // Reservation cleared after SC (even on failure)
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
+
+test "step: SC.W to out-of-bounds address fails without error" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, MEMORY_SIZE); // out of bounds, no prior LR.W (reservation=null)
+    cpu.writeReg(2, 0x99);
+
+    // SC.W x4, x2, (x1) — reservation is null != MEMORY_SIZE, so fails with rd=1
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
