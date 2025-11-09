@@ -101,6 +101,14 @@ test "step: unknown CSR address is illegal" {
     try std.testing.expectError(error.IllegalInstruction, cpu.step());
 }
 
+test "step: write to unknown non-read-only CSR is illegal" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 42);
+    // CSRRW x0, 0x001, x1 -- unknown CSR, but not read-only
+    loadInst(&cpu, encodeCsr(0b001, 0, 1, 0x001));
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+}
+
 test "step: CSRRS with rs1!=x0 to read-only CSR is illegal" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0);
@@ -162,6 +170,11 @@ test "Csr.read cycleh returns high 32 bits" {
 test "Csr.read unknown address returns IllegalInstruction" {
     const csr = zicsr.Csr{};
     try std.testing.expectError(error.IllegalInstruction, csr.read(0, 0x001));
+}
+
+test "Csr.write to unknown non-read-only address returns IllegalInstruction" {
+    var csr = zicsr.Csr{};
+    try std.testing.expectError(error.IllegalInstruction, csr.write(0x001, 42));
 }
 
 test "Csr.write and read mscratch round-trip" {
