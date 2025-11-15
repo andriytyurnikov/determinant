@@ -82,6 +82,14 @@ test "step: SEXT_H with upper bits set" {
     try std.testing.expectEqual(@as(u32, 0xFFFF8000), cpu.readReg(3));
 }
 
+test "step: SEXT_H boundary 0xFFFF" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x0000FFFF);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 5));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // 0xFFFF as i16 = -1
+}
+
 test "step: SEXT_H zero" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0);

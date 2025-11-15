@@ -65,6 +65,15 @@ test "step: MUL by zero" {
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
 }
 
+test "step: MUL neg1 times neg1" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, encodeR(0b000, 0b0000001, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3)); // lower 32 bits of (-1)*(-1) = 1
+}
+
 // --- MULH execute tests ---
 
 test "step: MULH signed positive" {

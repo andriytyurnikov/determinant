@@ -33,3 +33,13 @@ test "step: FENCE is no-op" {
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
 }
+
+test "step: FENCE.I is no-op" {
+    var cpu = Cpu.init();
+    // FENCE.I = 0x0000100F (opcode=0x0F, funct3=001)
+    loadInst(&cpu, 0x0000100F);
+    const result = try cpu.step();
+    try std.testing.expectEqual(StepResult.@"continue", result);
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+}

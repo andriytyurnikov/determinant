@@ -97,3 +97,29 @@ test "step: BSET with rs2 >= 32 (masking)" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0x00000002), cpu.readReg(3)); // bit 1 set
 }
+
+// --- I-type (immediate) bit 0/31 boundary tests ---
+
+test "step: BCLRI bit 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0100100, 3, 1, 31));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x7FFFFFFF), cpu.readReg(3));
+}
+
+test "step: BEXTI bit 0" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000001);
+    loadInst(&cpu, encodeIShamt(0b101, 0b0100100, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+}
+
+test "step: BSETI bit 0" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    loadInst(&cpu, encodeIShamt(0b001, 0b0010100, 3, 1, 0));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000001), cpu.readReg(3));
+}

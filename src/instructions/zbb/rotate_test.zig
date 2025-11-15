@@ -56,6 +56,24 @@ test "step: ROL with high rs2 (shift amount masking)" {
     try std.testing.expectEqual(@as(u32, 0x00000003), cpu.readReg(3));
 }
 
+test "step: ROL all-zeros unchanged" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 13);
+    loadInst(&cpu, encodeR(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000000), cpu.readReg(3));
+}
+
+test "step: ROL all-ones unchanged" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 13);
+    loadInst(&cpu, encodeR(0b001, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
+}
+
 test "step: ROR basic" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0x80000001);
@@ -90,6 +108,24 @@ test "step: ROR with high rs2 (shift amount masking)" {
     loadInst(&cpu, encodeR(0b101, 0b0110000, 3, 1, 2));
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xC0000000), cpu.readReg(3));
+}
+
+test "step: ROR all-zeros unchanged" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00000000);
+    cpu.writeReg(2, 7);
+    loadInst(&cpu, encodeR(0b101, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00000000), cpu.readReg(3));
+}
+
+test "step: ROR all-ones unchanged" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 7);
+    loadInst(&cpu, encodeR(0b101, 0b0110000, 3, 1, 2));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
 }
 
 test "step: RORI basic" {

@@ -30,6 +30,15 @@ test "step: ADDI wrapping 0x7FFFFFFF + 1 = 0x80000000" {
     try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(2));
 }
 
+test "step: ADDI minimum immediate -2048" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0);
+    // ADDI x2, x1, -2048 (imm=0x800 sign-extends to 0xFFFFF800)
+    loadInst(&cpu, encodeI(0b0010011, 0b000, 2, 1, 0x800));
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0xFFFFF800), cpu.readReg(2));
+}
+
 test "step: ADD wrapping 0xFFFFFFFF + 0xFFFFFFFF = 0xFFFFFFFE" {
     var cpu = Cpu.init();
     cpu.writeReg(1, 0xFFFFFFFF);
