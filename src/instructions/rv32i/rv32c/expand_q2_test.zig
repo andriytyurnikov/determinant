@@ -151,3 +151,23 @@ test "Q2 invalid funct3=001 is illegal" {
 test "Q2 invalid funct3=011 is illegal" {
     try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x6002));
 }
+
+test "Q0 invalid funct3=100 is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0x8000));
+}
+
+test "Q0 invalid funct3=101 is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0xA000));
+}
+
+test "Q0 invalid funct3=111 is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0xE000));
+}
+
+test "Q2 invalid funct3=101 is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0xA002));
+}
+
+test "Q2 invalid funct3=111 is illegal" {
+    try std.testing.expectError(error.IllegalInstruction, rv32c.expand(0xE002));
+}

@@ -27,6 +27,28 @@ test "CPU step: C.LW and C.SW" {
     try std.testing.expectEqual(@as(u32, 42), try cpu.readWord(256));
 }
 
+test "CPU step: C.LWSP and C.SWSP with non-zero offset" {
+    var cpu = Cpu.init();
+    // ADDI x2, x0, 256 — set stack pointer
+    h.storeWordAt(&cpu, 0, 0x10000113);
+    // ADDI x8, x0, 42 — value to store
+    h.storeWordAt(&cpu, 4, 0x02A00413);
+    // C.SWSP x8, 4(x2) = 0xC222
+    h.storeHalfAt(&cpu, 8, 0xC222);
+    // C.LWSP x9, 4(x2) = 0x4492
+    h.storeHalfAt(&cpu, 10, 0x4492);
+    // ECALL
+    h.storeWordAt(&cpu, 12, 0x00000073);
+
+    _ = try cpu.step(); // ADDI x2, x0, 256
+    _ = try cpu.step(); // ADDI x8, x0, 42
+    _ = try cpu.step(); // C.SWSP x8, 4(x2) → mem[260]=42
+    _ = try cpu.step(); // C.LWSP x9, 4(x2) → x9=42
+
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(9));
+    try std.testing.expectEqual(@as(u32, 42), try cpu.readWord(260));
+}
+
 test "CPU step: C.LW and C.SW with compact registers" {
     var cpu = Cpu.init();
     cpu.writeReg(8, 256); // base address in compact register
