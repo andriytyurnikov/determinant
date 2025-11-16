@@ -52,3 +52,26 @@ test "regression: demo program second instruction encodes ADDI x2, x0, 10" {
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
     try std.testing.expectEqual(@as(i32, 10), inst.imm);
 }
+
+test "integration: load, fetch, LUT decode" {
+    var machine = cpu.Cpu.init();
+    // ADDI x1, x0, 42 = 0x02A00093
+    const program = [_]u8{ 0x93, 0x00, 0xA0, 0x02 };
+    try machine.loadProgram(&program, 0);
+    const raw = try machine.fetch();
+    const inst = try decode(raw);
+    try std.testing.expectEqual(instructions.Opcode{ .i = .ADDI }, inst.op);
+    try std.testing.expectEqual(@as(u5, 1), inst.rd);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(i32, 42), inst.imm);
+}
+
+test "integration: LUT and branch decoders agree on demo instruction" {
+    const raw: u32 = 0x02A00093; // ADDI x1, x0, 42
+    const lut_inst = try decode(raw);
+    const branch_inst = try decodeBranch(raw);
+    try std.testing.expectEqual(lut_inst.op, branch_inst.op);
+    try std.testing.expectEqual(lut_inst.rd, branch_inst.rd);
+    try std.testing.expectEqual(lut_inst.rs1, branch_inst.rs1);
+    try std.testing.expectEqual(lut_inst.imm, branch_inst.imm);
+}

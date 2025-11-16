@@ -119,3 +119,29 @@ test "run: propagates IllegalInstruction from CSR execution" {
     std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x123020F3, .little);
     try std.testing.expectError(error.IllegalInstruction, cpu.run(0));
 }
+
+// --- run() cycle_count >= max_cycles edge cases ---
+
+test "run: returns immediately when cycle_count equals max_cycles" {
+    var cpu = Cpu.init();
+    // Place ECALL at addr 0 — if it executes, result would be ecall
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000073, .little);
+    cpu.cycle_count = 10;
+
+    const result = try cpu.run(10);
+    try std.testing.expectEqual(StepResult.@"continue", result);
+    try std.testing.expectEqual(@as(u64, 10), cpu.cycle_count); // unchanged
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc); // unchanged
+}
+
+test "run: returns immediately when cycle_count exceeds max_cycles" {
+    var cpu = Cpu.init();
+    // Place ECALL at addr 0 — if it executes, result would be ecall
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000073, .little);
+    cpu.cycle_count = 15;
+
+    const result = try cpu.run(10);
+    try std.testing.expectEqual(StepResult.@"continue", result);
+    try std.testing.expectEqual(@as(u64, 15), cpu.cycle_count); // unchanged
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc); // unchanged
+}

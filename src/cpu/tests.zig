@@ -10,4 +10,5 @@ comptime {
     _ = @import("atomic_test.zig");
     _ = @import("csr_test.zig");
     _ = @import("invariant_test.zig");
+    _ = @import("integration_test.zig");
 }
