@@ -6,4 +6,5 @@ comptime {
     _ = @import("jump_test.zig");
     _ = @import("system_test.zig");
     _ = @import("operand_test.zig");
+    _ = @import("edge_test.zig");
 }

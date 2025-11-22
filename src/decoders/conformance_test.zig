@@ -144,6 +144,8 @@ test "conformance: System/CSR" {
 }
 
 test "conformance: invalid encodings" {
+    try assertConformance(0x00000000); // zero instruction
+    try assertConformance(0xFFFFFFFF); // all-ones instruction
     try assertConformance(0b1111111); // unknown opcode
     try assertConformance(encodeRBase(0b000, 0b1111111, 0, 0, 0)); // invalid R-type funct7
     try assertConformance(encodeLoad(0b011, 1, 2, 0)); // invalid load funct3
