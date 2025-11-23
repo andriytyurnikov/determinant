@@ -97,3 +97,8 @@ test "loadProgram out of bounds" {
     const program = [_]u8{0xFF} ** 8;
     try std.testing.expectError(error.AddressOutOfBounds, cpu.loadProgram(&program, MEMORY_SIZE - 4));
 }
+
+test "init: reservation is null" {
+    const cpu = Cpu.init();
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}

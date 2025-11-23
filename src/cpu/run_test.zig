@@ -145,3 +145,34 @@ test "run: returns immediately when cycle_count exceeds max_cycles" {
     try std.testing.expectEqual(@as(u64, 15), cpu.cycle_count); // unchanged
     try std.testing.expectEqual(@as(u32, 0), cpu.pc); // unchanged
 }
+
+// --- run() with non-zero initial cycle_count ---
+
+test "run: partial execution with non-zero initial cycle_count" {
+    var cpu = Cpu.init();
+    // 3 NOPs then ECALL
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[8..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[12..][0..4], 0x00000073, .little);
+    cpu.cycle_count = 5;
+
+    // max_cycles=7 allows 2 steps (cycle 5→6, 6→7), then stops before 3rd NOP
+    const result = try cpu.run(7);
+    try std.testing.expectEqual(StepResult.@"continue", result);
+    try std.testing.expectEqual(@as(u64, 7), cpu.cycle_count);
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc); // executed 2 NOPs
+}
+
+test "run: unlimited with non-zero initial cycle_count" {
+    var cpu = Cpu.init();
+    // NOP then ECALL
+    std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
+    std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000073, .little);
+    cpu.cycle_count = 100;
+
+    const result = try cpu.run(0);
+    try std.testing.expectEqual(StepResult.ecall, result);
+    try std.testing.expectEqual(@as(u64, 102), cpu.cycle_count);
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}

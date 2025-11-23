@@ -11,4 +11,5 @@ comptime {
     _ = @import("csr_test.zig");
     _ = @import("invariant_test.zig");
     _ = @import("integration_test.zig");
+    _ = @import("recovery_test.zig");
 }

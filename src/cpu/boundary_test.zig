@@ -92,3 +92,14 @@ test "step: SLL shift masking rs2=32" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xFF), cpu.readReg(3)); // shift by 0
 }
+
+test "step: LHU zero-extension bit 15" {
+    var cpu = Cpu.init();
+    std.mem.writeInt(u16, cpu.memory[200..][0..2], 0x8000, .little);
+    cpu.writeReg(1, 200);
+    // LHU x2, 0(x1): opcode=0000011, funct3=101
+    h.loadInst(&cpu, h.encodeI(0b0000011, 0b101, 2, 1, 0));
+    _ = try cpu.step();
+    // LHU must zero-extend: 0x8000 → 0x00008000 (not 0xFFFF8000)
+    try std.testing.expectEqual(@as(u32, 0x00008000), cpu.readReg(2));
+}

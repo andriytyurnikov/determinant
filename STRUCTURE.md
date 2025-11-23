@@ -15,18 +15,19 @@ src/
   cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (64KB), step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
-    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant
+    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery
       init_test.zig             — init and register tests
       memory_test.zig           — memory read/write tests
       pipeline_test.zig         — pipeline infrastructure, branch/error path tests
-      run_test.zig              — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited)
+      run_test.zig              — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited, non-zero initial cycle_count)
       determinism_test.zig      — determinism: identical programs → identical state
       dispatch_test.zig         — CSR pipeline invariant, extension dispatch (MUL, SH1ADD, CLZ, BSET)
-      boundary_test.zig         — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0])
+      boundary_test.zig         — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0], LHU zero-extension)
       store_upper_test.zig      — CPU-level SB, SH, LUI, AUIPC tests
       atomic_test.zig           — LR/SC scenarios, AMO operations, reservation invalidation
       csr_test.zig              — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
       invariant_test.zig        — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
+      recovery_test.zig         — error recovery: continued execution after decode/load/store errors, reservation preservation
   instructions.zig        — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction (companion file for instructions/)
   instructions/
     format.zig            — Format enum (R/I/S/B/U/J), shared by all extensions
