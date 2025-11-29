@@ -27,6 +27,7 @@ src/
       atomic_test.zig           — LR/SC scenarios, AMO operations, reservation invalidation
       csr_test.zig              — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
       invariant_test.zig        — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
+      integration_test.zig      — multi-instruction programs, realistic execution sequences
       recovery_test.zig         — error recovery: continued execution after decode/load/store errors, reservation preservation
   instructions.zig        — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction (companion file for instructions/)
   instructions/
@@ -46,10 +47,11 @@ src/
       rv32c/
         expand.zig        — expand() function: maps Opcode + halfword → Expanded (validates constraints, builds fields)
         imm.zig           — pure stateless immediate extraction helpers (10 functions) + cReg() + funct3()
-        tests.zig         — hub → expand_q01, expand_q2, maxrange, cpu_alu, cpu_flow, cpu_loadstore, cpu_branch, cpu_misc
+        tests.zig         — hub → expand_q01, expand_q2, maxrange, imm, cpu_alu, cpu_flow, cpu_loadstore, cpu_branch, cpu_misc
           expand_q01_test.zig       — Q0+Q1 expand tests
           expand_q2_test.zig        — Q2 expand tests
           maxrange_test.zig         — max-range bit extraction tests
+          imm_test.zig              — cReg mapping, funct3 extraction, immediate extraction helpers
           cpu_alu_test.zig          — C.ADD, C.SUB, C.AND, etc. CPU execution
           cpu_flow_test.zig         — C.LI, C.ADDI, C.JAL, C.JALR, C.J, mixed 16/32-bit sequence
           cpu_loadstore_test.zig    — C.LW, C.SW, C.LWSP, C.SWSP, compact register variants
@@ -110,12 +112,14 @@ src/
     lut.zig               — primary decoder: comptime LUT tables (level1 strategy → format-specific tables) derived from registry.zig (companion file for lut/)
     lut/
       test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
-      tests.zig           — hub → rtype, ialu, load_store_branch, jump, system
+      tests.zig           — hub → rtype, ialu, load_store_branch, jump, system, operand, edge
         rtype_test.zig          — R-type LUT tests (base, M, Zba, Zbb, Zbs)
         ialu_test.zig           — I-type ALU LUT tests (shifts, Zbb, Zbs)
         load_store_branch_test.zig — load/store/branch valid+invalid LUT tests
         jump_test.zig           — LUI/AUIPC, JAL, JALR LUT tests
         system_test.zig         — atomic/system/FENCE/misc LUT tests
+        operand_test.zig        — R-format operand field extraction and isolation tests
+        edge_test.zig           — edge cases: invalid encodings, operand isolation, zero instruction
 build.zig                 — build system configuration (library module, executable, test and run steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
