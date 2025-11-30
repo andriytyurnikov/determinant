@@ -84,6 +84,12 @@ test "loadProgram" {
     try std.testing.expectEqual(@as(u8, 0x00), cpu.memory[3]);
 }
 
+test "loadProgram empty program" {
+    var cpu = Cpu.init();
+    try cpu.loadProgram(&.{}, 0);
+    try std.testing.expectEqual(@as(u8, 0), cpu.memory[0]);
+}
+
 test "loadProgram at offset" {
     var cpu = Cpu.init();
     const program = [_]u8{ 0xAA, 0xBB };
