@@ -105,3 +105,78 @@ test "mainInner: invalid --max-cycles value" {
 
     try expectContains(stderr_buf.items, "invalid");
 }
+
+test "mainInner: negative --max-cycles value" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "-1" } };
+    try std.testing.expectError(
+        error.UserError,
+        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
+    );
+
+    try expectContains(stderr_buf.items, "invalid");
+}
+
+test "mainInner: overflow --max-cycles value" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "99999999999999999999" } };
+    try std.testing.expectError(
+        error.UserError,
+        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
+    );
+
+    try expectContains(stderr_buf.items, "invalid");
+}
+
+test "mainInner: --max-cycles empty string" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "" } };
+    try std.testing.expectError(
+        error.UserError,
+        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
+    );
+
+    try expectContains(stderr_buf.items, "invalid");
+}
+
+test "mainInner: extra arguments produce warning" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "10", "extra" } };
+    try std.testing.expectError(
+        error.UserError,
+        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
+    );
+
+    try expectContains(stderr_buf.items, "ignoring extra argument");
+}
+
+test "mainInner: valid --max-cycles proceeds to file loading" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "nonexistent.bin", "--max-cycles", "100" } };
+    try std.testing.expectError(
+        error.UserError,
+        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
+    );
+
+    try expectContains(stderr_buf.items, "cannot open");
+}
