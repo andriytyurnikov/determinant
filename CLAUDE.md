@@ -184,12 +184,14 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
 
 ### Cycle Limits
-`run(0)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. Use `--max-cycles N` to set a finite limit.
+`run(null)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. `run(0)` executes zero steps (returns `.continue` immediately). Use `--max-cycles N` to set a finite limit.
 ```zig
 // Default — unlimited (runs until ECALL/EBREAK):
-const result = try vm.run(0);
+const result = try vm.run(null);
 // Finite limit:
 const result = try vm.run(10_000);
+// Zero steps — returns .continue without executing:
+const result = try vm.run(0);
 ```
 
 ## Adding a New Extension

@@ -130,11 +130,13 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         // --- Execution loop ---
 
         /// Run until ECALL, EBREAK, or max_cycles is reached. Returns the StepResult that stopped execution.
-        /// If max_cycles is 0, runs without a cycle limit.
-        pub fn run(self: *Self, max_cycles: u64) !StepResult {
+        /// If max_cycles is null, runs without a cycle limit. If 0, returns immediately with .continue.
+        pub fn run(self: *Self, max_cycles: ?u64) !StepResult {
             var result: StepResult = .@"continue";
             while (result == .@"continue") {
-                if (max_cycles > 0 and self.cycle_count >= max_cycles) return result;
+                if (max_cycles) |limit| {
+                    if (self.cycle_count >= limit) return result;
+                }
                 result = try self.step();
             }
             return result;

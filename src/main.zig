@@ -3,7 +3,7 @@
 const std = @import("std");
 const det = @import("determinant");
 
-const unlimited_cycles: u64 = 0;
+const unlimited_cycles: ?u64 = null;
 
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
@@ -35,7 +35,7 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
         if (std.mem.eql(u8, first_arg, "--help") or std.mem.eql(u8, first_arg, "-h")) {
             try stdout.print("Usage: determinant [<file> [--max-cycles N]]\n\n", .{});
             try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
-            try stdout.print("  --max-cycles N   Maximum execution cycles (default: unlimited, 0 = unlimited)\n", .{});
+            try stdout.print("  --max-cycles N   Maximum execution cycles (default: unlimited)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
             try stdout.print("Compiled with {d} KB VM memory.\n", .{det.Cpu.mem_size / 1024});
             return;
@@ -49,7 +49,7 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
         }
 
         const path = first_arg;
-        var max_cycles: u64 = unlimited_cycles;
+        var max_cycles: ?u64 = unlimited_cycles;
         // Check for --max-cycles N
         if (args.next()) |flag| {
             if (std.mem.eql(u8, flag, "--max-cycles")) {
@@ -142,7 +142,7 @@ pub fn runDemo(stdout: anytype) !void {
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
 }
 
-pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u64) !void {
+pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?u64) !void {
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
@@ -183,8 +183,8 @@ pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: u
 
     try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
 
-    if (max_cycles > 0) {
-        try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, max_cycles });
+    if (max_cycles) |mc| {
+        try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, mc });
     } else {
         try stdout.print("Loaded {d} bytes, executing (unlimited cycles)...\n", .{size});
     }

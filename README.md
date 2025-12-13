@@ -67,7 +67,7 @@ The library is available via `@import("determinant")`.
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset
   - `step() → StepResult` — fetch, decode, execute one instruction
-  - `run(max_cycles: u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (0 = unlimited)
+  - `run(max_cycles: ?u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (null = unlimited, 0 = zero steps)
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
 - **`CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)`** — generic VM constructor for custom memory size and decoder
