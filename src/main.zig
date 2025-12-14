@@ -72,11 +72,11 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
         }
         try runFile(stdout, stderr, path, max_cycles);
     } else {
-        try runDemo(stdout);
+        try runDemo(stdout, stderr);
     }
 }
 
-pub fn runDemo(stdout: anytype) !void {
+pub fn runDemo(stdout: anytype, stderr: anytype) !void {
     try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
     // Hardcoded 5-instruction RV32I program:
@@ -133,7 +133,10 @@ pub fn runDemo(stdout: anytype) !void {
 
     // Execute — unlimited cycles (demo terminates via ECALL)
     try stdout.print("\nExecuting...\n", .{});
-    const result = try vm.run(unlimited_cycles);
+    const result = vm.run(unlimited_cycles) catch |err| {
+        try stderr.print("\nDemo execution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
+        return error.UserError;
+    };
 
     try printResult(stdout, &vm, result);
 
