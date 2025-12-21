@@ -13,7 +13,7 @@ test "runDemo: deterministic output" {
     defer output.deinit(std.testing.allocator);
     var err_output: std.ArrayList(u8) = .empty;
     defer err_output.deinit(std.testing.allocator);
-    try main_mod.runDemo(output.writer(std.testing.allocator), err_output.writer(std.testing.allocator));
+    try main_mod.runDemo(output.writer(std.testing.allocator), err_output.writer(std.testing.allocator), null);
 
     // Header
     try expectContains(output.items, "Demo");
@@ -41,13 +41,13 @@ test "runDemo: reproducible output" {
     defer output1.deinit(std.testing.allocator);
     var err_output1: std.ArrayList(u8) = .empty;
     defer err_output1.deinit(std.testing.allocator);
-    try main_mod.runDemo(output1.writer(std.testing.allocator), err_output1.writer(std.testing.allocator));
+    try main_mod.runDemo(output1.writer(std.testing.allocator), err_output1.writer(std.testing.allocator), null);
 
     var output2: std.ArrayList(u8) = .empty;
     defer output2.deinit(std.testing.allocator);
     var err_output2: std.ArrayList(u8) = .empty;
     defer err_output2.deinit(std.testing.allocator);
-    try main_mod.runDemo(output2.writer(std.testing.allocator), err_output2.writer(std.testing.allocator));
+    try main_mod.runDemo(output2.writer(std.testing.allocator), err_output2.writer(std.testing.allocator), null);
 
     try std.testing.expectEqualStrings(output1.items, output2.items);
 }

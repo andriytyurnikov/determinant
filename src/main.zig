@@ -5,6 +5,8 @@ const det = @import("determinant");
 
 const unlimited_cycles: ?u64 = null;
 
+pub const DumpFormat = enum { hexdump, raw };
+
 pub fn main() !void {
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
@@ -31,52 +33,69 @@ pub fn main() !void {
 pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
     _ = args.next(); // skip program name
 
-    if (args.next()) |first_arg| {
-        if (std.mem.eql(u8, first_arg, "--help") or std.mem.eql(u8, first_arg, "-h")) {
-            try stdout.print("Usage: determinant [<file> [--max-cycles N]]\n\n", .{});
-            try stdout.print("  <file>           RISC-V binary to load and execute\n", .{});
-            try stdout.print("  --max-cycles N   Maximum execution cycles (default: unlimited)\n", .{});
+    // Collect args for index-based access (enables lookahead for --dump-memory)
+    var arg_buf: [16][]const u8 = undefined;
+    var arg_count: usize = 0;
+    while (args.next()) |arg| {
+        if (arg_count >= arg_buf.len) break;
+        arg_buf[arg_count] = arg;
+        arg_count += 1;
+    }
+    const arg_list = arg_buf[0..arg_count];
+
+    var path: ?[]const u8 = null;
+    var max_cycles: ?u64 = unlimited_cycles;
+    var dump_format: ?DumpFormat = null;
+
+    var i: usize = 0;
+    while (i < arg_list.len) : (i += 1) {
+        const arg = arg_list[i];
+        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try stdout.print("Usage: determinant [<file>] [--max-cycles N] [--dump-memory [raw]]\n\n", .{});
+            try stdout.print("  <file>              RISC-V binary to load and execute\n", .{});
+            try stdout.print("  --max-cycles N      Maximum execution cycles (default: unlimited)\n", .{});
+            try stdout.print("  --dump-memory [raw] Dump VM memory after execution (hexdump or raw hex)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
             try stdout.print("Compiled with {d} KB VM memory.\n", .{det.Cpu.mem_size / 1024});
             return;
-        }
-
-        // Detect flags used before file path
-        if (first_arg.len >= 2 and first_arg[0] == '-') {
-            try stderr.print("Error: unexpected option '{s}'. File path must come before options.\n", .{first_arg});
-            try stderr.print("Usage: determinant [<file> [--max-cycles N]]\n", .{});
-            return error.UserError;
-        }
-
-        const path = first_arg;
-        var max_cycles: ?u64 = unlimited_cycles;
-        // Check for --max-cycles N
-        if (args.next()) |flag| {
-            if (std.mem.eql(u8, flag, "--max-cycles")) {
-                if (args.next()) |val| {
-                    max_cycles = std.fmt.parseInt(u64, val, 10) catch {
-                        try stderr.print("Error: invalid --max-cycles value\n", .{});
-                        return error.UserError;
-                    };
-                } else {
-                    try stderr.print("Error: --max-cycles requires a value\n", .{});
+        } else if (std.mem.eql(u8, arg, "--max-cycles")) {
+            i += 1;
+            if (i < arg_list.len) {
+                max_cycles = std.fmt.parseInt(u64, arg_list[i], 10) catch {
+                    try stderr.print("Error: invalid --max-cycles value\n", .{});
                     return error.UserError;
-                }
+                };
             } else {
-                try stderr.print("Error: unknown option '{s}'\n", .{flag});
+                try stderr.print("Error: --max-cycles requires a value\n", .{});
                 return error.UserError;
             }
+        } else if (std.mem.eql(u8, arg, "--dump-memory")) {
+            dump_format = .hexdump;
+            // Peek at next arg for optional "raw" format
+            if (i + 1 < arg_list.len and std.mem.eql(u8, arg_list[i + 1], "raw")) {
+                dump_format = .raw;
+                i += 1;
+            }
+        } else if (arg.len >= 1 and arg[0] == '-') {
+            try stderr.print("Error: unknown option '{s}'\n", .{arg});
+            return error.UserError;
+        } else {
+            if (path != null) {
+                try stderr.print("Warning: ignoring extra argument '{s}'\n", .{arg});
+            } else {
+                path = arg;
+            }
         }
-        if (args.next()) |extra| {
-            try stderr.print("Warning: ignoring extra argument '{s}'\n", .{extra});
-        }
-        try runFile(stdout, stderr, path, max_cycles);
+    }
+
+    if (path) |p| {
+        try runFile(stdout, stderr, p, max_cycles, dump_format);
     } else {
-        try runDemo(stdout, stderr);
+        try runDemo(stdout, stderr, dump_format);
     }
 }
 
-pub fn runDemo(stdout: anytype, stderr: anytype) !void {
+pub fn runDemo(stdout: anytype, stderr: anytype, dump_format: ?DumpFormat) !void {
     try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
     // Hardcoded 5-instruction RV32I program:
@@ -143,9 +162,14 @@ pub fn runDemo(stdout: anytype, stderr: anytype) !void {
     // Show memory at store target
     const mem_val = std.mem.readInt(u32, vm.memory[100..][0..4], .little);
     try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
+
+    if (dump_format) |fmt| {
+        try stdout.print("\n", .{});
+        try dumpMemory(stdout, &vm.memory, fmt);
+    }
 }
 
-pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?u64) !void {
+pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !void {
     // Open and read the binary file
     var file = std.fs.cwd().openFile(path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
@@ -205,6 +229,11 @@ pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?
     };
 
     try printResult(stdout, &vm, result);
+
+    if (dump_format) |fmt| {
+        try stdout.print("\n", .{});
+        try dumpMemory(stdout, &vm.memory, fmt);
+    }
 }
 
 pub fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
@@ -258,6 +287,95 @@ pub fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
             .BCLR, .BEXT, .BINV, .BSET => try stdout.print("{s} x{d}, x{d}, x{d}", .{ op_name, inst.rd, inst.rs1, inst.rs2 }),
             .BCLRI, .BEXTI, .BINVI, .BSETI => try stdout.print("{s} x{d}, x{d}, {d}", .{ op_name, inst.rd, inst.rs1, inst.imm }),
         },
+    }
+}
+
+pub fn dumpMemory(stdout: anytype, memory: []const u8, format: DumpFormat) !void {
+    switch (format) {
+        .hexdump => try dumpHexdump(stdout, memory),
+        .raw => try dumpRaw(stdout, memory),
+    }
+}
+
+fn dumpHexdump(stdout: anytype, memory: []const u8) !void {
+    var prev_line: ?*const [16]u8 = null;
+    var collapsing = false;
+    var offset: usize = 0;
+
+    while (offset < memory.len) : (offset += 16) {
+        const remaining = memory.len - offset;
+        const line_len = if (remaining >= 16) 16 else remaining;
+        const line = memory[offset..][0..line_len];
+
+        // Check for collapsible repeated line (only full 16-byte lines)
+        if (line_len == 16) {
+            if (prev_line) |prev| {
+                if (std.mem.eql(u8, line, prev)) {
+                    if (!collapsing) {
+                        try stdout.print("*\n", .{});
+                        collapsing = true;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        collapsing = false;
+
+        // Address
+        try stdout.print("{X:0>8}  ", .{offset});
+
+        // Hex bytes — first group of 8
+        for (0..8) |j| {
+            if (j < line_len) {
+                try stdout.print("{X:0>2} ", .{line[j]});
+            } else {
+                try stdout.print("   ", .{});
+            }
+        }
+        try stdout.print(" ", .{});
+
+        // Hex bytes — second group of 8
+        for (8..16) |j| {
+            if (j < line_len) {
+                try stdout.print("{X:0>2} ", .{line[j]});
+            } else {
+                try stdout.print("   ", .{});
+            }
+        }
+
+        // ASCII
+        try stdout.print(" |", .{});
+        for (0..line_len) |j| {
+            const c = line[j];
+            if (c >= 0x20 and c <= 0x7E) {
+                try stdout.print("{c}", .{c});
+            } else {
+                try stdout.print(".", .{});
+            }
+        }
+        try stdout.print("|\n", .{});
+
+        if (line_len == 16) {
+            prev_line = memory[offset..][0..16];
+        } else {
+            prev_line = null;
+        }
+    }
+
+    // Final address line (total size)
+    try stdout.print("{X:0>8}\n", .{memory.len});
+}
+
+fn dumpRaw(stdout: anytype, memory: []const u8) !void {
+    var offset: usize = 0;
+    while (offset < memory.len) : (offset += 32) {
+        const remaining = memory.len - offset;
+        const line_len = if (remaining >= 32) 32 else remaining;
+        for (0..line_len) |j| {
+            try stdout.print("{X:0>2}", .{memory[offset + j]});
+        }
+        try stdout.print("\n", .{});
     }
 }
 

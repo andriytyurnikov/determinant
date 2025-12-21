@@ -46,19 +46,16 @@ test "mainInner: -h" {
     try expectContains(stdout_buf.items, "Usage:");
 }
 
-test "mainInner: flag before path" {
+test "mainInner: --max-cycles without file runs demo with limit" {
     var stdout_buf: std.ArrayList(u8) = .empty;
     defer stdout_buf.deinit(std.testing.allocator);
     var stderr_buf: std.ArrayList(u8) = .empty;
     defer stderr_buf.deinit(std.testing.allocator);
 
     var iter = SliceIterator{ .items = &.{ "determinant", "--max-cycles", "10" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
 
-    try expectContains(stderr_buf.items, "unexpected option");
+    try expectContains(stdout_buf.items, "Demo");
 }
 
 test "mainInner: unknown flag after path" {
@@ -164,6 +161,46 @@ test "mainInner: extra arguments produce warning" {
     );
 
     try expectContains(stderr_buf.items, "ignoring extra argument");
+}
+
+test "mainInner: --dump-memory runs demo with hexdump" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "--dump-memory" } };
+    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+
+    try expectContains(stdout_buf.items, "Demo");
+    // Hexdump format has address | hex | ASCII pattern
+    try expectContains(stdout_buf.items, "|");
+}
+
+test "mainInner: --dump-memory raw runs demo with raw format" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "--dump-memory", "raw" } };
+    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+
+    try expectContains(stdout_buf.items, "Demo");
+    // Raw format: hex bytes without addresses or ASCII
+    try expectContains(stdout_buf.items, "00000000");
+}
+
+test "mainInner: --help shows --dump-memory" {
+    var stdout_buf: std.ArrayList(u8) = .empty;
+    defer stdout_buf.deinit(std.testing.allocator);
+    var stderr_buf: std.ArrayList(u8) = .empty;
+    defer stderr_buf.deinit(std.testing.allocator);
+
+    var iter = SliceIterator{ .items = &.{ "determinant", "--help" } };
+    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+
+    try expectContains(stdout_buf.items, "--dump-memory");
 }
 
 test "mainInner: valid --max-cycles proceeds to file loading" {

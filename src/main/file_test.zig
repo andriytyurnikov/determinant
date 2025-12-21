@@ -30,7 +30,7 @@ test "runFile: empty file" {
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null),
+        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null),
     );
 
     try expectContains(stderr_buf.items, "file is empty");
@@ -59,7 +59,7 @@ test "runFile: file too large" {
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null),
+        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null),
     );
 
     try expectContains(stderr_buf.items, "file too large");
@@ -73,7 +73,7 @@ test "runFile: nonexistent file" {
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), "/tmp/determinant_nonexistent_test_file.bin", null),
+        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), "/tmp/determinant_nonexistent_test_file.bin", null, null),
     );
 
     try expectContains(stderr_buf.items, "cannot open");
@@ -101,7 +101,7 @@ test "runFile: successful execution" {
     var stderr_buf: std.ArrayList(u8) = .empty;
     defer stderr_buf.deinit(std.testing.allocator);
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null);
+    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null);
 
     try expectContains(stdout_buf.items, "Loaded 8 bytes");
     try expectContains(stdout_buf.items, "ecall");
@@ -129,7 +129,7 @@ test "runFile: max cycles display" {
     var stderr_buf: std.ArrayList(u8) = .empty;
     defer stderr_buf.deinit(std.testing.allocator);
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 1000);
+    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 1000, null);
 
     try expectContains(stdout_buf.items, "max 1000 cycles");
 }
@@ -155,7 +155,7 @@ test "runFile: unlimited cycles display" {
     var stderr_buf: std.ArrayList(u8) = .empty;
     defer stderr_buf.deinit(std.testing.allocator);
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null);
+    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null);
 
     try expectContains(stdout_buf.items, "unlimited cycles");
 }
@@ -184,7 +184,7 @@ test "runFile: cycle limit reached" {
     var stderr_buf: std.ArrayList(u8) = .empty;
     defer stderr_buf.deinit(std.testing.allocator);
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 2);
+    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 2, null);
 
     try expectContains(stdout_buf.items, "Cycle limit reached");
 }
