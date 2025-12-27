@@ -78,8 +78,26 @@ pub fn build(b: *std.Build) void {
 
     const alt_mod_tests = b.addTest(.{ .root_module = alt_mod });
 
-    const test_all_step = b.step("test-all", "Run tests with both decoder backends");
+    // Compliance tests: riscv-tests suite with pre-compiled binaries
+    const compliance_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compliance.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "determinant", .module = mod },
+            },
+        }),
+    });
+    const run_compliance_tests = b.addRunArtifact(compliance_tests);
+
+    const compliance_step = b.step("test-compliance", "Run RISC-V compliance tests");
+    compliance_step.dependOn(&run_compliance_tests.step);
+
+    // Test-all step: unit tests (both decoders) + compliance
+    const test_all_step = b.step("test-all", "Run tests with both decoder backends and compliance");
     test_all_step.dependOn(&run_mod_tests.step);
     test_all_step.dependOn(&run_exe_tests.step);
     test_all_step.dependOn(&b.addRunArtifact(alt_mod_tests).step);
+    test_all_step.dependOn(&run_compliance_tests.step);
 }

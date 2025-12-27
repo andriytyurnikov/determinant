@@ -5,3 +5,6 @@
 .zig-cache/
 zig-cache/
 zig-out/
+
+# Compliance test build artifacts (ELF intermediates)
+tests/riscv-tests/build/

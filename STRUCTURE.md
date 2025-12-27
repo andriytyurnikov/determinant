@@ -120,7 +120,34 @@ src/
         system_test.zig         — atomic/system/FENCE/misc LUT tests
         operand_test.zig        — R-format operand field extraction and isolation tests
         edge_test.zig           — edge cases: invalid encodings, operand isolation, zero instruction
-build.zig                 — build system configuration (library module, executable, test and run steps)
+  compliance.zig            — RISC-V compliance tests companion file (imports compliance/tests.zig)
+  compliance/
+    runner.zig              — ComplianceCpu (256KB, LUT decoder), runTest(), expectPass()
+    tests.zig               — hub → rv32ui, rv32um, rv32ua, rv32uc, rv32uzba, rv32uzbb, rv32uzbs
+      rv32ui_test.zig       — RV32I base integer tests (~39 tests)
+      rv32um_test.zig       — RV32M multiply/divide tests (8 tests)
+      rv32ua_test.zig       — RV32A atomic tests (10 tests)
+      rv32uc_test.zig       — RV32C compressed test (1 test)
+      rv32uzba_test.zig     — Zba address generation tests (3 tests)
+      rv32uzbb_test.zig     — Zbb bit manipulation tests (18 tests)
+      rv32uzbs_test.zig     — Zbs single-bit tests (8 tests)
+    bin/                    — pre-compiled flat binaries from riscv-tests (checked in)
+      rv32ui/               — RV32I test binaries (add.bin, sub.bin, ...)
+      rv32um/               — RV32M test binaries (mul.bin, div.bin, ...)
+      rv32ua/               — RV32A test binaries (amoadd_w.bin, lrsc.bin, ...)
+      rv32uc/               — RV32C test binary (rvc.bin)
+      rv32uzba/             — Zba test binaries (sh1add.bin, ...)
+      rv32uzbb/             — Zbb test binaries (clz.bin, cpop.bin, ...)
+      rv32uzbs/             — Zbs test binaries (bclr.bin, bext.bin, ...)
+tests/
+  riscv-tests/
+    riscv-tests-src/        — git submodule (riscv-software-src/riscv-tests)
+    env/determinant/
+      riscv_test.h          — custom test environment (user-mode, EBREAK termination)
+      link.ld               — custom linker script (origin at 0x0)
+    Makefile                — builds flat binaries from riscv-tests sources
+    README.md               — rebuild instructions and toolchain setup
+build.zig                 — build system configuration (library module, executable, test, test-compliance, and test-all steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
 
@@ -135,6 +162,7 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 ```
 
 - `cpu.zig` is the companion file; `cpu/exec_i.zig` handles RV32I execute logic (no upward dependency)
+- `compliance.zig` imports the `determinant` library module (not relative paths) — it's a separate test module, not part of the library
 - Extensions (rv32i, rv32m, rv32a, zicsr, zba, zbb, zbs) import only `format.zig` — never cpu, decoders, or instructions
 - RV32C imports only `rv32i.zig` and `format.zig` (decode-time frontend, no upward dependency)
 - `rv32c/expand.zig` imports `rv32c.zig`, `rv32i.zig`, and `imm.zig` — no upward dependency
