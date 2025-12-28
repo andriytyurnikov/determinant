@@ -49,9 +49,14 @@ zig build run -- program.bin --max-cycles 1000
 ## Test
 
 ```sh
-zig build test          # run tests with default decoder backend
-zig build test-all      # run tests with both decoder backends (LUT + branch)
+zig build test              # run unit tests with default decoder backend
+zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
+zig build test-all          # run all tests: both decoders + compliance
 ```
+
+### RISC-V Compliance
+
+The VM passes 88 tests from the official [riscv-tests](https://github.com/riscv-software-src/riscv-tests) ISA test suite covering all supported extensions: RV32I (39), RV32M (8), RV32A (10), RV32C (1), Zba (3), Zbb (18), Zbs (8). Pre-compiled test binaries are checked in — no RISC-V toolchain needed to run them. See [tests/riscv-tests/README.md](tests/riscv-tests/README.md) for rebuild instructions.
 
 ## Architecture
 
