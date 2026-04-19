@@ -1,6 +1,9 @@
 const std = @import("std");
+const Io = std.Io;
 const main_mod = @import("../main.zig");
-const SliceIterator = @import("test_helpers.zig").SliceIterator;
+
+const io = std.testing.io;
+const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
     if (std.mem.indexOf(u8, haystack, needle) == null) {
@@ -9,211 +12,191 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
     }
 }
 
+const Args = []const [:0]const u8;
+
+fn runArgs(args: Args, stdout: *Io.Writer, stderr: *Io.Writer) !void {
+    return main_mod.mainInner(io, stdout, stderr, args);
+}
+
 test "mainInner: no args runs demo" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{"determinant"} };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{"determinant"};
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Demo");
+    try expectContains(stdout_aw.written(), "Demo");
 }
 
 test "mainInner: --help" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "--help" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "--help" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Usage:");
-    try expectContains(stdout_buf.items, "--max-cycles");
+    try expectContains(stdout_aw.written(), "Usage:");
+    try expectContains(stdout_aw.written(), "--max-cycles");
 }
 
 test "mainInner: -h" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "-h" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "-h" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Usage:");
+    try expectContains(stdout_aw.written(), "Usage:");
 }
 
 test "mainInner: --max-cycles without file runs demo with limit" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "--max-cycles", "10" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "--max-cycles", "10" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Demo");
+    try expectContains(stdout_aw.written(), "Demo");
 }
 
 test "mainInner: unknown flag after path" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--unknown" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--unknown" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "unknown option");
+    try expectContains(stderr_aw.written(), "unknown option");
 }
 
 test "mainInner: missing --max-cycles value" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "requires a value");
+    try expectContains(stderr_aw.written(), "requires a value");
 }
 
 test "mainInner: invalid --max-cycles value" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "abc" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "abc" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "invalid");
+    try expectContains(stderr_aw.written(), "invalid");
 }
 
 test "mainInner: negative --max-cycles value" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "-1" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "-1" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "invalid");
+    try expectContains(stderr_aw.written(), "invalid");
 }
 
 test "mainInner: overflow --max-cycles value" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "99999999999999999999" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "99999999999999999999" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "invalid");
+    try expectContains(stderr_aw.written(), "invalid");
 }
 
 test "mainInner: --max-cycles empty string" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "invalid");
+    try expectContains(stderr_aw.written(), "invalid");
 }
 
 test "mainInner: extra arguments produce warning" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "test.bin", "--max-cycles", "10", "extra" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "10", "extra" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "ignoring extra argument");
+    try expectContains(stderr_aw.written(), "ignoring extra argument");
 }
 
 test "mainInner: --dump-memory runs demo with hexdump" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "--dump-memory" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "--dump-memory" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Demo");
-    // Hexdump format has address | hex | ASCII pattern
-    try expectContains(stdout_buf.items, "|");
+    try expectContains(stdout_aw.written(), "Demo");
+    try expectContains(stdout_aw.written(), "|");
 }
 
 test "mainInner: --dump-memory raw runs demo with raw format" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "--dump-memory", "raw" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "--dump-memory", "raw" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "Demo");
-    // Raw format: hex bytes without addresses or ASCII
-    try expectContains(stdout_buf.items, "00000000");
+    try expectContains(stdout_aw.written(), "Demo");
+    try expectContains(stdout_aw.written(), "00000000");
 }
 
 test "mainInner: --help shows --dump-memory" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "--help" } };
-    try main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter);
+    const args: Args = &.{ "determinant", "--help" };
+    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
 
-    try expectContains(stdout_buf.items, "--dump-memory");
+    try expectContains(stdout_aw.written(), "--dump-memory");
 }
 
 test "mainInner: valid --max-cycles proceeds to file loading" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    var iter = SliceIterator{ .items = &.{ "determinant", "nonexistent.bin", "--max-cycles", "100" } };
-    try std.testing.expectError(
-        error.UserError,
-        main_mod.mainInner(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), &iter),
-    );
+    const args: Args = &.{ "determinant", "nonexistent.bin", "--max-cycles", "100" };
+    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
-    try expectContains(stderr_buf.items, "cannot open");
+    try expectContains(stderr_aw.written(), "cannot open");
 }

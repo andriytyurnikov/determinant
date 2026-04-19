@@ -1,6 +1,9 @@
 const std = @import("std");
+const Io = std.Io;
 const main_mod = @import("../main.zig");
 const det = @import("determinant");
+
+const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
     if (std.mem.indexOf(u8, haystack, needle) == null) {
@@ -21,79 +24,77 @@ test "printResult: ecall" {
     vm.cycle_count = 42;
     vm.pc = 0x00001000;
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ecall);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ecall);
 
-    try expectContains(output.items, "ecall after 42 cycles");
-    try expectContains(output.items, "PC = 0x00001000");
+    try expectContains(aw.written(), "ecall after 42 cycles");
+    try expectContains(aw.written(), "PC = 0x00001000");
 }
 
 test "printResult: ebreak" {
     var vm = det.Cpu.init();
     vm.cycle_count = 7;
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ebreak);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ebreak);
 
-    try expectContains(output.items, "ebreak after 7 cycles");
+    try expectContains(aw.written(), "ebreak after 7 cycles");
 }
 
 test "printResult: continue (cycle limit)" {
     var vm = det.Cpu.init();
     vm.cycle_count = 1000;
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .@"continue");
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .@"continue");
 
-    try expectContains(output.items, "Cycle limit reached after 1000 cycles");
+    try expectContains(aw.written(), "Cycle limit reached after 1000 cycles");
 }
 
 test "printResult: non-zero registers displayed" {
     var vm = det.Cpu.init();
     vm.writeReg(1, 42);
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ecall);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ecall);
 
-    try expectContains(output.items, "x1 = 42 (0x0000002A)");
+    try expectContains(aw.written(), "x1 = 42 (0x0000002A)");
 }
 
 test "printResult: negative register display" {
     var vm = det.Cpu.init();
     vm.writeReg(1, 0xFFFFFFFF);
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ecall);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ecall);
 
-    try expectContains(output.items, "x1 = -1 (0xFFFFFFFF)");
+    try expectContains(aw.written(), "x1 = -1 (0xFFFFFFFF)");
 }
 
 test "printResult: zero registers omitted" {
     var vm = det.Cpu.init();
-    // All registers are zero by default
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ecall);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ecall);
 
-    // Should have Registers header but no x<N> lines
-    try expectContains(output.items, "Registers:");
-    try expectNotContains(output.items, "x0 =");
-    try expectNotContains(output.items, "x1 =");
+    try expectContains(aw.written(), "Registers:");
+    try expectNotContains(aw.written(), "x0 =");
+    try expectNotContains(aw.written(), "x1 =");
 }
 
 test "printResult: PC format" {
     var vm = det.Cpu.init();
     vm.pc = 0x00000014;
 
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printResult(output.writer(std.testing.allocator), &vm, .ecall);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printResult(&aw.writer, &vm, .ecall);
 
-    try expectContains(output.items, "PC = 0x00000014");
+    try expectContains(aw.written(), "PC = 0x00000014");
 }

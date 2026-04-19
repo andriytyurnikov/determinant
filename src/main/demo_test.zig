@@ -1,5 +1,8 @@
 const std = @import("std");
+const Io = std.Io;
 const main_mod = @import("../main.zig");
+
+const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
     if (std.mem.indexOf(u8, haystack, needle) == null) {
@@ -9,45 +12,38 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
 }
 
 test "runDemo: deterministic output" {
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    var err_output: std.ArrayList(u8) = .empty;
-    defer err_output.deinit(std.testing.allocator);
-    try main_mod.runDemo(output.writer(std.testing.allocator), err_output.writer(std.testing.allocator), null);
+    var out_aw: Io.Writer.Allocating = .init(alloc);
+    defer out_aw.deinit();
+    var err_aw: Io.Writer.Allocating = .init(alloc);
+    defer err_aw.deinit();
+    try main_mod.runDemo(&out_aw.writer, &err_aw.writer, null);
 
-    // Header
-    try expectContains(output.items, "Demo");
+    const output = out_aw.written();
 
-    // Disassembly of 5 instructions
-    try expectContains(output.items, "ADDI");
-    try expectContains(output.items, "ADD");
-    try expectContains(output.items, "SW");
-    try expectContains(output.items, "ECALL");
-
-    // Execution result
-    try expectContains(output.items, "ecall after 5 cycles");
-
-    // Register values
-    try expectContains(output.items, "x1 = 100");
-    try expectContains(output.items, "x2 = 10");
-    try expectContains(output.items, "x3 = 110");
-
-    // Memory store result
-    try expectContains(output.items, "Memory[100] = 110");
+    try expectContains(output, "Demo");
+    try expectContains(output, "ADDI");
+    try expectContains(output, "ADD");
+    try expectContains(output, "SW");
+    try expectContains(output, "ECALL");
+    try expectContains(output, "ecall after 5 cycles");
+    try expectContains(output, "x1 = 100");
+    try expectContains(output, "x2 = 10");
+    try expectContains(output, "x3 = 110");
+    try expectContains(output, "Memory[100] = 110");
 }
 
 test "runDemo: reproducible output" {
-    var output1: std.ArrayList(u8) = .empty;
-    defer output1.deinit(std.testing.allocator);
-    var err_output1: std.ArrayList(u8) = .empty;
-    defer err_output1.deinit(std.testing.allocator);
-    try main_mod.runDemo(output1.writer(std.testing.allocator), err_output1.writer(std.testing.allocator), null);
+    var out1: Io.Writer.Allocating = .init(alloc);
+    defer out1.deinit();
+    var err1: Io.Writer.Allocating = .init(alloc);
+    defer err1.deinit();
+    try main_mod.runDemo(&out1.writer, &err1.writer, null);
 
-    var output2: std.ArrayList(u8) = .empty;
-    defer output2.deinit(std.testing.allocator);
-    var err_output2: std.ArrayList(u8) = .empty;
-    defer err_output2.deinit(std.testing.allocator);
-    try main_mod.runDemo(output2.writer(std.testing.allocator), err_output2.writer(std.testing.allocator), null);
+    var out2: Io.Writer.Allocating = .init(alloc);
+    defer out2.deinit();
+    var err2: Io.Writer.Allocating = .init(alloc);
+    defer err2.deinit();
+    try main_mod.runDemo(&out2.writer, &err2.writer, null);
 
-    try std.testing.expectEqualStrings(output1.items, output2.items);
+    try std.testing.expectEqualStrings(out1.written(), out2.written());
 }

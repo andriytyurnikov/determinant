@@ -1,5 +1,9 @@
 const std = @import("std");
+const Io = std.Io;
 const main_mod = @import("../main.zig");
+
+const io = std.testing.io;
+const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
     if (std.mem.indexOf(u8, haystack, needle) == null) {
@@ -8,75 +12,75 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
     }
 }
 
-fn makeTmpPath(tmp_dir: std.testing.TmpDir, sub_path: []const u8) ![]const u8 {
-    return tmp_dir.dir.realpathAlloc(std.testing.allocator, sub_path);
+/// Build a path relative to cwd pointing into the TmpDir. tmpDir() roots its dirs
+/// under `.zig-cache/tmp/<sub_path>/` and that's cwd-relative during `zig build test`.
+fn makeTmpPath(tmp: std.testing.TmpDir, sub_path: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(alloc, ".zig-cache/tmp/{s}/{s}", .{ &tmp.sub_path, sub_path });
 }
 
 test "runFile: empty file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // Create empty file
-    const f = try tmp.dir.createFile("empty.bin", .{});
-    f.close();
+    const f = try tmp.dir.createFile(io, "empty.bin", .{});
+    f.close(io);
 
     const path = try makeTmpPath(tmp, "empty.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null),
+        main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null),
     );
 
-    try expectContains(stderr_buf.items, "file is empty");
+    try expectContains(stderr_aw.written(), "file is empty");
 }
 
 test "runFile: file too large" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // Create file larger than VM memory (65536)
-    const f = try tmp.dir.createFile("big.bin", .{});
-    defer f.close();
+    const f = try tmp.dir.createFile(io, "big.bin", .{});
+    defer f.close(io);
 
-    const big_buf = try std.testing.allocator.alloc(u8, 65537);
-    defer std.testing.allocator.free(big_buf);
+    const big_buf = try alloc.alloc(u8, 65537);
+    defer alloc.free(big_buf);
     @memset(big_buf, 0x13); // NOP opcode byte
-    try f.writeAll(big_buf);
+    try f.writeStreamingAll(io, big_buf);
 
     const path = try makeTmpPath(tmp, "big.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null),
+        main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null),
     );
 
-    try expectContains(stderr_buf.items, "file too large");
+    try expectContains(stderr_aw.written(), "file too large");
 }
 
 test "runFile: nonexistent file" {
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
     try std.testing.expectError(
         error.UserError,
-        main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), "/tmp/determinant_nonexistent_test_file.bin", null, null),
+        main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, "/tmp/determinant_nonexistent_test_file.bin", null, null),
     );
 
-    try expectContains(stderr_buf.items, "cannot open");
+    try expectContains(stderr_aw.written(), "cannot open");
 }
 
 test "runFile: successful execution" {
@@ -89,23 +93,23 @@ test "runFile: successful execution" {
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
 
-    const f = try tmp.dir.createFile("test.bin", .{});
-    try f.writeAll(&program);
-    f.close();
+    const f = try tmp.dir.createFile(io, "test.bin", .{});
+    try f.writeStreamingAll(io, &program);
+    f.close(io);
 
     const path = try makeTmpPath(tmp, "test.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null);
+    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null);
 
-    try expectContains(stdout_buf.items, "Loaded 8 bytes");
-    try expectContains(stdout_buf.items, "ecall");
-    try expectContains(stdout_buf.items, "x1 = 42");
+    try expectContains(stdout_aw.written(), "Loaded 8 bytes");
+    try expectContains(stdout_aw.written(), "ecall");
+    try expectContains(stdout_aw.written(), "x1 = 42");
 }
 
 test "runFile: max cycles display" {
@@ -117,21 +121,21 @@ test "runFile: max cycles display" {
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
 
-    const f = try tmp.dir.createFile("test.bin", .{});
-    try f.writeAll(&program);
-    f.close();
+    const f = try tmp.dir.createFile(io, "test.bin", .{});
+    try f.writeStreamingAll(io, &program);
+    f.close(io);
 
     const path = try makeTmpPath(tmp, "test.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 1000, null);
+    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 1000, null);
 
-    try expectContains(stdout_buf.items, "max 1000 cycles");
+    try expectContains(stdout_aw.written(), "max 1000 cycles");
 }
 
 test "runFile: unlimited cycles display" {
@@ -143,21 +147,21 @@ test "runFile: unlimited cycles display" {
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
 
-    const f = try tmp.dir.createFile("test.bin", .{});
-    try f.writeAll(&program);
-    f.close();
+    const f = try tmp.dir.createFile(io, "test.bin", .{});
+    try f.writeStreamingAll(io, &program);
+    f.close(io);
 
     const path = try makeTmpPath(tmp, "test.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, null, null);
+    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null);
 
-    try expectContains(stdout_buf.items, "unlimited cycles");
+    try expectContains(stdout_aw.written(), "unlimited cycles");
 }
 
 test "runFile: cycle limit reached" {
@@ -172,19 +176,19 @@ test "runFile: cycle limit reached" {
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
 
-    const f = try tmp.dir.createFile("test.bin", .{});
-    try f.writeAll(&program);
-    f.close();
+    const f = try tmp.dir.createFile(io, "test.bin", .{});
+    try f.writeStreamingAll(io, &program);
+    f.close(io);
 
     const path = try makeTmpPath(tmp, "test.bin");
-    defer std.testing.allocator.free(path);
+    defer alloc.free(path);
 
-    var stdout_buf: std.ArrayList(u8) = .empty;
-    defer stdout_buf.deinit(std.testing.allocator);
-    var stderr_buf: std.ArrayList(u8) = .empty;
-    defer stderr_buf.deinit(std.testing.allocator);
+    var stdout_aw: Io.Writer.Allocating = .init(alloc);
+    defer stdout_aw.deinit();
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
 
-    try main_mod.runFile(stdout_buf.writer(std.testing.allocator), stderr_buf.writer(std.testing.allocator), path, 2, null);
+    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 2, null);
 
-    try expectContains(stdout_buf.items, "Cycle limit reached");
+    try expectContains(stdout_aw.written(), "Cycle limit reached");
 }
