@@ -197,6 +197,8 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                     self.reservation = addr;
                 },
                 .SC_W => {
+                    // reservation is guaranteed word-aligned (LR.W's readWord rejects
+                    // misalignment), so direct equality suffices — no mask needed here.
                     if (self.reservation == addr) {
                         try self.writeWord(addr, rs2_val);
                         self.writeReg(rd, 0); // success
