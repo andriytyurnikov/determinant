@@ -83,15 +83,25 @@ test "conformance: I-type ALU (RV32I + Zbb + Zbs)" {
     try assertConformance(encodeI(0b0010011, 0b001, 3, 7, 0b0000000_00101)); // SLLI
     try assertConformance(encodeI(0b0010011, 0b101, 3, 7, 0b0000000_00011)); // SRLI
     try assertConformance(encodeI(0b0010011, 0b101, 3, 7, 0b0100000_00011)); // SRAI
-    // Zbb shifts (with non-zero rd/rs1)
-    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0110000_00101)); // RORI
-    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00000)); // CLZ
-    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00001)); // CTZ
-    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00010)); // CPOP
-    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00100)); // SEXT_B
-    try assertConformance(encodeI(0b0010011, 0b001, 4, 8, 0b0110000_00101)); // SEXT_H
-    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0010100_00111)); // ORC_B
-    try assertConformance(encodeI(0b0010011, 0b101, 4, 8, 0b0110100_11000)); // REV8
+    // Zbb I-ALU with register sweep to catch field-population divergence at non-trivial operands.
+    const zbb_cases = [_]struct { f3: u3, imm12: u12 }{
+        .{ .f3 = 0b001, .imm12 = 0b0110000_00000 }, // CLZ
+        .{ .f3 = 0b001, .imm12 = 0b0110000_00001 }, // CTZ
+        .{ .f3 = 0b001, .imm12 = 0b0110000_00010 }, // CPOP
+        .{ .f3 = 0b001, .imm12 = 0b0110000_00100 }, // SEXT_B
+        .{ .f3 = 0b001, .imm12 = 0b0110000_00101 }, // SEXT_H
+        .{ .f3 = 0b101, .imm12 = 0b0010100_00111 }, // ORC_B
+        .{ .f3 = 0b101, .imm12 = 0b0110100_11000 }, // REV8
+        .{ .f3 = 0b101, .imm12 = 0b0110000_00101 }, // RORI (shamt=5)
+    };
+    const test_regs = [_]u5{ 0, 1, 15, 31 };
+    for (test_regs) |rd_v| {
+        for (test_regs) |rs1_v| {
+            inline for (zbb_cases) |c| {
+                try assertConformance(encodeI(0b0010011, c.f3, rd_v, rs1_v, c.imm12));
+            }
+        }
+    }
     // Zbs shifts (with non-zero rd/rs1)
     try assertConformance(encodeI(0b0010011, 0b001, 6, 12, 0b0100100_00101)); // BCLRI
     try assertConformance(encodeI(0b0010011, 0b101, 6, 12, 0b0100100_00011)); // BEXTI

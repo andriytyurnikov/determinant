@@ -6,12 +6,13 @@ src/
   main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant") (companion file for main/)
   main/
     test_helpers.zig      — SliceIterator (fake arg iterator for mainInner tests)
-    tests.zig             — hub → disassembly, result, demo, args, file
+    tests.zig             — hub → disassembly, result, demo, args, file, dump
       disassembly_test.zig      — printInstruction output for all extension families (RV32I/M/A, Zicsr, Zba/Zbb/Zbs, compressed)
       result_test.zig           — printResult: ecall/ebreak/continue, register dump, PC format, zero omission
       demo_test.zig             — runDemo deterministic output, reproducibility
       args_test.zig             — mainInner arg parsing: help, flag errors, missing/invalid --max-cycles
       file_test.zig             — runFile: empty/large/nonexistent files, successful execution, cycle limits
+      dump_test.zig             — dumpMemory: hexdump and raw format output
   cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (64KB), step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)

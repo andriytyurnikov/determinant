@@ -31,10 +31,9 @@ pub fn runTest(binary: []const u8) TestResult {
             return .{ .fail = gp >> 1 };
         },
         .ecall => {
-            // Some tests use ecall for pass (with a0=0, a7=93 convention)
-            const a0 = vm.readReg(10);
-            if (a0 == 0) return .pass;
+            // riscv_test.h uses the gp (x3) PASS/FAIL convention for both EBREAK and ECALL exits.
             const gp = vm.readReg(3);
+            if (gp == 1) return .pass;
             return .{ .fail = gp >> 1 };
         },
         .@"continue" => .timeout,
