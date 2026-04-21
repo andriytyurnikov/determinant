@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Determinant — a deterministic RISC-V VM. Written in Zig 0.15.2, structured as both a library and CLI executable. See `README.md` for public API, [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
+Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as both a library and CLI executable. See `README.md` for public API, [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
 
 ## Build Commands
 
@@ -169,7 +169,7 @@ std.mem.writeInt(u32, buf[0..][0..4], 0x06400093, .little);
 ```
 Banned APIs in VM/CLI code: `std.mem.sliceAsBytes`, `std.mem.bytesAsSlice`, `@ptrCast` on byte buffers, `.native` endianness. These all depend on host byte order and silently break determinism on big-endian targets.
 
-### Zig 0.15.2 Memory Slice Syntax
+### Memory Slice Syntax
 ```zig
 // WRONG — returns variable-length slice:
 std.mem.readInt(u32, memory[addr..addr+4], .little)

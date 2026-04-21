@@ -23,7 +23,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ## Requirements
 
-- [Zig](https://ziglang.org/) 0.15.2+
+- [Zig](https://ziglang.org/) 0.16.0+
 
 ## Build
 
