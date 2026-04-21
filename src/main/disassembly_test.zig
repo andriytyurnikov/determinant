@@ -1,13 +1,16 @@
 const std = @import("std");
+const Io = std.Io;
 const main_mod = @import("../main.zig");
 const det = @import("determinant");
 const Instruction = det.Instruction;
 
+const alloc = std.testing.allocator;
+
 fn expectDisassembly(inst: Instruction, expected: []const u8) !void {
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(std.testing.allocator);
-    try main_mod.printInstruction(output.writer(std.testing.allocator), inst);
-    try std.testing.expectEqualStrings(expected, output.items);
+    var aw: Io.Writer.Allocating = .init(alloc);
+    defer aw.deinit();
+    try main_mod.printInstruction(&aw.writer, inst);
+    try std.testing.expectEqualStrings(expected, aw.written());
 }
 
 // --- RV32I ---
@@ -183,7 +186,6 @@ test "printInstruction: AMOSWAP.W" {
 // --- Zicsr ---
 
 test "printInstruction: CSRRW register" {
-    // CSR 0xC00 = cycle counter, stored as imm = -1024 (sign-extended 0xC00)
     try expectDisassembly(.{
         .op = .{ .csr = .CSRRW },
         .rd = 1,
@@ -194,7 +196,6 @@ test "printInstruction: CSRRW register" {
 }
 
 test "printInstruction: CSRRWI immediate" {
-    // CSR 0x340 = mscratch, rs1 field holds uimm
     try expectDisassembly(.{
         .op = .{ .csr = .CSRRWI },
         .rd = 1,
