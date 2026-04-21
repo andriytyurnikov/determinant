@@ -1,26 +1,31 @@
 //! CLI executable: loads flat binary, runs VM, prints disassembly and register dump.
 
 const std = @import("std");
+const Io = std.Io;
 const det = @import("determinant");
 
 const unlimited_cycles: ?u64 = null;
 
 pub const DumpFormat = enum { hexdump, raw };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const arena = init.arena.allocator();
+
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
+    var stdout_fw: Io.File.Writer = .init(Io.File.stdout(), io, &stdout_buffer);
+    const stdout: *Io.Writer = &stdout_fw.interface;
 
     var stderr_buffer: [4096]u8 = undefined;
-    var stderr_writer = std.fs.File.stderr().writer(&stderr_buffer);
-    const stderr = &stderr_writer.interface;
+    var stderr_fw: Io.File.Writer = .init(Io.File.stderr(), io, &stderr_buffer);
+    const stderr: *Io.Writer = &stderr_fw.interface;
 
     defer stdout.flush() catch {};
     defer stderr.flush() catch {};
 
-    var args = std.process.args();
-    mainInner(stdout, stderr, &args) catch |err| switch (err) {
+    const args = try init.minimal.args.toSlice(arena);
+
+    mainInner(io, stdout, stderr, args) catch |err| switch (err) {
         error.UserError => {
             stdout.flush() catch {};
             stderr.flush() catch {};
@@ -30,26 +35,20 @@ pub fn main() !void {
     };
 }
 
-pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
-    _ = args.next(); // skip program name
-
-    // Collect args for index-based access (enables lookahead for --dump-memory)
-    var arg_buf: [16][]const u8 = undefined;
-    var arg_count: usize = 0;
-    while (args.next()) |arg| {
-        if (arg_count >= arg_buf.len) break;
-        arg_buf[arg_count] = arg;
-        arg_count += 1;
-    }
-    const arg_list = arg_buf[0..arg_count];
-
+pub fn mainInner(
+    io: Io,
+    stdout: *Io.Writer,
+    stderr: *Io.Writer,
+    args: []const [:0]const u8,
+) !void {
+    // args[0] is the program name; iterate args[1..].
     var path: ?[]const u8 = null;
     var max_cycles: ?u64 = unlimited_cycles;
     var dump_format: ?DumpFormat = null;
 
-    var i: usize = 0;
-    while (i < arg_list.len) : (i += 1) {
-        const arg = arg_list[i];
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             try stdout.print("Usage: determinant [<file>] [--max-cycles N] [--dump-memory [raw]]\n\n", .{});
             try stdout.print("  <file>              RISC-V binary to load and execute\n", .{});
@@ -60,8 +59,8 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
             return;
         } else if (std.mem.eql(u8, arg, "--max-cycles")) {
             i += 1;
-            if (i < arg_list.len) {
-                max_cycles = std.fmt.parseInt(u64, arg_list[i], 10) catch {
+            if (i < args.len) {
+                max_cycles = std.fmt.parseInt(u64, args[i], 10) catch {
                     try stderr.print("Error: invalid --max-cycles value\n", .{});
                     return error.UserError;
                 };
@@ -72,7 +71,7 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
         } else if (std.mem.eql(u8, arg, "--dump-memory")) {
             dump_format = .hexdump;
             // Peek at next arg for optional "raw" format
-            if (i + 1 < arg_list.len and std.mem.eql(u8, arg_list[i + 1], "raw")) {
+            if (i + 1 < args.len and std.mem.eql(u8, args[i + 1], "raw")) {
                 dump_format = .raw;
                 i += 1;
             }
@@ -89,13 +88,13 @@ pub fn mainInner(stdout: anytype, stderr: anytype, args: anytype) !void {
     }
 
     if (path) |p| {
-        try runFile(stdout, stderr, p, max_cycles, dump_format);
+        try runFile(io, stdout, stderr, p, max_cycles, dump_format);
     } else {
         try runDemo(stdout, stderr, dump_format);
     }
 }
 
-pub fn runDemo(stdout: anytype, stderr: anytype, dump_format: ?DumpFormat) !void {
+pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat) !void {
     try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
     // Hardcoded 5-instruction RV32I program:
@@ -169,15 +168,15 @@ pub fn runDemo(stdout: anytype, stderr: anytype, dump_format: ?DumpFormat) !void
     }
 }
 
-pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !void {
+pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !void {
     // Open and read the binary file
-    var file = std.fs.cwd().openFile(path, .{}) catch |err| {
+    var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
         return error.UserError;
     };
-    defer file.close();
+    defer file.close(io);
 
-    const stat = file.stat() catch |err| {
+    const stat = file.stat(io) catch |err| {
         try stderr.print("Error: cannot stat '{s}': {s}\n", .{ path, @errorName(err) });
         return error.UserError;
     };
@@ -198,7 +197,7 @@ pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?
     // Read directly into VM memory — equivalent to loadProgram() but avoids
     // an intermediate buffer. If loadProgram() gains side effects beyond memcpy,
     // this must be updated to match.
-    const n = file.readAll(vm.memory[0..size]) catch |err| {
+    const n = file.readPositionalAll(io, vm.memory[0..size], 0) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return error.UserError;
     };
@@ -236,7 +235,7 @@ pub fn runFile(stdout: anytype, stderr: anytype, path: []const u8, max_cycles: ?
     }
 }
 
-pub fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) !void {
+pub fn printResult(stdout: *Io.Writer, vm: *const det.Cpu, result: det.StepResult) !void {
     switch (result) {
         .@"continue" => try stdout.print("\nCycle limit reached after {d} cycles (program did not terminate)\n", .{vm.cycle_count}),
         .ecall, .ebreak => try stdout.print("\nExecution complete ({s} after {d} cycles)\n", .{ @tagName(result), vm.cycle_count }),
@@ -251,7 +250,7 @@ pub fn printResult(stdout: anytype, vm: *const det.Cpu, result: det.StepResult) 
     }
 }
 
-pub fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
+pub fn printInstruction(stdout: *Io.Writer, inst: det.Instruction) !void {
     const op_name = if (inst.compressed_op) |c_op| c_op.name() else inst.op.name();
     switch (inst.op) {
         .i => |i_op| switch (i_op) {
@@ -290,14 +289,14 @@ pub fn printInstruction(stdout: anytype, inst: det.Instruction) !void {
     }
 }
 
-pub fn dumpMemory(stdout: anytype, memory: []const u8, format: DumpFormat) !void {
+pub fn dumpMemory(stdout: *Io.Writer, memory: []const u8, format: DumpFormat) !void {
     switch (format) {
         .hexdump => try dumpHexdump(stdout, memory),
         .raw => try dumpRaw(stdout, memory),
     }
 }
 
-fn dumpHexdump(stdout: anytype, memory: []const u8) !void {
+fn dumpHexdump(stdout: *Io.Writer, memory: []const u8) !void {
     var prev_line: ?*const [16]u8 = null;
     var collapsing = false;
     var offset: usize = 0;
@@ -367,7 +366,7 @@ fn dumpHexdump(stdout: anytype, memory: []const u8) !void {
     try stdout.print("{X:0>8}\n", .{memory.len});
 }
 
-fn dumpRaw(stdout: anytype, memory: []const u8) !void {
+fn dumpRaw(stdout: *Io.Writer, memory: []const u8) !void {
     var offset: usize = 0;
     while (offset < memory.len) : (offset += 32) {
         const remaining = memory.len - offset;
