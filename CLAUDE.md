@@ -111,7 +111,7 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 - LR_W/SC_W orchestration stays in cpu.zig (needs reservation state + memory access); AMO computation is in `rv32a.zig`
 - SC_W checks alignment and bounds (`checkWordAccess`) BEFORE it looks at the reservation: a misaligned or out-of-bounds SC.W faults even when it would have failed, and the fault leaves the reservation unchanged (spec: no SC.W retires unless it passes memory permission checks; Spike and Sail agree)
 - Reservation state is `reservation: ?u32` (null = no reservation) — Option type eliminates impossible states that a separate bool+address pair would allow
-- Memory write methods (`writeByte`, `writeHalfword`, `writeWord`) auto-call `invalidateReservation()` — store sites don't need to invalidate manually. If new write methods are added, they MUST call `invalidateReservation()`.
+- Memory write methods (`writeByte`, `writeHalfword`, `writeWord`) auto-call `invalidateReservation()` — store sites don't need to invalidate manually. `loadProgram()` drops a reservation on any word it overwrites (`invalidateReservationRange()`). If new write methods are added, they MUST do the same. Hosts that write `memory` directly must call `clearReservation()` afterwards (the CLI's `runFile` does).
 - `invalidateReservation()` checks word-aligned overlap (addr & 0xFFFFFFFC), not exact byte match
 
 ### CSR Implementation

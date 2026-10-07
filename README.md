@@ -77,7 +77,8 @@ The library is available via `@import("determinant")`.
   - `reset()` — zero a VM in place; use it on a heap-allocated VM for large memories
   - `readReg(u5) → u32` / `writeReg(u5, u32)` — register access (x0 hardwired to zero)
   - `fetch() → u32` — read instruction word at PC
-  - `loadProgram([]const u8, u32)` — load bytes into memory at offset
+  - `loadProgram([]const u8, u32)` — load bytes into memory at offset (drops an LR reservation on any word it overwrites)
+  - `clearReservation()` — drop the LR reservation; call it after writing `memory` directly
   - `step() → StepResult` — fetch, decode, execute one instruction
   - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
   - `run(max_cycles: ?u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (null = unlimited, 0 = zero steps)

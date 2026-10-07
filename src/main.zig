@@ -220,9 +220,9 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
 
     const size: usize = @intCast(stat.size);
 
-    // Read directly into VM memory — equivalent to loadProgram() but avoids
-    // an intermediate buffer. If loadProgram() gains side effects beyond memcpy,
-    // this must be updated to match.
+    // Read directly into VM memory instead of going through loadProgram(), to avoid
+    // an intermediate buffer as large as the file. Direct memory writes must drop the
+    // LR reservation (see clearReservation below).
     const n = file.readPositionalAll(io, vm.memory[0..size], 0) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return error.UserError;
@@ -232,6 +232,7 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
         try stderr.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
         return error.UserError;
     }
+    vm.clearReservation();
 
     try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
 
