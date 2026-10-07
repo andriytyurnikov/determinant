@@ -1,6 +1,6 @@
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 const MEMORY_SIZE = Cpu.mem_size;
 const StepResult = cpu_mod.StepResult;
 
@@ -107,4 +107,43 @@ test "loadProgram out of bounds" {
 test "init: reservation is null" {
     const cpu = Cpu.init();
     try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
+
+test "init: memory, counters and CSRs are zero" {
+    const cpu = Cpu.init();
+    for (cpu.memory) |b| try std.testing.expectEqual(@as(u8, 0), b);
+    try std.testing.expectEqual(@as(u64, 0), cpu.cycle_count);
+    try std.testing.expectEqual(@as(u32, 0), cpu.csrs.mscratch);
+}
+
+test "reset: restores the power-on state in place" {
+    var cpu = Cpu.init();
+    cpu.pc = 0x100;
+    for (&cpu.regs, 0..) |*r, i| r.* = @intCast(i + 1);
+    @memset(&cpu.memory, 0xA5);
+    cpu.cycle_count = 12345;
+    cpu.reservation = 64;
+    cpu.csrs.mscratch = 0xDEADBEEF;
+
+    cpu.reset();
+
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+    for (cpu.regs) |r| try std.testing.expectEqual(@as(u32, 0), r);
+    for (cpu.memory) |b| try std.testing.expectEqual(@as(u8, 0), b);
+    try std.testing.expectEqual(@as(u64, 0), cpu.cycle_count);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+    try std.testing.expectEqual(@as(u32, 0), cpu.csrs.mscratch);
+}
+
+test "reset: a heap-allocated VM starts like init()" {
+    const cpu = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(cpu);
+    cpu.reset();
+    const fresh = Cpu.init();
+    try std.testing.expectEqual(fresh.pc, cpu.pc);
+    try std.testing.expectEqualSlices(u32, &fresh.regs, &cpu.regs);
+    try std.testing.expectEqualSlices(u8, &fresh.memory, &cpu.memory);
+    try std.testing.expectEqual(fresh.cycle_count, cpu.cycle_count);
+    try std.testing.expectEqual(fresh.reservation, cpu.reservation);
+    try std.testing.expectEqual(fresh.csrs, cpu.csrs);
 }

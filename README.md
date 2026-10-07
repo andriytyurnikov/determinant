@@ -67,7 +67,8 @@ Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.
 The library is available via `@import("determinant")`.
 
 - **`Cpu`** — VM state (decoder backend follows `-Ddecoder` build option, default: LUT)
-  - `init()` — create a zeroed VM
+  - `init()` — return a zeroed VM by value (small memories only: the memory lives inside the struct)
+  - `reset()` — zero a VM in place; use it on a heap-allocated VM for large memories
   - `readReg(u5) → u32` / `writeReg(u5, u32)` — register access (x0 hardwired to zero)
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset

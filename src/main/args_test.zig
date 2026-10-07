@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const main_mod = @import("../main.zig");
+const det = @import("determinant");
 
 const io = std.testing.io;
 const alloc = std.testing.allocator;
@@ -19,6 +20,7 @@ fn runArgs(args: Args, stdout: *Io.Writer, stderr: *Io.Writer) !void {
 }
 
 test "mainInner: no args runs demo" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var stdout_aw: Io.Writer.Allocating = .init(alloc);
     defer stdout_aw.deinit();
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
@@ -56,6 +58,7 @@ test "mainInner: -h" {
 }
 
 test "mainInner: --max-cycles without file runs demo with limit" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var stdout_aw: Io.Writer.Allocating = .init(alloc);
     defer stdout_aw.deinit();
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
@@ -152,6 +155,7 @@ test "mainInner: extra arguments produce warning" {
 }
 
 test "mainInner: --dump-memory runs demo with hexdump" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var stdout_aw: Io.Writer.Allocating = .init(alloc);
     defer stdout_aw.deinit();
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
@@ -165,6 +169,9 @@ test "mainInner: --dump-memory runs demo with hexdump" {
 }
 
 test "mainInner: --dump-memory raw runs demo with raw format" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
+    // A raw dump prints two hex digits per byte; skip it for very large memories.
+    if (det.Cpu.mem_size > 1024 * 1024) return error.SkipZigTest;
     var stdout_aw: Io.Writer.Allocating = .init(alloc);
     defer stdout_aw.deinit();
     var stderr_aw: Io.Writer.Allocating = .init(alloc);

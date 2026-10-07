@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 
 pub fn loadInst(cpu: *Cpu, word: u32) void {
     std.mem.writeInt(u32, cpu.memory[cpu.pc..][0..4], word, .little);

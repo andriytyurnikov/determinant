@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const main_mod = @import("../main.zig");
+const det = @import("determinant");
 
 const alloc = std.testing.allocator;
 
@@ -12,6 +13,7 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
 }
 
 test "runDemo: deterministic output" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var out_aw: Io.Writer.Allocating = .init(alloc);
     defer out_aw.deinit();
     var err_aw: Io.Writer.Allocating = .init(alloc);
@@ -33,6 +35,7 @@ test "runDemo: deterministic output" {
 }
 
 test "runDemo: reproducible output" {
+    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var out1: Io.Writer.Allocating = .init(alloc);
     defer out1.deinit();
     var err1: Io.Writer.Allocating = .init(alloc);
@@ -46,4 +49,14 @@ test "runDemo: reproducible output" {
     try main_mod.runDemo(&out2.writer, &err2.writer, null);
 
     try std.testing.expectEqualStrings(out1.written(), out2.written());
+}
+
+test "runDemo: memory too small for the demo is a user error" {
+    if (det.Cpu.mem_size >= main_mod.demo_min_memory) return error.SkipZigTest;
+    var out_aw: Io.Writer.Allocating = .init(alloc);
+    defer out_aw.deinit();
+    var err_aw: Io.Writer.Allocating = .init(alloc);
+    defer err_aw.deinit();
+    try std.testing.expectError(error.UserError, main_mod.runDemo(&out_aw.writer, &err_aw.writer, null));
+    try std.testing.expect(err_aw.written().len > 0);
 }

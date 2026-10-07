@@ -9,6 +9,10 @@ pub fn build(b: *std.Build) void {
 
     const decoder_choice = b.option(Decoder, "decoder", "Instruction decoder backend (default: lut)") orelse .lut;
     const memory_size: u32 = b.option(u32, "memory_size", "VM memory size in bytes (default: 65536, must be >= 4 and divisible by 4)") orelse default_memory_size;
+    if (memory_size < 4 or memory_size % 4 != 0) {
+        std.log.err("invalid -Dmemory_size={d}: it must be at least 4 and a multiple of 4", .{memory_size});
+        b.invalid_user_input = true;
+    }
 
     const options = b.addOptions();
     options.addOption(bool, "use_branch_decoder", decoder_choice == .branch);

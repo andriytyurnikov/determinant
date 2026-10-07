@@ -13,7 +13,7 @@ src/
       args_test.zig             — mainInner arg parsing: help, flag errors, missing/invalid --max-cycles
       file_test.zig             — runFile: empty/large/nonexistent files, successful execution, cycle limits
       dump_test.zig             — dumpMemory: hexdump and raw format output
-  cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (64KB), step/run executor, memory helpers (companion file for cpu/)
+  cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
     tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery

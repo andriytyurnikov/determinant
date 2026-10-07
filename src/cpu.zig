@@ -34,16 +34,26 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         reservation: ?u32,
         csrs: zicsr.Csr,
 
+        /// Return a zeroed VM by value. The whole memory lives inside Self, so this
+        /// is for small memories only: for large ones, place Self on the heap or in
+        /// static storage and call reset() on it instead.
         /// INVARIANT: no allocators — all state is fixed-size (registers, memory, CSR struct).
         pub fn init() Self {
-            return .{
-                .pc = 0,
-                .regs = [_]u32{0} ** 32,
-                .memory = [_]u8{0} ** mem_size,
-                .cycle_count = 0,
-                .reservation = null,
-                .csrs = .{},
-            };
+            var self: Self = undefined;
+            self.reset();
+            return self;
+        }
+
+        /// Reset to the power-on state in place: pc = 0, registers, memory and
+        /// counters zeroed, no reservation. Unlike init(), this never builds a Self
+        /// temporary on the stack or a memory-sized constant in the binary.
+        pub fn reset(self: *Self) void {
+            self.pc = 0;
+            self.regs = @splat(0);
+            @memset(&self.memory, 0);
+            self.cycle_count = 0;
+            self.reservation = null;
+            self.csrs = .{};
         }
 
         /// Read register. x0 always returns 0.
@@ -263,6 +273,10 @@ pub const default_memory_size: u32 = build_options.memory_size;
 
 /// Default Cpu — memory size follows `-Dmemory_size`, decoder follows `-Ddecoder`.
 pub const Cpu = CpuType(default_memory_size, default_decode);
+
+/// CPU for the unit tests: always 64 KiB of memory, so the tests behave the same
+/// at every `-Dmemory_size`. The decoder still follows `-Ddecoder`.
+pub const TestCpu = CpuType(64 * 1024, default_decode);
 
 test "CpuType: custom memory size" {
     const SmallCpu = CpuType(4096, &decoders.lut.decode);

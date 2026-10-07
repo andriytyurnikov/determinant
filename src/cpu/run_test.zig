@@ -1,6 +1,6 @@
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 const StepResult = cpu_mod.StepResult;
 
 // --- run() tests ---
