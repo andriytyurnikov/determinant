@@ -89,6 +89,9 @@ pub const Csr = struct {
     }
 
     pub fn write(self: *Csr, addr: u12, value: u32) !void {
+        // CSRs with bits [11:10] = 0b11 are read-only by convention. The switch below
+        // already rejects every write but mscratch; this keeps the rule if writable
+        // CSRs are added.
         if ((addr >> 10) & 0b11 == 0b11) return error.IllegalInstruction;
         switch (addr) {
             0x340 => self.mscratch = value,
