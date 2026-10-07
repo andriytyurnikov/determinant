@@ -66,3 +66,8 @@ test "C.LWSP max offset=252" {
 test "C.SWSP max offset=252" {
     try expectExpand(0xDF86, .SW, 0, 2, 1, 252);
 }
+
+test "C.ADDI16SP: imm=+64 and imm=+256 (nzimm[6] vs nzimm[8])" {
+    try expectExpand(0x6121, .ADDI, 2, 2, 0, 64);
+    try expectExpand(0x6111, .ADDI, 2, 2, 0, 256);
+}

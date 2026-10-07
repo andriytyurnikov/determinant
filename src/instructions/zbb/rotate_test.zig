@@ -241,3 +241,17 @@ test "step: REV8 all-ones" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
 }
+
+test "step: ORC.B sets a byte when only its high nibble is non-zero" {
+    const orc_b = h.encodeI(0b0010011, 0b101, 3, 1, (@as(u12, 0b0010100) << 5) | 7); // ORC.B x3, x1
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x00800000);
+    loadInst(&cpu, orc_b);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x00FF0000), cpu.readReg(3));
+    cpu.pc = 0;
+    cpu.writeReg(1, 0x0000F000);
+    loadInst(&cpu, orc_b);
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x0000FF00), cpu.readReg(3));
+}

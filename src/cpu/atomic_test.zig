@@ -324,3 +324,30 @@ test "step: SC.W to out-of-bounds address fails without error" {
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
     try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
 }
+
+test "reservation: only writes overlapping the reserved word invalidate it" {
+    var cpu = Cpu.init();
+    cpu.reservation = 256;
+    try cpu.writeWord(252, 1); // previous word
+    try cpu.writeHalfword(260, 1); // next word
+    try cpu.writeByte(255, 1); // last byte of the previous word
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    try cpu.writeByte(259, 1); // last byte of the reserved word
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
+
+test "step: LR.W, SW to another word, SC.W still succeeds" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 256, 0x42);
+    cpu.writeReg(1, 256); // reserved address
+    cpu.writeReg(5, 260); // neighbouring word
+    cpu.writeReg(2, 0x99);
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0)); // LR.W x3, (x1)
+    _ = try cpu.step();
+    h.loadInst(&cpu, h.encodeS(0b010, 5, 2, 0)); // SW x2, 0(x5)
+    _ = try cpu.step();
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
+    try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
+}

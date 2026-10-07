@@ -147,3 +147,15 @@ test "reset: a heap-allocated VM starts like init()" {
     try std.testing.expectEqual(fresh.reservation, cpu.reservation);
     try std.testing.expectEqual(fresh.csrs, cpu.csrs);
 }
+
+test "writeReg(0) leaves regs[0] untouched" {
+    var cpu = Cpu.init();
+    cpu.writeReg(0, 0xDEADBEEF);
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
+}
+
+test "readReg(0) is 0 even if regs[0] is non-zero" {
+    var cpu = Cpu.init();
+    cpu.regs[0] = 0xDEADBEEF;
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+}

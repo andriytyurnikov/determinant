@@ -187,3 +187,7 @@ pub fn strategyFor(opcode7: u7) Strategy {
         else => .illegal,
     };
 }
+
+test {
+    _ = @import("registry_test.zig");
+}

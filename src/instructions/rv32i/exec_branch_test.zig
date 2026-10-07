@@ -106,3 +106,21 @@ test "step: BGEU not taken" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
 }
+
+test "step: BGEU taken on equal operands" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    cpu.writeReg(2, 0x80000000);
+    loadInst(&cpu, h.encodeB(0b111, 1, 2, 8)); // BGEU x1, x2, +8
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+}
+
+test "step: BLT not taken on equal operands" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF);
+    cpu.writeReg(2, 0xFFFFFFFF);
+    loadInst(&cpu, h.encodeB(0b100, 1, 2, 8)); // BLT x1, x2, +8
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+}
