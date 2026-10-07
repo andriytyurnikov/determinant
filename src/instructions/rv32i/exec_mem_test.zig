@@ -68,6 +68,8 @@ test "step: SB stores low byte" {
     loadInst(&cpu, 0x00208023);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u8, 0x42), cpu.memory[300]);
+    try std.testing.expectEqual(@as(u8, 0), cpu.memory[301]); // neighbours untouched
+    try std.testing.expectEqual(@as(u8, 0), cpu.memory[299]);
 }
 
 test "step: SH stores low halfword" {
@@ -78,6 +80,8 @@ test "step: SH stores low halfword" {
     loadInst(&cpu, 0x00209023);
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u16, 0x1234), std.mem.readInt(u16, cpu.memory[300..][0..2], .little));
+    try std.testing.expectEqual(@as(u8, 0), cpu.memory[302]); // neighbours untouched
+    try std.testing.expectEqual(@as(u8, 0), cpu.memory[299]);
 }
 
 test "step: SW with positive offset" {

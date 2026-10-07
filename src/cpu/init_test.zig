@@ -2,7 +2,6 @@ const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
 const Cpu = cpu_mod.TestCpu;
 const MEMORY_SIZE = Cpu.mem_size;
-const StepResult = cpu_mod.StepResult;
 
 test "init zeroes pc and registers" {
     const cpu = Cpu.init();

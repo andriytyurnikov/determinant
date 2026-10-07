@@ -3,20 +3,7 @@ const instructions = @import("../../instructions.zig");
 const Opcode = instructions.Opcode;
 const decoder = @import("../../decoders/branch.zig");
 const decode = decoder.decode;
-const cpu_mod = @import("../../cpu.zig");
-const Cpu = cpu_mod.TestCpu;
 const h = @import("../test_helpers.zig");
-
-const loadInst = h.loadInst;
-
-fn encodeR(f3: u3, f7: u7, rd_v: u5, rs1_v: u5, rs2_v: u5) u32 {
-    return h.encodeR(0b0110011, f3, f7, rd_v, rs1_v, rs2_v);
-}
-
-fn encodeIShamt(f3: u3, f7: u7, rd_v: u5, rs1_v: u5, shamt: u5) u32 {
-    const imm12: u12 = (@as(u12, f7) << 5) | @as(u12, shamt);
-    return h.encodeI(0b0010011, f3, rd_v, rs1_v, imm12);
-}
 
 // --- Decode tests ---
 
@@ -33,7 +20,7 @@ test "decode Zbb R-type ANDN ORN XNOR MIN MINU MAX MAXU ROL ROR" {
         .{ @as(u3, 0b101), @as(u7, 0b0110000), Opcode{ .zbb = .ROR } },
     };
     inline for (cases) |c| {
-        const raw = encodeR(c[0], c[1], 4, 5, 6);
+        const raw = h.encodeOp(c[0], c[1], 4, 5, 6);
         const inst = try decode(raw);
         try std.testing.expectEqual(c[2], inst.op);
         try std.testing.expectEqual(@as(u5, 4), inst.rd);
@@ -43,7 +30,7 @@ test "decode Zbb R-type ANDN ORN XNOR MIN MINU MAX MAXU ROL ROR" {
 }
 
 test "decode Zbb R-type ZEXT_H" {
-    const raw = encodeR(0b100, 0b0000100, 4, 5, 0); // rs2=0 required
+    const raw = h.encodeOp(0b100, 0b0000100, 4, 5, 0); // rs2=0 required
     const inst = try decode(raw);
     try std.testing.expectEqual(Opcode{ .zbb = .ZEXT_H }, inst.op);
 }
@@ -60,7 +47,7 @@ test "decode Zbb I-type CLZ CTZ CPOP SEXT_B SEXT_H RORI ORC_B REV8" {
         .{ @as(u3, 0b101), @as(u7, 0b0110100), @as(u5, 24), Opcode{ .zbb = .REV8 } },
     };
     inline for (cases) |c| {
-        const raw = encodeIShamt(c[0], c[1], 4, 5, c[2]);
+        const raw = h.encodeOpImmShift(c[0], c[1], 4, 5, c[2]);
         const inst = try decode(raw);
         try std.testing.expectEqual(c[3], inst.op);
     }
@@ -68,106 +55,20 @@ test "decode Zbb I-type CLZ CTZ CPOP SEXT_B SEXT_H RORI ORC_B REV8" {
 
 // --- CLZ/CTZ/CPOP execute tests ---
 
-test "step: CLZ zero" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 0));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 32), cpu.readReg(3));
-}
-
-test "step: CLZ one" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 1);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 0));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 31), cpu.readReg(3));
-}
-
-test "step: CLZ high bit" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 0));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: CLZ all-ones" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFFFFFFFF);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 0));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: CTZ zero" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 1));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 32), cpu.readReg(3));
-}
-
-test "step: CTZ low bit" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 1);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 1));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: CTZ trailing zeros" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 1));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 7), cpu.readReg(3));
-}
-
-test "step: CTZ all-ones" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFFFFFFFF);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 1));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: CPOP zero" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: CPOP all ones" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFFFFFFFF);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 32), cpu.readReg(3));
-}
-
-test "step: CPOP mixed" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x0F0F0F0F);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 16), cpu.readReg(3));
-}
-
-test "step: CPOP single bit low" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x00000001);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
-}
-
-test "step: CPOP single bit high" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    loadInst(&cpu, encodeIShamt(0b001, 0b0110000, 3, 1, 2));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+test "step: table (bitcount)" {
+    try h.expectSteps(&.{
+        .{ .name = "CLZ zero", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 0), .regs = &.{.{ 1, 0 }}, .want = &.{.{ 3, 32 }} },
+        .{ .name = "CLZ one", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 0), .regs = &.{.{ 1, 1 }}, .want = &.{.{ 3, 31 }} },
+        .{ .name = "CLZ high bit", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 0), .regs = &.{.{ 1, 0x80000000 }}, .want = &.{.{ 3, 0 }} },
+        .{ .name = "CLZ all-ones", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 0), .regs = &.{.{ 1, 0xFFFFFFFF }}, .want = &.{.{ 3, 0 }} },
+        .{ .name = "CTZ zero", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 1), .regs = &.{.{ 1, 0 }}, .want = &.{.{ 3, 32 }} },
+        .{ .name = "CTZ low bit", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 1), .regs = &.{.{ 1, 1 }}, .want = &.{.{ 3, 0 }} },
+        .{ .name = "CTZ trailing zeros", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 1), .regs = &.{.{ 1, 0x80 }}, .want = &.{.{ 3, 7 }} },
+        .{ .name = "CTZ all-ones", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 1), .regs = &.{.{ 1, 0xFFFFFFFF }}, .want = &.{.{ 3, 0 }} },
+        .{ .name = "CPOP zero", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 2), .regs = &.{.{ 1, 0 }}, .want = &.{.{ 3, 0 }} },
+        .{ .name = "CPOP all ones", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 2), .regs = &.{.{ 1, 0xFFFFFFFF }}, .want = &.{.{ 3, 32 }} },
+        .{ .name = "CPOP mixed", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 2), .regs = &.{.{ 1, 0x0F0F0F0F }}, .want = &.{.{ 3, 16 }} },
+        .{ .name = "CPOP single bit low", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 2), .regs = &.{.{ 1, 0x00000001 }}, .want = &.{.{ 3, 1 }} },
+        .{ .name = "CPOP single bit high", .inst = h.encodeOpImmShift(0b001, 0b0110000, 3, 1, 2), .regs = &.{.{ 1, 0x80000000 }}, .want = &.{.{ 3, 1 }} },
+    });
 }

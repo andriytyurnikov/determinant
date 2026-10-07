@@ -1,264 +1,64 @@
-const std = @import("std");
 const cpu_mod = @import("../../cpu.zig");
-const Cpu = cpu_mod.TestCpu;
 const StepResult = cpu_mod.StepResult;
 const h = @import("../test_helpers.zig");
 
-const loadInst = h.loadInst;
-
 // === Execute tests (I-extension ALU step tests) ===
 
-test "step: ADDI" {
-    var cpu = Cpu.init();
-    // ADDI x1, x0, 42 = 0x02A00093
-    loadInst(&cpu, 0x02A00093);
-    const result = try cpu.step();
-    try std.testing.expectEqual(StepResult.@"continue", result);
-    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(1));
-    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
-    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
-}
-
-test "step: ADDI negative" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 100);
-    // ADDI x2, x1, -1 = 0xFFF08113
-    loadInst(&cpu, 0xFFF08113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 99), cpu.readReg(2));
-}
-
-test "step: ADD" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 5);
-    cpu.writeReg(2, 10);
-    // ADD x3, x1, x2 = 0x002081B3
-    loadInst(&cpu, 0x002081B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 15), cpu.readReg(3));
-}
-
-test "step: SUB" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 20);
-    cpu.writeReg(2, 7);
-    // SUB x3, x1, x2 = 0x402081B3
-    loadInst(&cpu, 0x402081B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 13), cpu.readReg(3));
-}
-
-test "step: SUB wrapping" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0);
-    cpu.writeReg(2, 1);
-    // SUB x3, x1, x2
-    loadInst(&cpu, 0x402081B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
-}
-
-test "step: SLL" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 1);
-    cpu.writeReg(2, 4);
-    // SLL x3, x1, x2 = 0x002091B3
-    loadInst(&cpu, 0x002091B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 16), cpu.readReg(3));
-}
-
-test "step: SLT signed" {
-    var cpu = Cpu.init();
-    // -1 (0xFFFFFFFF) < 1 signed
-    cpu.writeReg(1, 0xFFFFFFFF);
-    cpu.writeReg(2, 1);
-    // SLT x3, x1, x2 = 0x0020A1B3
-    loadInst(&cpu, 0x0020A1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
-}
-
-test "step: SLTU unsigned" {
-    var cpu = Cpu.init();
-    // 0xFFFFFFFF > 1 unsigned
-    cpu.writeReg(1, 0xFFFFFFFF);
-    cpu.writeReg(2, 1);
-    // SLTU x3, x1, x2 = 0x0020B1B3
-    loadInst(&cpu, 0x0020B1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
-}
-
-test "step: XOR" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFF00FF00);
-    cpu.writeReg(2, 0x0F0F0F0F);
-    // XOR x3, x1, x2 = 0x0020C1B3
-    loadInst(&cpu, 0x0020C1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xF00FF00F), cpu.readReg(3));
-}
-
-test "step: SRL" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    cpu.writeReg(2, 4);
-    // SRL x3, x1, x2 = 0x0020D1B3
-    loadInst(&cpu, 0x0020D1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x08000000), cpu.readReg(3));
-}
-
-test "step: SRA" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000); // -2147483648
-    cpu.writeReg(2, 4);
-    // SRA x3, x1, x2 = 0x4020D1B3
-    loadInst(&cpu, 0x4020D1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xF8000000), cpu.readReg(3));
-}
-
-test "step: OR" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xF0F0F0F0);
-    cpu.writeReg(2, 0x0F0F0F0F);
-    // OR x3, x1, x2 = 0x0020E1B3
-    loadInst(&cpu, 0x0020E1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3));
-}
-
-test "step: AND" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFF00FF00);
-    cpu.writeReg(2, 0x0F0F0F0F);
-    // AND x3, x1, x2 = 0x0020F1B3
-    loadInst(&cpu, 0x0020F1B3);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x0F000F00), cpu.readReg(3));
-}
-
-test "step: SLTI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 5);
-    // SLTI x2, x1, 10 = 0x00A0A113
-    loadInst(&cpu, 0x00A0A113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(2));
-}
-
-test "step: SLTIU" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 5);
-    // SLTIU x2, x1, 10 = 0x00A0B113
-    loadInst(&cpu, 0x00A0B113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(2));
-}
-
-test "step: XORI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFF);
-    // XORI x2, x1, 0x0F = 0x00F0C113
-    loadInst(&cpu, 0x00F0C113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xF0), cpu.readReg(2));
-}
-
-test "step: ORI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xF0);
-    // ORI x2, x1, 0x0F = 0x00F0E113
-    loadInst(&cpu, 0x00F0E113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFF), cpu.readReg(2));
-}
-
-test "step: ANDI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFF);
-    // ANDI x2, x1, 0x0F = 0x00F0F113
-    loadInst(&cpu, 0x00F0F113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x0F), cpu.readReg(2));
-}
-
-test "step: SLLI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 1);
-    // SLLI x2, x1, 31 = 0x01F09113
-    loadInst(&cpu, 0x01F09113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x80000000), cpu.readReg(2));
-}
-
-test "step: SRLI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    // SRLI x2, x1, 31 = 0x01F0D113
-    loadInst(&cpu, 0x01F0D113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(2));
-}
-
-test "step: SRAI" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    // SRAI x2, x1, 31 = 0x41F0D113
-    loadInst(&cpu, 0x41F0D113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(2));
-}
-
-test "step: shift by 0" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 42);
-    // SLLI x2, x1, 0 = 0x00009113
-    loadInst(&cpu, 0x00009113);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(2));
-}
-
-test "step: x0 writes ignored" {
-    var cpu = Cpu.init();
-    // ADDI x0, x0, 42 — should not change x0
-    loadInst(&cpu, 0x02A00013);
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
-}
-
-test "step: SLTI is a signed compare" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0xFFFFFFFF); // -1
-    loadInst(&cpu, h.encodeI(0b0010011, 0b010, 2, 1, 1)); // SLTI x2, x1, 1
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(2));
-}
-
-test "step: SRL by 31" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x80000000);
-    cpu.writeReg(2, 31);
-    loadInst(&cpu, h.encodeR(0b0110011, 0b101, 0b0000000, 3, 1, 2)); // SRL x3, x1, x2
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
-}
-
-test "step: ANDI sign-extends its immediate" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x12345678);
-    loadInst(&cpu, h.encodeI(0b0010011, 0b111, 2, 1, 0xF0F)); // ANDI x2, x1, -241
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x12345608), cpu.readReg(2));
-}
-
-test "step: SLTU with equal operands yields 0" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 7);
-    cpu.writeReg(2, 7);
-    loadInst(&cpu, h.encodeR(0b0110011, 0b011, 0b0000000, 3, 1, 2)); // SLTU x3, x1, x2
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+test "step: table (exec_alu)" {
+    try h.expectSteps(&.{
+        // ADDI x1, x0, 42 = 0x02A00093
+        .{ .name = "ADDI", .inst = 0x02A00093, .result = StepResult.@"continue", .want = &.{.{ 1, 42 }}, .want_pc = 4, .want_cycles = @as(u64, 1) },
+        // ADDI x2, x1, -1 = 0xFFF08113
+        .{ .name = "ADDI negative", .inst = 0xFFF08113, .regs = &.{.{ 1, 100 }}, .want = &.{.{ 2, 99 }} },
+        // ADD x3, x1, x2 = 0x002081B3
+        .{ .name = "ADD", .inst = 0x002081B3, .regs = &.{ .{ 1, 5 }, .{ 2, 10 } }, .want = &.{.{ 3, 15 }} },
+        // SUB x3, x1, x2 = 0x402081B3
+        .{ .name = "SUB", .inst = 0x402081B3, .regs = &.{ .{ 1, 20 }, .{ 2, 7 } }, .want = &.{.{ 3, 13 }} },
+        // SUB x3, x1, x2
+        .{ .name = "SUB wrapping", .inst = 0x402081B3, .regs = &.{ .{ 1, 0 }, .{ 2, 1 } }, .want = &.{.{ 3, 0xFFFFFFFF }} },
+        // SLL x3, x1, x2 = 0x002091B3
+        .{ .name = "SLL", .inst = 0x002091B3, .regs = &.{ .{ 1, 1 }, .{ 2, 4 } }, .want = &.{.{ 3, 16 }} },
+        // -1 (0xFFFFFFFF) < 1 signed
+        .{ .name = "SLT signed", .inst = 0x0020A1B3, .regs = &.{ .{ 1, 0xFFFFFFFF }, .{ 2, 1 } }, .want = &.{.{ 3, 1 }} },
+        // 0xFFFFFFFF > 1 unsigned
+        .{ .name = "SLTU unsigned", .inst = 0x0020B1B3, .regs = &.{ .{ 1, 0xFFFFFFFF }, .{ 2, 1 } }, .want = &.{.{ 3, 0 }} },
+        // XOR x3, x1, x2 = 0x0020C1B3
+        .{ .name = "XOR", .inst = 0x0020C1B3, .regs = &.{ .{ 1, 0xFF00FF00 }, .{ 2, 0x0F0F0F0F } }, .want = &.{.{ 3, 0xF00FF00F }} },
+        // SRL x3, x1, x2 = 0x0020D1B3
+        .{ .name = "SRL", .inst = 0x0020D1B3, .regs = &.{ .{ 1, 0x80000000 }, .{ 2, 4 } }, .want = &.{.{ 3, 0x08000000 }} },
+        // SRA x3, x1, x2 = 0x4020D1B3
+        .{ .name = "SRA", .inst = 0x4020D1B3, .regs = &.{ .{ 1, 0x80000000 }, .{ 2, 4 } }, .want = &.{.{ 3, 0xF8000000 }} },
+        // OR x3, x1, x2 = 0x0020E1B3
+        .{ .name = "OR", .inst = 0x0020E1B3, .regs = &.{ .{ 1, 0xF0F0F0F0 }, .{ 2, 0x0F0F0F0F } }, .want = &.{.{ 3, 0xFFFFFFFF }} },
+        // AND x3, x1, x2 = 0x0020F1B3
+        .{ .name = "AND", .inst = 0x0020F1B3, .regs = &.{ .{ 1, 0xFF00FF00 }, .{ 2, 0x0F0F0F0F } }, .want = &.{.{ 3, 0x0F000F00 }} },
+        // SLTI x2, x1, 10 = 0x00A0A113
+        .{ .name = "SLTI", .inst = 0x00A0A113, .regs = &.{.{ 1, 5 }}, .want = &.{.{ 2, 1 }} },
+        // SLTIU x2, x1, 10 = 0x00A0B113
+        .{ .name = "SLTIU", .inst = 0x00A0B113, .regs = &.{.{ 1, 5 }}, .want = &.{.{ 2, 1 }} },
+        // XORI x2, x1, 0x0F = 0x00F0C113
+        .{ .name = "XORI", .inst = 0x00F0C113, .regs = &.{.{ 1, 0xFF }}, .want = &.{.{ 2, 0xF0 }} },
+        // ORI x2, x1, 0x0F = 0x00F0E113
+        .{ .name = "ORI", .inst = 0x00F0E113, .regs = &.{.{ 1, 0xF0 }}, .want = &.{.{ 2, 0xFF }} },
+        // ANDI x2, x1, 0x0F = 0x00F0F113
+        .{ .name = "ANDI", .inst = 0x00F0F113, .regs = &.{.{ 1, 0xFF }}, .want = &.{.{ 2, 0x0F }} },
+        // SLLI x2, x1, 31 = 0x01F09113
+        .{ .name = "SLLI", .inst = 0x01F09113, .regs = &.{.{ 1, 1 }}, .want = &.{.{ 2, 0x80000000 }} },
+        // SRLI x2, x1, 31 = 0x01F0D113
+        .{ .name = "SRLI", .inst = 0x01F0D113, .regs = &.{.{ 1, 0x80000000 }}, .want = &.{.{ 2, 1 }} },
+        // SRAI x2, x1, 31 = 0x41F0D113
+        .{ .name = "SRAI", .inst = 0x41F0D113, .regs = &.{.{ 1, 0x80000000 }}, .want = &.{.{ 2, 0xFFFFFFFF }} },
+        // SLLI x2, x1, 0 = 0x00009113
+        .{ .name = "shift by 0", .inst = 0x00009113, .regs = &.{.{ 1, 42 }}, .want = &.{.{ 2, 42 }} },
+        // ADDI x0, x0, 42 — should not change x0
+        .{ .name = "x0 writes ignored", .inst = 0x02A00013, .want_raw = &.{.{ 0, 0 }} },
+        // SLTI x2, x1, 1
+        .{ .name = "SLTI is a signed compare", .inst = h.encodeI(0b0010011, 0b010, 2, 1, 1), .regs = &.{.{ 1, 0xFFFFFFFF }}, .want = &.{.{ 2, 1 }} },
+        // SRL x3, x1, x2
+        .{ .name = "SRL by 31", .inst = h.encodeR(0b0110011, 0b101, 0b0000000, 3, 1, 2), .regs = &.{ .{ 1, 0x80000000 }, .{ 2, 31 } }, .want = &.{.{ 3, 1 }} },
+        // ANDI x2, x1, -241
+        .{ .name = "ANDI sign-extends its immediate", .inst = h.encodeI(0b0010011, 0b111, 2, 1, 0xF0F), .regs = &.{.{ 1, 0x12345678 }}, .want = &.{.{ 2, 0x12345608 }} },
+        // SLTU x3, x1, x2
+        .{ .name = "SLTU with equal operands yields 0", .inst = h.encodeR(0b0110011, 0b011, 0b0000000, 3, 1, 2), .regs = &.{ .{ 1, 7 }, .{ 2, 7 } }, .want = &.{.{ 3, 0 }} },
+    });
 }

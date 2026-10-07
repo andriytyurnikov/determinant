@@ -17,15 +17,12 @@ src/
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
     state.zig             — canonical little-endian state encoding (versioned header + memory) and its SHA-256 digest
-    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery, state, decode_cache, fault, csr_table, aliasing, wraparound
+    tests.zig             — hub → init, memory, pipeline, run, determinism, atomic, csr, invariant, integration, recovery, state, decode_cache, fault, csr_table, aliasing, wraparound
       init_test.zig             — init and register tests
       memory_test.zig           — memory read/write tests
-      pipeline_test.zig         — pipeline infrastructure, branch/error path tests
+      pipeline_test.zig         — pipeline infrastructure: cycle counting, multi-instruction sequences, branch/jump targets beyond memory
       run_test.zig              — run() behavior (ECALL/EBREAK termination, max_cycles, unlimited, non-zero initial cycle_count)
       determinism_test.zig      — determinism: identical programs → identical state
-      dispatch_test.zig         — CSR pipeline invariant, extension dispatch (MUL, SH1ADD, CLZ, BSET)
-      boundary_test.zig         — boundary-value tests (overflow, sign-extension, shift masking, JALR bit[0], LHU zero-extension)
-      store_upper_test.zig      — CPU-level SB, SH, LUI, AUIPC tests
       atomic_test.zig           — LR/SC scenarios, AMO operations, reservation invalidation
       csr_test.zig              — CSRRW, CSRRC, CSRRWI/CSRRSI, read-only CSR error
       invariant_test.zig        — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
@@ -188,6 +185,7 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 - Each ISA extension has a companion file (`instructions/ext.zig` + `instructions/ext/tests.zig`); tests are pulled in via `test { _ = @import("ext/tests.zig"); }` blocks
 - **Test hub pattern**: inside each module directory, the test hub is always named `tests.zig`. Semantic test files drop the directory prefix (e.g., `cpu/boundary_test.zig` not `cpu/cpu_boundary_test.zig`)
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
-- Shared test utilities live in `instructions/test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt for `TestCpu`, and encode helpers for all formats); `decoders/branch/test_helpers.zig` has the decoder round-trip helpers
+- Shared test utilities live in `instructions/test_helpers.zig`: memory helpers for any CpuType (loadInst, storeWordAt, readWordAt, storeHalfAt), encoders for every format (encodeR/I/S/B/U/J, encodeOp, encodeOpImmShift, encodeAtomic, encodeCsr), and `expectSteps()`, the table runner for one-instruction tests (`StepCase` rows: setup registers/memory/CSRs, one step, expected registers/memory/pc/cycles/errors). `decoders/branch/test_helpers.zig` has the decoder round-trip helpers
+- One-instruction execute tests are rows of a `test "step: table (<file>)"` per file; scenario tests (several steps, interacting state) stay as individual tests
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
 - RV32C lives under `rv32i/rv32c.zig` + `rv32i/rv32c/` (accessed as `rv32i.rv32c`) because it's a decode-time front-end to rv32i, not an independent peer extension. Compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)
