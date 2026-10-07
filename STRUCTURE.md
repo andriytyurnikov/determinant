@@ -16,7 +16,8 @@ src/
   cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
-    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery
+    state.zig             — canonical little-endian state encoding (versioned header + memory) and its SHA-256 digest
+    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery, state
       init_test.zig             — init and register tests
       memory_test.zig           — memory read/write tests
       pipeline_test.zig         — pipeline infrastructure, branch/error path tests
@@ -30,6 +31,7 @@ src/
       invariant_test.zig        — x0 hardwired zero, wrapping ADD+CSR pipeline, C.NOP, C.ADDI dispatch
       integration_test.zig      — multi-instruction programs, realistic execution sequences
       recovery_test.zig         — error recovery: continued execution after decode/load/store errors, reservation preservation
+      state_test.zig            — state encoding layout, fixed power-on digest, every field affects the digest
   instructions.zig        — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction (companion file for instructions/)
   instructions/
     format.zig            — Format enum (R/I/S/B/U/J), shared by all extensions
@@ -143,7 +145,9 @@ src/
       rv32uzbs/             — Zbs test binaries (bclr.bin, bext.bin, ...)
 tools/
   verify_decoders.zig     — exhaustive LUT-vs-branch decoder comparison over all 2^32 inputs (`zig build verify-decoders`)
+  corpus_digests.zig      — runs every corpus program and prints/checks final-state digests (`zig build digests` / `test-digests`)
 tests/
+  digests.txt             — golden final-state digests of the corpus; every CI configuration must match it
   riscv-tests/
     riscv-tests-src/        — git submodule (riscv-software-src/riscv-tests)
     env/determinant/

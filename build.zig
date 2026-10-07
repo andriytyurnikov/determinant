@@ -59,12 +59,23 @@ pub fn build(b: *std.Build) void {
     const compliance_step = b.step("test-compliance", "Run RISC-V compliance tests");
     compliance_step.dependOn(main_suites.compliance);
 
-    // Test-all step: unit, CLI and compliance tests, once per decoder
-    const test_all_step = b.step("test-all", "Run unit, CLI and compliance tests with both decoder backends");
+    // Print the corpus digest table (regenerate tests/digests.txt with it)
+    const digests_step = b.step("digests", "Print the final-state digest of every corpus program");
+    const print_digests = b.addRunArtifact(main_suites.digests_exe);
+    print_digests.addDirectoryArg(b.path("src/compliance/bin"));
+    digests_step.dependOn(&print_digests.step);
+
+    const check_digests_step = b.step("test-digests", "Check corpus final-state digests against tests/digests.txt (both decoders)");
+    check_digests_step.dependOn(main_suites.digests);
+    check_digests_step.dependOn(alt_suites.digests);
+
+    // Test-all step: unit, CLI, compliance and digest tests, once per decoder
+    const test_all_step = b.step("test-all", "Run unit, CLI, compliance and digest tests with both decoder backends");
     for ([_]TestSuites{ main_suites, alt_suites }) |suites| {
         test_all_step.dependOn(suites.unit);
         test_all_step.dependOn(suites.cli);
         test_all_step.dependOn(suites.compliance);
+        test_all_step.dependOn(suites.digests);
     }
 
     // Exhaustive decoder equivalence over all 2^32 inputs. Always ReleaseFast:
@@ -112,10 +123,13 @@ const TestSuites = struct {
     unit: *std.Build.Step,
     cli: *std.Build.Step,
     compliance: *std.Build.Step,
+    /// Checks the corpus final-state digests against tests/digests.txt.
+    digests: *std.Build.Step,
+    digests_exe: *std.Build.Step.Compile,
 };
 
-/// Unit tests of the library, tests of the CLI, and the riscv-tests compliance
-/// suite (pre-compiled binaries), all against one library module.
+/// Unit tests of the library, tests of the CLI, the riscv-tests compliance suite
+/// (pre-compiled binaries) and the corpus digest check, all against one library module.
 fn addTestSuites(
     b: *std.Build,
     lib: *std.Build.Module,
@@ -135,9 +149,27 @@ fn addTestSuites(
             },
         }),
     });
+    const digests_exe = b.addExecutable(.{
+        .name = "corpus-digests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/corpus_digests.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "determinant", .module = lib },
+            },
+        }),
+    });
+    const check_digests = b.addRunArtifact(digests_exe);
+    check_digests.addDirectoryArg(b.path("src/compliance/bin"));
+    check_digests.addArg("--check");
+    check_digests.addFileArg(b.path("tests/digests.txt"));
+    check_digests.has_side_effects = true;
     return .{
         .unit = &b.addRunArtifact(unit_tests).step,
         .cli = &b.addRunArtifact(cli_tests).step,
         .compliance = &b.addRunArtifact(compliance_tests).step,
+        .digests = &check_digests.step,
+        .digests_exe = digests_exe,
     };
 }
