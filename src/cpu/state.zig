@@ -68,8 +68,8 @@ pub fn writeSnapshot(cpu: anytype, w: *std.Io.Writer) std.Io.Writer.Error!void {
 pub const RestoreError = error{InvalidSnapshot} || std.Io.Reader.Error;
 
 /// Restore the architectural state from a snapshot. The header is validated before
-/// anything changes; if the reader then fails inside the memory image, memory is left
-/// partly overwritten (reset() or restore again).
+/// anything changes. If the reader then fails inside the memory image, the VM is left
+/// partly restored (the header's state, some of the memory): reset() or restore again.
 pub fn restoreSnapshot(cpu: anytype, r: *std.Io.Reader) RestoreError!void {
     const Cpu = @TypeOf(cpu.*);
     checkFields(Cpu);
