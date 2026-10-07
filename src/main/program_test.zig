@@ -194,3 +194,15 @@ test "ELF: a toolchain-built executable (crc32) loads and computes the native re
     const a0 = try std.fmt.bufPrint(&a0_text, "a0={x:0>8}", .{vm.readReg(10)});
     try std.testing.expectStringStartsWith(expected, a0);
 }
+
+test "host calls: exit(3) is not mistaken for a VM fault (--dump-memory still runs)" {
+    if (det.Cpu.mem_size < 16) return error.SkipZigTest;
+    var fx: Fixture = .init();
+    defer fx.deinit();
+    // li a7, 93; li a0, 3; ecall
+    const prog = try fx.file("exit3.bin", &.{ 0x93, 0x08, 0xd0, 0x05, 0x13, 0x05, 0x30, 0x00, 0x73, 0x00, 0x00, 0x00 });
+    try std.testing.expectEqual(@as(u8, 3), fx.run(&.{ "determinant", prog, "--dump-memory" }));
+    try expectContains(fx.out.written(), "Program exited with status 3");
+    try expectContains(fx.out.written(), "00000000  93 08 D0 05"); // the memory dump ran
+    try std.testing.expectEqualStrings("", fx.err.written()); // no fault report
+}
