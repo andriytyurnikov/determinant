@@ -4,6 +4,10 @@ const Cpu = cpu_mod.TestCpu;
 const StepResult = cpu_mod.StepResult;
 const h = @import("../instructions/test_helpers.zig");
 
+/// Cycle budget for the programs below. They all finish in well under 1000 cycles,
+/// so a bug that loops forever fails fast (result is .continue) instead of hanging.
+const max_test_cycles: u64 = 1_000_000;
+
 fn writeProgram(memory: []u8, program: []const u32) void {
     for (program, 0..) |word, i| {
         const offset = i * 4;
@@ -28,7 +32,7 @@ test "run: multi-extension M + Zba + Zbb + Zbs" {
     };
     writeProgram(&cpu.memory, &program);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(3));
@@ -54,7 +58,7 @@ test "run: multi-extension M + A with atomics" {
     };
     writeProgram(&cpu.memory, &program);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 30), cpu.readReg(3));
@@ -78,7 +82,7 @@ test "run: counted loop sums 1 to 10" {
     };
     writeProgram(&cpu.memory, &program);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(1));
@@ -99,7 +103,7 @@ test "run: function call and return via JAL and JALR" {
     writeProgram(&cpu.memory, &program);
 
     // Execution: 0→4→16→20→8→12
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 8), cpu.readReg(1)); // link address
@@ -126,7 +130,7 @@ test "run: stack frame push and pop" {
     };
     writeProgram(&cpu.memory, &program);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 4096), cpu.readReg(2)); // sp restored
@@ -152,7 +156,7 @@ test "run: 200-iteration loop with SH1ADD" {
     };
     writeProgram(&cpu.memory, &program);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 40000), cpu.readReg(2)); // 200^2
@@ -170,7 +174,7 @@ test "run: 1000 NOPs then ECALL" {
     // ECALL at offset 4000
     std.mem.writeInt(u32, cpu.memory[4000..][0..4], 0x00000073, .little);
 
-    const result = try cpu.run(null);
+    const result = try cpu.run(max_test_cycles);
 
     try std.testing.expectEqual(StepResult.ecall, result);
     try std.testing.expectEqual(@as(u32, 4004), cpu.pc);
