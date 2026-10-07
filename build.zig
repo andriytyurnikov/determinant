@@ -14,29 +14,18 @@ pub fn build(b: *std.Build) void {
         b.invalid_user_input = true;
     }
 
-    const options = b.addOptions();
-    options.addOption(bool, "use_branch_decoder", decoder_choice == .branch);
-    options.addOption(u32, "memory_size", memory_size);
-
     // Library module
     const mod = b.addModule("determinant", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    mod.addOptions("build_options", options);
+    mod.addOptions("build_options", buildOptions(b, decoder_choice, memory_size));
 
     // CLI executable
     const exe = b.addExecutable(.{
         .name = "determinant",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "determinant", .module = mod },
-            },
-        }),
+        .root_module = cliModule(b, mod, target, optimize),
     });
 
     b.installArtifact(exe);
@@ -51,55 +40,82 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    // Test step
-    const mod_tests = b.addTest(.{
-        .root_module = mod,
-    });
-    const run_mod_tests = b.addRunArtifact(mod_tests);
+    // Test suites for the selected decoder, and for the other one (test-all).
+    const main_suites = addTestSuites(b, mod, exe.root_module, target, optimize);
 
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
-    const run_exe_tests = b.addRunArtifact(exe_tests);
-
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
-    test_step.dependOn(&run_exe_tests.step);
-
-    // Test-all step: runs library tests with both decoder backends
-    const alt_options = b.addOptions();
-    alt_options.addOption(bool, "use_branch_decoder", decoder_choice == .lut);
-    alt_options.addOption(u32, "memory_size", memory_size);
-
+    const other_decoder: Decoder = if (decoder_choice == .lut) .branch else .lut;
     const alt_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    alt_mod.addOptions("build_options", alt_options);
+    alt_mod.addOptions("build_options", buildOptions(b, other_decoder, memory_size));
+    const alt_suites = addTestSuites(b, alt_mod, cliModule(b, alt_mod, target, optimize), target, optimize);
 
-    const alt_mod_tests = b.addTest(.{ .root_module = alt_mod });
+    const test_step = b.step("test", "Run unit and CLI tests");
+    test_step.dependOn(main_suites.unit);
+    test_step.dependOn(main_suites.cli);
 
-    // Compliance tests: riscv-tests suite with pre-compiled binaries
+    const compliance_step = b.step("test-compliance", "Run RISC-V compliance tests");
+    compliance_step.dependOn(main_suites.compliance);
+
+    // Test-all step: unit, CLI and compliance tests, once per decoder
+    const test_all_step = b.step("test-all", "Run unit, CLI and compliance tests with both decoder backends");
+    for ([_]TestSuites{ main_suites, alt_suites }) |suites| {
+        test_all_step.dependOn(suites.unit);
+        test_all_step.dependOn(suites.cli);
+        test_all_step.dependOn(suites.compliance);
+    }
+}
+
+fn buildOptions(b: *std.Build, decoder: Decoder, memory_size: u32) *std.Build.Step.Options {
+    const options = b.addOptions();
+    options.addOption(bool, "use_branch_decoder", decoder == .branch);
+    options.addOption(u32, "memory_size", memory_size);
+    return options;
+}
+
+fn cliModule(b: *std.Build, lib: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    return b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "determinant", .module = lib },
+        },
+    });
+}
+
+const TestSuites = struct {
+    unit: *std.Build.Step,
+    cli: *std.Build.Step,
+    compliance: *std.Build.Step,
+};
+
+/// Unit tests of the library, tests of the CLI, and the riscv-tests compliance
+/// suite (pre-compiled binaries), all against one library module.
+fn addTestSuites(
+    b: *std.Build,
+    lib: *std.Build.Module,
+    cli: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) TestSuites {
+    const unit_tests = b.addTest(.{ .root_module = lib });
+    const cli_tests = b.addTest(.{ .root_module = cli });
     const compliance_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/compliance.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "determinant", .module = mod },
+                .{ .name = "determinant", .module = lib },
             },
         }),
     });
-    const run_compliance_tests = b.addRunArtifact(compliance_tests);
-
-    const compliance_step = b.step("test-compliance", "Run RISC-V compliance tests");
-    compliance_step.dependOn(&run_compliance_tests.step);
-
-    // Test-all step: unit tests (both decoders) + compliance
-    const test_all_step = b.step("test-all", "Run tests with both decoder backends and compliance");
-    test_all_step.dependOn(&run_mod_tests.step);
-    test_all_step.dependOn(&run_exe_tests.step);
-    test_all_step.dependOn(&b.addRunArtifact(alt_mod_tests).step);
-    test_all_step.dependOn(&run_compliance_tests.step);
+    return .{
+        .unit = &b.addRunArtifact(unit_tests).step,
+        .cli = &b.addRunArtifact(cli_tests).step,
+        .compliance = &b.addRunArtifact(compliance_tests).step,
+    };
 }
