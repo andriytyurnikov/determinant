@@ -60,7 +60,7 @@ zig build verify-decoders   # compare both decoders on all 2^32 instruction word
 
 ### Cross-platform determinism
 
-`zig build test-digests` runs every corpus program and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, on a big-endian target, and with both decoders, so every configuration must reach bit-identical final states.
+`zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, on a big-endian target, and with both decoders, so every configuration must reach bit-identical final states.
 
 ### RISC-V Compliance
 

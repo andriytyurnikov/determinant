@@ -62,7 +62,7 @@ pub fn build(b: *std.Build) void {
     // Print the corpus digest table (regenerate tests/digests.txt with it)
     const digests_step = b.step("digests", "Print the final-state digest of every corpus program");
     const print_digests = b.addRunArtifact(main_suites.digests_exe);
-    print_digests.addDirectoryArg(b.path("src/compliance/bin"));
+    addCorpusArgs(b, print_digests);
     digests_step.dependOn(&print_digests.step);
 
     const check_digests_step = b.step("test-digests", "Check corpus final-state digests against tests/digests.txt (both decoders)");
@@ -99,6 +99,87 @@ pub fn build(b: *std.Build) void {
     });
     const verify_step = b.step("verify-decoders", "Compare the LUT and branch decoders on all 2^32 inputs (ReleaseFast)");
     verify_step.dependOn(&b.addRunArtifact(verify_exe).step);
+
+    addProgramsStep(b);
+}
+
+/// The corpus: the riscv-tests compliance binaries and the C programs, whose results
+/// are also checked against a native run of the same C.
+fn addCorpusArgs(b: *std.Build, run: *std.Build.Step.Run) void {
+    run.addPrefixedDirectoryArg("compliance=", b.path("src/compliance/bin"));
+    run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/bin"));
+    run.addArg("--expect");
+    run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/expected"));
+}
+
+/// C programs of the corpus (tests/programs/src/<name>.c).
+const corpus_programs = [_][]const u8{ "arith64", "atomics", "bitops", "crc32", "interp", "memops", "qsort", "recursion", "sha256", "sieve" };
+
+/// The corpus is compiled twice, to cover both instruction mixes: with compressed
+/// and bit-manipulation instructions at -O2, and without either at -Os.
+const CorpusConfig = struct {
+    name: []const u8,
+    features: []const std.Target.riscv.Feature,
+    optimize: std.builtin.OptimizeMode,
+};
+const corpus_configs = [_]CorpusConfig{
+    .{ .name = "imac_zb-O2", .features = &.{ .m, .a, .c, .zba, .zbb, .zbs }, .optimize = .ReleaseFast },
+    .{ .name = "ima-Os", .features = &.{ .m, .a }, .optimize = .ReleaseSmall },
+};
+
+/// `zig build programs`: rebuild the checked-in corpus binaries (tests/programs/bin)
+/// with Zig's C compiler, and their expected results (tests/programs/expected) by
+/// running the same C natively. Run it on a little-endian host.
+fn addProgramsStep(b: *std.Build) void {
+    const update = b.addUpdateSourceFiles();
+    for (corpus_programs) |name| {
+        for (corpus_configs) |cfg| {
+            const target = b.resolveTargetQuery(.{
+                .cpu_arch = .riscv32,
+                .os_tag = .freestanding,
+                .abi = .none,
+                .cpu_model = .{ .explicit = &std.Target.riscv.cpu.generic_rv32 },
+                .cpu_features_add = std.Target.riscv.featureSet(cfg.features),
+            });
+            const exe = b.addExecutable(.{
+                .name = name,
+                .root_module = b.createModule(.{
+                    .target = target,
+                    .optimize = cfg.optimize,
+                    .strip = true,
+                }),
+            });
+            exe.root_module.addAssemblyFile(b.path("tests/programs/src/crt0.S"));
+            exe.root_module.addCSourceFiles(.{
+                .root = b.path("tests/programs/src"),
+                .files = &.{ b.fmt("{s}.c", .{name}), "libmini.c" },
+                .flags = &.{"-fno-builtin"},
+            });
+            exe.setLinkerScript(b.path("tests/programs/src/link.ld"));
+            exe.entry = .{ .symbol_name = "_start" };
+            const bin = b.addObjCopy(exe.getEmittedBin(), .{ .format = .bin });
+            update.addCopyFileToSource(bin.getOutput(), b.fmt("tests/programs/bin/{s}/{s}.bin", .{ cfg.name, name }));
+        }
+
+        // Expected results: the same program built for the host and run natively
+        // (Debug, so the C undefined-behavior sanitizer would trap).
+        const native = b.addExecutable(.{
+            .name = b.fmt("{s}-native", .{name}),
+            .root_module = b.createModule(.{
+                .target = b.graph.host,
+                .optimize = .Debug,
+                .link_libc = true,
+            }),
+        });
+        native.root_module.addCSourceFiles(.{
+            .root = b.path("tests/programs/src"),
+            .files = &.{ b.fmt("{s}.c", .{name}), "native_main.c" },
+        });
+        const run_native = b.addRunArtifact(native);
+        update.addCopyFileToSource(run_native.captureStdOut(.{}), b.fmt("tests/programs/expected/{s}.txt", .{name}));
+    }
+    const step = b.step("programs", "Rebuild the corpus binaries and expected results under tests/programs");
+    step.dependOn(&update.step);
 }
 
 fn buildOptions(b: *std.Build, decoder: Decoder, memory_size: u32) *std.Build.Step.Options {
@@ -161,7 +242,7 @@ fn addTestSuites(
         }),
     });
     const check_digests = b.addRunArtifact(digests_exe);
-    check_digests.addDirectoryArg(b.path("src/compliance/bin"));
+    addCorpusArgs(b, check_digests);
     check_digests.addArg("--check");
     check_digests.addFileArg(b.path("tests/digests.txt"));
     check_digests.has_side_effects = true;
