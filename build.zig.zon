@@ -11,5 +11,6 @@
         "README.md",
         "SEMANTICS.md",
         "THIRD_PARTY_NOTICES.md",
+        "CHANGELOG.md",
     },
 }

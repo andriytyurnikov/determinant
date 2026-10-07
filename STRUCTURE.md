@@ -163,6 +163,8 @@ build.zig                 — build system configuration (library module, execut
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 README.md                 — overview, CLI, program contract, public API
 SEMANTICS.md              — execution semantics: the contract (ISA subset, decoding, faults, LR/SC, CSRs, determinism)
+CHANGELOG.md              — release notes; guest-visible semantic changes listed first
+THIRD_PARTY_NOTICES.md    — licenses of material derived from riscv-tests and Zig compiler-rt
 STRUCTURE.md              — this file
 CLAUDE.md                 — guidance for working on the code (invariants, patterns, traps)
 ```
