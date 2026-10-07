@@ -147,13 +147,17 @@ test "decode: EBREAK operand isolation" {
     try std.testing.expectEqual(@as(u5, 0), inst.rd);
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
     try std.testing.expectEqual(@as(u5, 0), inst.rs2);
+    try std.testing.expectEqual(@as(i32, 0), inst.imm); // funct12 = 1 is not an operand
 }
 
 test "decode: FENCE operand isolation" {
-    const inst = try decoder.decode(0x0FF0000F);
+    // fm/pred/succ, rs1 and rd are all set: none of them becomes an operand
+    const inst = try decoder.decode(0x8FF5850F); // fm=1000 pred=1111 succ=1111 rs1=x11 rd=x10
     try std.testing.expectEqual(Opcode{ .i = .FENCE }, inst.op);
     try std.testing.expectEqual(@as(u5, 0), inst.rd);
     try std.testing.expectEqual(@as(u5, 0), inst.rs1);
+    try std.testing.expectEqual(@as(u5, 0), inst.rs2);
+    try std.testing.expectEqual(@as(i32, 0), inst.imm);
 }
 
 test "decode: minimal non-compressed 0x00000003 decodes as LB x0, 0(x0)" {

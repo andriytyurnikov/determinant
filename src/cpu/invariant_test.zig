@@ -14,7 +14,7 @@ test "step: LB x0 with sign-extension — x0 stays zero" {
     h.loadInst(&cpu, h.encodeI(0b0000011, 0b000, 0, 1, 0));
     _ = try cpu.step();
     // x0 must remain 0 despite sign-extension of loaded byte
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
 }
 
 test "step: wrapping ADD then CSR read sees correct cycle count" {
@@ -57,14 +57,14 @@ test "step: LUI x0 — x0 stays zero" {
     var cpu = Cpu.init();
     h.loadInst(&cpu, h.encodeU(0b0110111, 0, 0xABCDE));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
 }
 
 test "step: JAL x0 — link discarded, x0 stays zero" {
     var cpu = Cpu.init();
     h.loadInst(&cpu, h.encodeJ(0, 8));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
 
@@ -74,7 +74,7 @@ test "step: JALR x0 — link discarded, x0 stays zero" {
     // JALR x0, x1, 0: opcode=1100111, funct3=000, rd=0, rs1=1, imm=0
     h.loadInst(&cpu, h.encodeI(0b1100111, 0b000, 0, 1, 0));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 100), cpu.pc);
 }
 
@@ -86,7 +86,7 @@ test "step: AMOSWAP.W x0 — old value discarded, x0 stays zero" {
     // AMOSWAP.W x0, x2, (x1): funct5=00001
     h.loadInst(&cpu, h.encodeAtomic(0b00001, 0, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xBEEF), h.readWordAt(&cpu, 256));
 }
 
@@ -101,7 +101,7 @@ test "step: SC.W x0 — success code discarded, x0 stays zero" {
     // SC.W x0, x2, (x1): funct5=00011
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 0, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xCAFE), h.readWordAt(&cpu, 256));
 }
 
@@ -112,7 +112,7 @@ test "step: CSRRS x0 — old CSR value discarded, x0 stays zero" {
     // CSRRS x0, mscratch, x1
     h.loadInst(&cpu, h.encodeCsr(0b010, 0, 1, 0x340));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xFF), cpu.csrs.mscratch);
 }
 
@@ -123,7 +123,7 @@ test "step: CSRRC x0 — old CSR value discarded, x0 stays zero" {
     // CSRRC x0, mscratch, x1
     h.loadInst(&cpu, h.encodeCsr(0b011, 0, 1, 0x340));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xF0), cpu.csrs.mscratch);
 }
 
@@ -133,7 +133,7 @@ test "step: CSRRSI x0 — old CSR value discarded, x0 stays zero" {
     // CSRRSI x0, mscratch, 15 (zimm=15 in rs1 field)
     h.loadInst(&cpu, h.encodeCsr(0b110, 0, 15, 0x340));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xFF), cpu.csrs.mscratch);
 }
 
@@ -143,7 +143,7 @@ test "step: CSRRCI x0 — old CSR value discarded, x0 stays zero" {
     // CSRRCI x0, mscratch, 15 (zimm=15 in rs1 field)
     h.loadInst(&cpu, h.encodeCsr(0b111, 0, 15, 0x340));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
     try std.testing.expectEqual(@as(u32, 0xF0), cpu.csrs.mscratch);
 }
 

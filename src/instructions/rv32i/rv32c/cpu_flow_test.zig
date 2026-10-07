@@ -99,7 +99,7 @@ test "CPU step: C.J unconditional jump" {
 
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0)); // x0 unchanged (C.J links to x0)
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]); // x0 unchanged (C.J links to x0)
 }
 
 test "CPU step: mixed 16-bit and 32-bit sequence" {

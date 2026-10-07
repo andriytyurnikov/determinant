@@ -4,7 +4,7 @@ const Cpu = cpu_mod.TestCpu;
 const MEMORY_SIZE = Cpu.mem_size;
 const StepResult = cpu_mod.StepResult;
 
-test "init zeroes everything" {
+test "init zeroes pc and registers" {
     const cpu = Cpu.init();
     try std.testing.expectEqual(@as(u32, 0), cpu.pc);
     for (cpu.regs) |r| {
@@ -16,6 +16,7 @@ test "x0 hardwired to zero" {
     var cpu = Cpu.init();
     cpu.writeReg(0, 12345);
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
 }
 
 test "x0 write-protection: ADD to x0 leaves it zero" {
@@ -26,7 +27,7 @@ test "x0 write-protection: ADD to x0 leaves it zero" {
     // ADD x0, x1, x2 — result should be discarded
     h.loadInst(&cpu, h.encodeR(0b0110011, 0b000, 0b0000000, 0, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
 }
 
 test "register read/write" {
