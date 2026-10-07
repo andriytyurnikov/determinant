@@ -159,3 +159,13 @@ test "readReg(0) is 0 even if regs[0] is non-zero" {
     cpu.regs[0] = 0xDEADBEEF;
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
 }
+
+test "step: a host write to regs[0] never reaches execution" {
+    const h = @import("../instructions/test_helpers.zig");
+    var cpu = Cpu.init();
+    cpu.regs[0] = 0xDEADBEEF; // a host poking the field directly
+    h.loadInst(&cpu, h.encodeR(0b0110011, 0b000, 0b0000000, 1, 0, 0)); // ADD x1, x0, x0
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
+}
