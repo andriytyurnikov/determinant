@@ -5,14 +5,19 @@ src/
   root.zig                — library root; re-exports cpu, instructions, decoders, decode(), DecodeError, CpuType/Cpu and the common types
   main.zig                — CLI entry point: run() maps the outcome to an exit status (ExitStatus) and flushes output; runDemo() (built-in program) or runFile() (load flat binary); imports the library as @import("determinant") (companion file for main/)
   main/
-    tests.zig             — hub → disassembly, result, demo, args, file, dump, exit
+    tests.zig             — hub → disassembly, result, demo, args, file, dump, exit, program
       disassembly_test.zig      — printInstruction output for all extension families (RV32I/M/A, Zicsr, Zba/Zbb/Zbs, compressed)
       result_test.zig           — printResult: ecall/ebreak/continue, register dump, PC format, zero omission
       demo_test.zig             — runDemo deterministic output, reproducibility
       args_test.zig             — mainInner arg parsing: help, flag errors, missing/invalid --max-cycles
       file_test.zig             — runFile: empty/large/nonexistent files, successful execution, cycle limits
       dump_test.zig             — dumpMemory: hexdump and raw format output
-      exit_test.zig             — run(): every exit status (0/1/2/3), unwritable stdout
+      exit_test.zig             — run(): every exit status (0/1/2/3), unwritable stdout, stdio writers append
+      program_test.zig          — host calls and --input, guest exit status, ELF loading, --load-addr, initial sp
+  hostcall.zig            — host-call ABI: handle() performs the read/write/exit ECALL that stopped run() (docs/design/host-calls.md)
+  hostcall_test.zig       — each call, its error codes, reservations, an echo program end to end
+  loader.zig              — ELF32 RISC-V executable loader: loadElf(), isElf() (docs/design/program-loading.md)
+  loader_test.zig         — segments and .bss, entry point, every rejection leaves the VM unchanged
   cpu.zig                 — CpuType(comptime memory_size, comptime options) generic (Options: decoder, decode cache size), Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
@@ -144,6 +149,9 @@ tests/
     src/                  — freestanding C programs, crt0.S, link.ld, libmini.c, native_main.c
     bin/<config>/         — checked-in flat binaries built by `zig build programs` (imac_zb-O2, ima-Os)
     expected/             — results of the same C run natively
+    elf/crc32.elf         — one ELF executable from the same build, for the ELF-loading test
+docs/
+  design/                 — design notes: host-calls.md, snapshots.md, program-loading.md, memory-protection.md
   riscv-tests/
     riscv-tests-src/        — git submodule (riscv-software-src/riscv-tests)
     env/determinant/
@@ -164,6 +172,8 @@ CLAUDE.md                 — guidance for working on the code (invariants, patt
 All edges point downward — no cycles exist and none should be introduced.
 
 ```
+main.zig ─→ root.zig ─→ hostcall.zig, loader.zig (generic over CpuType: no imports of cpu.zig)
+                │
 main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
                 │          ↓
                 └──→ decoders.zig ─→ branch.zig ─→ bitfields.zig, expand.zig

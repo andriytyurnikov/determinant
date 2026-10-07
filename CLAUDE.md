@@ -99,6 +99,13 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 - Memory write methods (`writeByte`, `writeHalfword`, `writeWord`) auto-call `invalidateReservation()` — store sites don't need to invalidate manually. `loadProgram()` drops a reservation on any word it overwrites (`invalidateReservationRange()`). If new write methods are added, they MUST do the same. Hosts that write `memory` directly must call `clearReservation()` afterwards (the CLI's `runFile` does).
 - `invalidateReservation()` checks word-aligned overlap (addr & 0xFFFFFFFC), not exact byte match
 
+### Host calls and program loading
+
+- The VM core only stops at ECALL; `src/hostcall.zig` is the standard host-side handler (read/write/exit, Linux RISC-V numbers). It must stay deterministic: its effects may depend only on the VM state and `Env.input`. Guest memory it writes goes through `loadProgram()` (reservations)
+- `src/loader.zig` loads ELF32 executables. It reads every header field with `std.mem.readInt(.little)` from the byte image — never a struct `@ptrCast` — and validates everything before writing anything
+- The initial stack pointer and load address are CLI policy (`main.zig`), not VM state: `reset()` leaves every register 0, so `tests/digests.txt` does not depend on them
+- Design notes for these features live in `docs/design/`
+
 ### CSR Implementation
 
 - CSR storage (`Csr` struct with `read`/`write`) lives in `zicsr.zig`, not `cpu.zig` — cpu.zig embeds `csrs: zicsr.Csr`

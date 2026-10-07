@@ -24,6 +24,7 @@ Each program computes into `out[16]` and returns a checksum. `crt0.S` sets `gp` 
   - `imac_zb-O2`: RV32IMAC with Zba/Zbb/Zbs, `ReleaseFast`
   - `ima-Os`: RV32IMA without compressed or bit-manipulation instructions, `ReleaseSmall`
 - `expected/<program>.txt` — the result of the same C program run natively.
+- `elf/crc32.elf` — the `imac_zb-O2` crc32 executable as an ELF file, for the ELF-loading test.
 
 ## How it is used
 

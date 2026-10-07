@@ -8,7 +8,8 @@ const det = @import("determinant");
 
 pub const DumpFormat = enum { hexdump, raw };
 
-/// Process exit status.
+/// Process exit status. When the program calls exit (docs/design/host-calls.md) the
+/// status is the low 8 bits of the program's status instead.
 pub const ExitStatus = enum(u8) {
     /// The program stopped at ECALL or EBREAK (or --help was shown).
     ok = 0,
@@ -18,7 +19,24 @@ pub const ExitStatus = enum(u8) {
     cycle_limit = 2,
     /// The VM raised a fault: illegal instruction, misaligned or out-of-bounds access, ...
     vm_fault = 3,
+    /// Any other value: the status the program passed to exit.
+    _,
 };
+
+/// How to run a program: the CLI options that are not the program file.
+pub const RunOptions = struct {
+    /// Absolute cycle limit (--max-cycles); null for none.
+    max_cycles: ?u64 = null,
+    dump_format: ?DumpFormat = null,
+    /// What the program's `read` host call returns (--input).
+    input: []const u8 = &.{},
+    /// Where a flat binary is loaded and starts (--load-addr). ELF files say where.
+    load_addr: u32 = 0,
+};
+
+/// The stack pointer a program starts with: the top of memory, 16-byte aligned
+/// (docs/design/program-loading.md). The VM's reset() leaves it 0; this is CLI policy.
+pub const initial_sp: u32 = det.Cpu.mem_size & ~@as(u32, 15);
 
 pub fn main(init: std.process.Init) !u8 {
     const io = init.io;
@@ -88,26 +106,29 @@ pub fn mainInner(
 ) !ExitStatus {
     // args[0] is the program name; iterate args[1..].
     var path: ?[]const u8 = null;
-    var max_cycles: ?u64 = null; // unlimited
-    var dump_format: ?DumpFormat = null;
+    var input_path: ?[]const u8 = null;
+    var opts: RunOptions = .{};
 
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            try stdout.print("Usage: determinant [<file>] [--max-cycles N] [--dump-memory [raw]]\n\n", .{});
-            try stdout.print("  <file>              RISC-V binary to load and execute\n", .{});
+            try stdout.print("Usage: determinant [<file>] [--max-cycles N] [--input FILE] [--load-addr ADDR] [--dump-memory [raw]]\n\n", .{});
+            try stdout.print("  <file>              RISC-V program: an ELF32 executable, or a flat binary\n", .{});
             try stdout.print("  --max-cycles N      Maximum execution cycles (default: unlimited)\n", .{});
+            try stdout.print("  --input FILE        Bytes the program's read host call returns (default: none)\n", .{});
+            try stdout.print("  --load-addr ADDR    Load address and entry point of a flat binary (default: 0)\n", .{});
             try stdout.print("  --dump-memory [raw] Dump VM memory after execution (hexdump or raw hex)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
-            try stdout.print("Compiled with {f} of VM memory.\n", .{vm_mem_size});
+            try stdout.print("Compiled with {f} of VM memory; programs start with sp = 0x{X:0>8}.\n", .{ vm_mem_size, initial_sp });
             try stdout.print("\nExit status: 0 stopped at ECALL/EBREAK, 1 usage or I/O error,\n", .{});
-            try stdout.print("             2 cycle limit reached, 3 VM fault.\n", .{});
+            try stdout.print("             2 cycle limit reached, 3 VM fault; or the program's own\n", .{});
+            try stdout.print("             status (low 8 bits) if it called exit.\n", .{});
             return .ok;
         } else if (std.mem.eql(u8, arg, "--max-cycles")) {
             i += 1;
             if (i < args.len) {
-                max_cycles = std.fmt.parseInt(u64, args[i], 10) catch {
+                opts.max_cycles = std.fmt.parseInt(u64, args[i], 10) catch {
                     try stderr.print("Error: invalid --max-cycles value\n", .{});
                     return error.UserError;
                 };
@@ -115,11 +136,32 @@ pub fn mainInner(
                 try stderr.print("Error: --max-cycles requires a value\n", .{});
                 return error.UserError;
             }
+        } else if (std.mem.eql(u8, arg, "--input")) {
+            i += 1;
+            if (i == args.len) {
+                try stderr.print("Error: --input requires a file\n", .{});
+                return error.UserError;
+            }
+            input_path = args[i];
+        } else if (std.mem.eql(u8, arg, "--load-addr")) {
+            i += 1;
+            if (i == args.len) {
+                try stderr.print("Error: --load-addr requires an address\n", .{});
+                return error.UserError;
+            }
+            opts.load_addr = std.fmt.parseInt(u32, args[i], 0) catch {
+                try stderr.print("Error: invalid --load-addr value\n", .{});
+                return error.UserError;
+            };
+            if (opts.load_addr % 2 != 0 or opts.load_addr >= det.Cpu.mem_size) {
+                try stderr.print("Error: --load-addr must be even and inside the {f} of VM memory\n", .{vm_mem_size});
+                return error.UserError;
+            }
         } else if (std.mem.eql(u8, arg, "--dump-memory")) {
-            dump_format = .hexdump;
+            opts.dump_format = .hexdump;
             // Peek at next arg for optional "raw" format
             if (i + 1 < args.len and std.mem.eql(u8, args[i + 1], "raw")) {
-                dump_format = .raw;
+                opts.dump_format = .raw;
                 i += 1;
             }
         } else if (arg.len >= 1 and arg[0] == '-') {
@@ -134,10 +176,70 @@ pub fn mainInner(
         }
     }
 
+    const input: []const u8 = if (input_path) |p| Io.Dir.cwd().readFileAlloc(io, p, std.heap.page_allocator, .limited(max_input)) catch |err| {
+        try stderr.print("Error: cannot read input '{s}': {s}\n", .{ p, @errorName(err) });
+        return error.UserError;
+    } else &.{};
+    defer if (input_path != null) std.heap.page_allocator.free(input);
+    opts.input = input;
+
     if (path) |p| {
-        return runFile(io, stdout, stderr, p, max_cycles, dump_format);
+        return runFile(io, stdout, stderr, p, opts);
     } else {
-        return runDemo(stdout, stderr, max_cycles, dump_format);
+        return runDemo(stdout, stderr, opts);
+    }
+}
+
+/// Largest --input file.
+const max_input = 1 << 30;
+
+/// Largest ELF file accepted (flat binaries are limited by the VM memory instead).
+const max_elf = 1 << 30;
+
+/// How a run ended: like StepResult, or the program called exit.
+const Stop = union(enum) {
+    result: det.StepResult,
+    exit: u32,
+};
+
+/// Run the program, performing its host calls, until it stops.
+fn execute(vm: *det.Cpu, opts: RunOptions, env: *det.hostcall.Env) (det.StepError || Io.Writer.Error)!Stop {
+    while (true) {
+        const result = try vm.run(opts.max_cycles);
+        if (result != .ecall) return .{ .result = result };
+        switch (try det.hostcall.handle(vm, env)) {
+            .resumed => {},
+            .exit => |status| return .{ .exit = status },
+            .unknown => return .{ .result = .ecall }, // not a host call: stop, as ECALL always did
+        }
+    }
+}
+
+/// Run the program and report how it ended; returns the exit status.
+fn executeAndReport(vm: *det.Cpu, stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !ExitStatus {
+    var env: det.hostcall.Env = .{ .input = opts.input, .stdout = stdout, .stderr = stderr };
+    const stop = execute(vm, opts, &env) catch |err| switch (err) {
+        error.WriteFailed => return error.WriteFailed,
+        else => |fault| {
+            try stdout.flush(); // what stdout has so far comes before the fault report
+            try printFault(stderr, vm, fault);
+            try stderr.print("\nRegisters:\n", .{});
+            try printRegisters(stderr, vm);
+            return .vm_fault;
+        },
+    };
+    switch (stop) {
+        .result => |result| {
+            try printResult(stdout, vm, result);
+            return stopStatus(result);
+        },
+        .exit => |status| {
+            try stdout.print("\nProgram exited with status {d} after {d} cycles\n", .{ status, vm.cycle_count });
+            try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
+            try stdout.print("\nRegisters:\n", .{});
+            try printRegisters(stdout, vm);
+            return @enumFromInt(@as(u8, @truncate(status)));
+        },
     }
 }
 
@@ -181,7 +283,7 @@ fn destroyVm(vm: *det.Cpu) void {
     std.heap.page_allocator.destroy(vm);
 }
 
-pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, max_cycles: ?u64, dump_format: ?DumpFormat) !ExitStatus {
+pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !ExitStatus {
     try stdout.print("Determinant — RV32I Executor Demo ({f} memory)\n\n", .{vm_mem_size});
 
     const program = demo_program;
@@ -230,27 +332,23 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, max_cycles: ?u64, dump_fo
 
     // Execute (the demo stops at its ECALL unless --max-cycles stops it first)
     try stdout.print("\nExecuting...\n", .{});
-    const result = vm.run(max_cycles) catch |err| {
-        try stdout.flush(); // what stdout has so far comes before the fault report
-        try printFault(stderr, vm, err);
-        return .vm_fault;
-    };
-
-    try printResult(stdout, vm, result);
+    vm.writeReg(2, initial_sp);
+    const status = try executeAndReport(vm, stdout, stderr, opts);
+    if (status == .vm_fault) return status;
 
     // Show memory at store target (absent when memory is too small to hold it)
     if (vm.readWord(demo_store_addr)) |mem_val| {
         try stdout.print("\nMemory[{d}] = {d} (0x{X:0>8})\n", .{ demo_store_addr, mem_val, mem_val });
     } else |_| {}
 
-    if (dump_format) |fmt| {
+    if (opts.dump_format) |fmt| {
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
-    return stopStatus(result);
+    return status;
 }
 
-pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !ExitStatus {
+pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, opts: RunOptions) !ExitStatus {
     // Open and read the binary file
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
@@ -270,55 +368,75 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
     const vm = try createVm();
     defer destroyVm(vm);
 
-    if (stat.size > vm.memory.len) {
-        try stderr.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
-        return error.UserError;
-    }
-
-    const size: usize = @intCast(stat.size);
-
-    // Read directly into VM memory instead of going through loadProgram(), to avoid
-    // an intermediate buffer as large as the file. Direct memory writes must drop the
-    // LR reservation (see clearReservation below).
-    const n = file.readPositionalAll(io, vm.memory[0..size], 0) catch |err| {
+    var magic: [4]u8 = undefined;
+    const magic_len = file.readPositionalAll(io, &magic, 0) catch |err| {
         try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
         return error.UserError;
     };
 
-    if (n != size) {
-        try stderr.print("Error: short read ({d}/{d} bytes)\n", .{ n, size });
-        return error.UserError;
-    }
-    vm.clearReservation();
-
-    try stdout.print("Determinant — Loading {s} ({f} memory)\n\n", .{ path, vm_mem_size });
-
-    if (max_cycles) |mc| {
-        try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, mc });
-    } else {
-        try stdout.print("Loaded {d} bytes, executing (unlimited cycles)...\n", .{size});
-    }
-
-    const result = vm.run(max_cycles) catch |err| {
-        try stdout.flush(); // what stdout has so far comes before the fault report
-        try printFault(stderr, vm, err);
-        try stderr.print("\nRegisters:\n", .{});
-        for (0..32) |i| {
-            const val = vm.readReg(@intCast(i));
-            if (val != 0) {
-                try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
-            }
+    var entry: u32 = undefined;
+    if (det.loader.isElf(magic[0..magic_len])) {
+        if (stat.size > max_elf) {
+            try stderr.print("Error: ELF file too large ({d} bytes)\n", .{stat.size});
+            return error.UserError;
         }
-        return .vm_fault;
-    };
+        const image = try std.heap.page_allocator.alloc(u8, @intCast(stat.size));
+        defer std.heap.page_allocator.free(image);
+        try readExactly(io, stderr, file, path, image, 0);
+        entry = det.loader.loadElf(vm, image) catch |err| {
+            switch (err) {
+                error.InvalidElf => try stderr.print("Error: '{s}' is not a RISC-V ELF32 little-endian executable\n", .{path}),
+                error.AddressOutOfBounds => try stderr.print("Error: '{s}' has a segment outside the {f} of VM memory\n", .{ path, vm_mem_size }),
+            }
+            return error.UserError;
+        };
+        try stdout.print("Determinant — Loading {s} ({f} memory)\n\n", .{ path, vm_mem_size });
+        try stdout.print("Loaded ELF executable, entry 0x{X:0>8}, ", .{entry});
+    } else {
+        const room = det.Cpu.mem_size - opts.load_addr;
+        if (stat.size > room) {
+            try stderr.print("Error: file too large ({d} bytes, max {d} at load address 0x{X:0>8})\n", .{ stat.size, room, opts.load_addr });
+            return error.UserError;
+        }
+        const size: usize = @intCast(stat.size);
+        // Read directly into VM memory instead of going through loadProgram(), to
+        // avoid an intermediate buffer as large as the file. Direct memory writes must
+        // drop the LR reservation.
+        try readExactly(io, stderr, file, path, vm.memory[opts.load_addr..][0..size], 0);
+        vm.clearReservation();
+        entry = opts.load_addr;
+        try stdout.print("Determinant — Loading {s} ({f} memory)\n\n", .{ path, vm_mem_size });
+        try stdout.print("Loaded {d} bytes at 0x{X:0>8}, ", .{ size, entry });
+    }
 
-    try printResult(stdout, vm, result);
+    if (opts.max_cycles) |mc| {
+        try stdout.print("executing (max {d} cycles)...\n", .{mc});
+    } else {
+        try stdout.print("executing (unlimited cycles)...\n", .{});
+    }
 
-    if (dump_format) |fmt| {
+    vm.pc = entry;
+    vm.writeReg(2, initial_sp);
+    const status = try executeAndReport(vm, stdout, stderr, opts);
+    if (status == .vm_fault) return status;
+
+    if (opts.dump_format) |fmt| {
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
-    return stopStatus(result);
+    return status;
+}
+
+/// Read exactly buf.len bytes at `offset`, or report the problem as a user error.
+fn readExactly(io: Io, stderr: *Io.Writer, file: Io.File, path: []const u8, buf: []u8, offset: u64) !void {
+    const n = file.readPositionalAll(io, buf, offset) catch |err| {
+        try stderr.print("Error: cannot read '{s}': {s}\n", .{ path, @errorName(err) });
+        return error.UserError;
+    };
+    if (n != buf.len) {
+        try stderr.print("Error: short read ({d}/{d} bytes)\n", .{ n, buf.len });
+        return error.UserError;
+    }
 }
 
 /// Report a fault: the error, where it happened, the instruction and the address.
@@ -348,10 +466,15 @@ pub fn printResult(stdout: *Io.Writer, vm: *const det.Cpu, result: det.StepResul
     }
     try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
     try stdout.print("\nRegisters:\n", .{});
+    try printRegisters(stdout, vm);
+}
+
+/// The non-zero registers, one per line.
+fn printRegisters(w: *Io.Writer, vm: *const det.Cpu) !void {
     for (0..32) |i| {
         const val = vm.readReg(@intCast(i));
         if (val != 0) {
-            try stdout.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
+            try w.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
         }
     }
 }

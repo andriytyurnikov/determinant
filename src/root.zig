@@ -5,6 +5,10 @@ const std = @import("std");
 pub const cpu = @import("cpu.zig");
 pub const instructions = @import("instructions.zig");
 pub const decoders = @import("decoders.zig");
+/// The host-call ABI (read/write/exit through ECALL): docs/design/host-calls.md.
+pub const hostcall = @import("hostcall.zig");
+/// ELF32 executable loading: docs/design/program-loading.md.
+pub const loader = @import("loader.zig");
 
 // Convenience aliases
 pub const CpuType = cpu.CpuType;

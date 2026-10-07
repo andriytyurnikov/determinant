@@ -111,7 +111,7 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
 
 - **They retire.** `cycle_count` is incremented and `pc` already points past the instruction: `pc + 4`, or `pc + 2` for C.EBREAK. There is no C.ECALL.
 - **Continuing.** Calling `run()` again continues with the next instruction.
-- **The host's role.** The host is responsible for whatever the call means, for example reading arguments from `a0`–`a7` and writing results back.
+- **The host's role.** The host is responsible for whatever the call means, for example reading arguments from `a0`–`a7` and writing results back. The standard convention is the host-call ABI in `docs/design/host-calls.md` (`hostcall.handle()`): `read`, `write` and `exit`, with Linux RISC-V numbers in `a7`. Its effects depend only on the VM state and input fixed before the run.
 - **The stopping instruction's address** is in `stop_pc`: `pc - 4` for ECALL and EBREAK, `pc - 2` for C.EBREAK. `stop_pc` is host-facing metadata, not part of the architectural state or the digest.
 
 ## CSRs
@@ -137,7 +137,10 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
   - `run(null)` has no limit, and `run(0)` executes nothing.
   - `runFor(n)` is `run(cycle_count + n)`, saturating: at most `n` more instructions.
 - **Initial state.** After `init()` or `reset()`, `pc` = 0, all registers are 0 (including `sp`), memory is all zero, `cycle_count` = 0, there is no reservation, and `mscratch` = 0.
-- **The CLI.** It loads a flat binary at address 0 and starts there. The program must set up its own stack pointer.
+- **The CLI.** These are host conventions layered on top of the VM, so the state digests above don't depend on them:
+  - it loads an ELF32 executable at its segments, or a flat binary at `--load-addr`;
+  - it starts at the entry point with `sp` at the 16-byte-aligned top of memory;
+  - it implements the host-call ABI (`docs/design/host-calls.md`, `docs/design/program-loading.md`).
 
 ## Memory
 
