@@ -52,6 +52,7 @@ zig build run -- program.bin --max-cycles 1000
 zig build test              # run unit and CLI tests with the selected decoder backend
 zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
 zig build test-all          # run unit, CLI and compliance tests with both decoder backends
+zig build verify-decoders   # compare both decoders on all 2^32 instruction words (~20 s)
 ```
 
 ### RISC-V Compliance

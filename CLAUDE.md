@@ -13,6 +13,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as 
 - `zig build test` — run the unit tests (library) and CLI tests (executable) with the selected decoder
 - `zig build test-compliance` — run the riscv-tests compliance suite with the selected decoder
 - `zig build test-all` — run unit, CLI and compliance tests once per decoder (what CI runs)
+- `zig build verify-decoders` — compare the LUT and branch decoders on all 2^32 inputs (always ReleaseFast, ~20 s); run it after any decoder change
 - `zig build run -- <args>` — pass arguments to the executable
 - `-Ddecoder=lut|branch` — select decoder backend (default: `lut`). Applies to CLI, tests, and `Cpu` alias. Example: `zig build test -Ddecoder=branch`
 - `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
