@@ -1,8 +1,6 @@
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
-const decoders = @import("../decoders.zig");
 const Cpu = cpu_mod.TestCpu;
-const CpuType = cpu_mod.CpuType;
 const StepResult = cpu_mod.StepResult;
 
 /// Load the test program into a CPU's memory.
@@ -52,42 +50,4 @@ test "determinism: two VMs with same program produce identical state" {
     try std.testing.expectEqual(StepResult.ecall, result1);
     try std.testing.expectEqual(@as(u32, 45), cpu1.readReg(5));
     try std.testing.expectEqual(@as(u32, 45), std.mem.readInt(u32, cpu1.memory[256..][0..4], .little));
-}
-
-test "determinism: LUT and branch decoders produce identical CPU state" {
-    const LutCpu = CpuType(1024 * 1024, &decoders.lut.decode);
-    const BranchCpu = CpuType(1024 * 1024, &decoders.branch.decode);
-
-    // 1 MiB VMs are too large for the test stack; place them on the heap.
-    const lut_cpu = try std.testing.allocator.create(LutCpu);
-    defer std.testing.allocator.destroy(lut_cpu);
-    lut_cpu.reset();
-    const branch_cpu = try std.testing.allocator.create(BranchCpu);
-    defer std.testing.allocator.destroy(branch_cpu);
-    branch_cpu.reset();
-
-    loadTestProgram(&lut_cpu.memory);
-    loadTestProgram(&branch_cpu.memory);
-
-    const lut_result = try lut_cpu.run(100);
-    const branch_result = try branch_cpu.run(100);
-
-    // Both decoders must produce identical stop reason
-    try std.testing.expectEqual(lut_result, branch_result);
-    try std.testing.expectEqual(StepResult.ecall, lut_result);
-
-    // Identical PC and cycle count
-    try std.testing.expectEqual(lut_cpu.pc, branch_cpu.pc);
-    try std.testing.expectEqual(lut_cpu.cycle_count, branch_cpu.cycle_count);
-
-    // Identical register state
-    for (0..32) |i| {
-        try std.testing.expectEqual(lut_cpu.readReg(@intCast(i)), branch_cpu.readReg(@intCast(i)));
-    }
-
-    // Identical memory at store target
-    try std.testing.expectEqual(
-        std.mem.readInt(u32, lut_cpu.memory[256..][0..4], .little),
-        std.mem.readInt(u32, branch_cpu.memory[256..][0..4], .little),
-    );
 }

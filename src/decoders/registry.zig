@@ -1,19 +1,30 @@
-//! Opcode registry — single source of truth for all 95 supported opcodes.
+//! Opcode registry — the specification of every 32-bit encoding the decoder accepts.
 //!
-//! Each entry specifies the instruction's encoding fields. The comptime
-//! generator in `lut_decoder.zig` derives all lookup tables from this list.
+//! Each entry lists the fields that identify one instruction; every other bit is an
+//! operand. An encoding is legal exactly when one entry matches it (`lookup`), and the
+//! decoder (`branch.zig`) is tested against this table: registry_test.zig checks every
+//! entry with random operands and sweeps the identifying fields, and
+//! `zig build verify-decoder` compares the two on all 2^30 32-bit encodings.
+//! 16-bit (RV32C) encodings are outside the registry.
 //!
 //! Fields:
 //!   op      — tagged union variant from instructions.Opcode
-//!   opcode7 — bits [6:0], selects the decode strategy
+//!   opcode7 — bits [6:0]
 //!   f3      — bits [14:12]; null if not used for identification
 //!   f7      — bits [31:25]; null if not used for identification
-//!   rs2_eq  — bits [24:20] must equal this value (Zbb special cases, LR.W)
-//!   f5      — bits [31:27], atomics only
+//!   rs2_eq  — bits [24:20] must equal this value (Zbb unary ops, ZEXT.H, LR.W)
+//!   f5      — bits [31:27], atomics only (bits [26:25] are the free aq/rl flags)
 //!   f12     — bits [31:20], ECALL/EBREAK only
+//!   rd_eq   — bits [11:7] must equal this value (ECALL/EBREAK)
+//!   rs1_eq  — bits [19:15] must equal this value (ECALL/EBREAK)
+//!
+//! FENCE and FENCE.I constrain only opcode7 and f3: the spec requires implementations
+//! to ignore their other fields.
 
 const instructions = @import("../instructions.zig");
+const bf = @import("bitfields.zig");
 pub const Opcode = instructions.Opcode;
+pub const Instruction = instructions.Instruction;
 
 pub const Entry = struct {
     op: Opcode,
@@ -23,7 +34,94 @@ pub const Entry = struct {
     rs2_eq: ?u5 = null,
     f5: ?u5 = null,
     f12: ?u12 = null,
+    rd_eq: ?u5 = null,
+    rs1_eq: ?u5 = null,
+
+    /// Bits this entry constrains.
+    pub fn mask(e: Entry) u32 {
+        var m: u32 = 0x7F;
+        if (e.f3 != null) m |= 0x7 << 12;
+        if (e.f7 != null) m |= 0x7F << 25;
+        if (e.rs2_eq != null) m |= 0x1F << 20;
+        if (e.f5 != null) m |= 0x1F << 27;
+        if (e.f12 != null) m |= 0xFFF << 20;
+        if (e.rd_eq != null) m |= 0x1F << 7;
+        if (e.rs1_eq != null) m |= 0x1F << 15;
+        return m;
+    }
+
+    /// Values of the constrained bits: `raw` encodes this entry iff `raw & mask() == match()`.
+    pub fn match(e: Entry) u32 {
+        var v: u32 = e.opcode7;
+        if (e.f3) |x| v |= @as(u32, x) << 12;
+        if (e.f7) |x| v |= @as(u32, x) << 25;
+        if (e.rs2_eq) |x| v |= @as(u32, x) << 20;
+        if (e.f5) |x| v |= @as(u32, x) << 27;
+        if (e.f12) |x| v |= @as(u32, x) << 20;
+        if (e.rd_eq) |x| v |= @as(u32, x) << 7;
+        if (e.rs1_eq) |x| v |= @as(u32, x) << 15;
+        return v;
+    }
 };
+
+/// Registry indices by opcode7, so lookup() scans only the entries that can match.
+const by_opcode = blk: {
+    @setEvalBranchQuota(20_000);
+    var lists: [128][]const u8 = @splat(&.{});
+    for (0..128) |op| {
+        var idx: []const u8 = &.{};
+        for (registry, 0..) |e, i| {
+            if (e.opcode7 == op) idx = idx ++ [_]u8{i};
+        }
+        lists[op] = idx;
+    }
+    break :blk lists;
+};
+
+/// The entry a 32-bit encoding matches, or null if none does. A plain search over the
+/// table: this is the reference the decoder is checked against, not a fast path.
+/// Entries never overlap (registry_test.zig), so there is at most one match.
+pub fn lookup(raw: u32) ?Entry {
+    for (by_opcode[raw & 0x7F]) |i| {
+        const e = registry[i];
+        if (raw & e.mask() == e.match()) return e;
+    }
+    return null;
+}
+
+/// The Instruction the decoder must produce for `raw`, an encoding of entry `e`.
+/// Operands come from the instruction's format, with these exceptions:
+///   - ECALL, EBREAK, FENCE and FENCE.I carry no operands;
+///   - I-ALU shift-type instructions (opcode 0010011, funct3 001/101: SLLI, SRLI,
+///     SRAI, RORI, the Zbs immediate forms and the Zbb unary ops) take imm from the
+///     rs2 field, not the full 12-bit immediate.
+pub fn instruction(e: Entry, raw: u32) Instruction {
+    const op = e.op;
+    switch (op) {
+        .i => |i_op| switch (i_op) {
+            .ECALL, .EBREAK, .FENCE, .FENCE_I => return .{ .op = op, .raw = raw },
+            else => {},
+        },
+        else => {},
+    }
+    return switch (op.format()) {
+        .R => .{ .op = op, .rd = bf.rd(raw), .rs1 = bf.rs1(raw), .rs2 = bf.rs2(raw), .raw = raw },
+        .I => .{
+            .op = op,
+            .rd = bf.rd(raw),
+            .rs1 = bf.rs1(raw),
+            .imm = if (e.opcode7 == 0b0010011 and (bf.funct3(raw) == 0b001 or bf.funct3(raw) == 0b101))
+                @intCast(bf.rs2(raw))
+            else
+                bf.immI(raw),
+            .raw = raw,
+        },
+        .S => .{ .op = op, .rs1 = bf.rs1(raw), .rs2 = bf.rs2(raw), .imm = bf.immS(raw), .raw = raw },
+        .B => .{ .op = op, .rs1 = bf.rs1(raw), .rs2 = bf.rs2(raw), .imm = bf.immB(raw), .raw = raw },
+        .U => .{ .op = op, .rd = bf.rd(raw), .imm = bf.immU(raw), .raw = raw },
+        .J => .{ .op = op, .rd = bf.rd(raw), .imm = bf.immJ(raw), .raw = raw },
+    };
+}
 
 pub const registry = [_]Entry{
     // ---- RV32I R-type (10) ---- opcode 0b0110011
@@ -134,8 +232,8 @@ pub const registry = [_]Entry{
     .{ .op = .{ .a = .AMOMAXU_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b11100 },
 
     // ---- System (8) ---- opcode 0b1110011
-    .{ .op = .{ .i = .ECALL }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x000 },
-    .{ .op = .{ .i = .EBREAK }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x001 },
+    .{ .op = .{ .i = .ECALL }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x000, .rd_eq = 0, .rs1_eq = 0 },
+    .{ .op = .{ .i = .EBREAK }, .opcode7 = 0b1110011, .f3 = 0b000, .f12 = 0x001, .rd_eq = 0, .rs1_eq = 0 },
     .{ .op = .{ .csr = .CSRRW }, .opcode7 = 0b1110011, .f3 = 0b001 },
     .{ .op = .{ .csr = .CSRRS }, .opcode7 = 0b1110011, .f3 = 0b010 },
     .{ .op = .{ .csr = .CSRRC }, .opcode7 = 0b1110011, .f3 = 0b011 },
@@ -151,42 +249,6 @@ pub const registry = [_]Entry{
     .{ .op = .{ .i = .FENCE }, .opcode7 = 0b0001111, .f3 = 0b000 },
     .{ .op = .{ .i = .FENCE_I }, .opcode7 = 0b0001111, .f3 = 0b001 },
 };
-
-/// Decode strategies — what sub-table to consult after level-1 lookup.
-pub const Strategy = enum(u8) {
-    illegal,
-    r_type, // → r_table[funct3][funct7]
-    i_alu, // → i_alu_base[funct3] or shift_table[idx][funct7]
-    load, // → load_table[funct3]
-    store, // → store_table[funct3]
-    branch, // → branch_table[funct3]
-    atomic, // → atomic_table[funct5], funct3==010 guard
-    system, // → system_table[funct3], or ECALL/EBREAK by funct12
-    // --- Fixed / guarded single-opcode strategies ---
-    lui, // fixed .{ .i = .LUI }
-    auipc, // fixed .{ .i = .AUIPC }
-    jal, // fixed .{ .i = .JAL }
-    jalr, // funct3==0 guard, fixed .{ .i = .JALR }
-    fence, // funct3 switch: FENCE (0b000) / FENCE_I (0b001)
-};
-
-pub fn strategyFor(opcode7: u7) Strategy {
-    return switch (opcode7) {
-        0b0110011 => .r_type,
-        0b0010011 => .i_alu,
-        0b0000011 => .load,
-        0b0100011 => .store,
-        0b1100011 => .branch,
-        0b0101111 => .atomic,
-        0b1110011 => .system,
-        0b0110111 => .lui,
-        0b0010111 => .auipc,
-        0b1101111 => .jal,
-        0b1100111 => .jalr,
-        0b0001111 => .fence,
-        else => .illegal,
-    };
-}
 
 test {
     _ = @import("registry_test.zig");

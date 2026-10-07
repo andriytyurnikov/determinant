@@ -1,4 +1,6 @@
-//! Reference decoder — branch-based dispatch for conformance testing and documentation.
+//! The instruction decoder: a switch on opcode[6:0], then the extension decoders by
+//! funct3/funct7. Its specification is registry.zig (see registry_test.zig and
+//! `zig build verify-decoder`).
 
 const std = @import("std");
 const instructions = @import("../instructions.zig");
@@ -58,10 +60,9 @@ pub fn decode(raw: u32) DecodeError!Instruction {
 // --- Sub-decoders ---
 
 /// Decode an R-type instruction (opcode 0b0110011).
-/// Extensions are checked in priority order: M-extension first (unique funct7=0b0000001
-/// distinguishes it from RV32I which shares the same base opcode), then RV32I base,
-/// then Zba, Zbb, Zbs. M-extension must precede RV32I because both use opcode 0b0110011
-/// and a false match on funct3 alone would misidentify M instructions as RV32I.
+/// The extensions are tried in turn: M (funct7 = 0b0000001), RV32I, Zba, Zbb, Zbs.
+/// Their (funct3, funct7, rs2) encodings are disjoint, as the registry test checks,
+/// so the order does not change any result.
 fn decodeR(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     const f7 = funct7(raw);

@@ -2,7 +2,7 @@
 
 ```
 src/
-  root.zig                — library root; decode() = LUT primary, decodeBranch() = reference; re-exports cpu, instructions, decoders, branch_decoder
+  root.zig                — library root; re-exports cpu, instructions, decoders, decode(), DecodeError, CpuType/Cpu and the common types
   main.zig                — CLI entry point: run() maps the outcome to an exit status (ExitStatus) and flushes output; runDemo() (built-in program) or runFile() (load flat binary); imports the library as @import("determinant") (companion file for main/)
   main/
     tests.zig             — hub → disassembly, result, demo, args, file, dump, exit
@@ -90,17 +90,16 @@ src/
       tests.zig           — hub → decode_exec_test.zig, boundary_test.zig
         decode_exec_test.zig    — decode + execute tests
         boundary_test.zig       — boundary-value tests
-  decoders.zig            — namespace for decoders/; re-exports branch, lut, expand, registry, bitfields; canonical DecodeError with comptime divergence assertion (companion file for decoders/)
+  decoders.zig            — namespace for decoders/: decode() (= branch.decode), DecodeError; re-exports branch, expand, registry, bitfields (companion file for decoders/)
   decoders/
     bitfields.zig         — shared bit-field extraction (opcode7, rd, rs1, rs2, funct3/5/7/12, immI/S/B/U/J)
     bitfields_test.zig    — standalone bit-field extraction tests (register fields, immediate extractors)
-    expand.zig            — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
-    registry.zig          — opcode registry: Entry struct, 95-entry registry array, Strategy enum, strategyFor()
-    registry_test.zig     — every registry entry decodes to its own opcode with both decoders
-    conformance_test.zig  — conformance suite (field-by-field match vs branch decoder)
+    expand.zig            — expandCompressed(): wraps rv32c.Expanded → Instruction
+    registry.zig          — opcode registry: the specification of every 32-bit encoding (Entry with mask()/match(), 95 entries, lookup(), instruction())
+    registry_test.zig     — decoder vs. registry: no overlaps, one entry per Opcode, random operands, sweep of all identifying fields
     rv32c_cross_test.zig  — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
     rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
-    branch.zig            — reference decoder: branch-based dispatch to extension decoders (companion file for branch/)
+    branch.zig            — the decoder: switch on opcode, then extension decoders by funct3/funct7 (companion file for branch/)
     branch/
       test_helpers.zig    — shared branch decoder test helpers (expectRoundTripI/S/B/U/Csr)
       tests.zig           — hub → rtype, alu, shift, load_store, branch, jump, atomic, system, edge
@@ -113,20 +112,9 @@ src/
         atomic_test.zig         — RV32A atomic round-trip tests (all 11 opcodes)
         system_test.zig         — CSR and FENCE round-trip tests
         edge_test.zig           — edge cases, invalid encodings, load variants, ZEXT_H, operand isolation
-    lut.zig               — primary decoder: comptime LUT tables (level1 strategy → format-specific tables) derived from registry.zig (companion file for lut/)
-    lut/
-      test_helpers.zig    — shared LUT test encoding helpers and assertion utilities
-      tests.zig           — hub → rtype, ialu, load_store_branch, jump, system, operand, edge
-        rtype_test.zig          — R-type LUT tests (base, M, Zba, Zbb, Zbs)
-        ialu_test.zig           — I-type ALU LUT tests (shifts, Zbb, Zbs)
-        load_store_branch_test.zig — load/store/branch valid+invalid LUT tests
-        jump_test.zig           — LUI/AUIPC, JAL, JALR LUT tests
-        system_test.zig         — atomic/system/FENCE/misc LUT tests
-        operand_test.zig        — R-format operand field extraction and isolation tests
-        edge_test.zig           — edge cases: invalid encodings, operand isolation, zero instruction
   compliance.zig            — RISC-V compliance tests companion file (imports compliance/tests.zig)
   compliance/
-    runner.zig              — ComplianceCpu (256KB, decoder follows -Ddecoder), runTest(), expectPass()
+    runner.zig              — ComplianceCpu (256KB), runTest(), expectPass()
     tests.zig               — hub → rv32ui, rv32um, rv32ua, rv32uc, rv32uzba, rv32uzbb, rv32uzbs
       rv32ui_test.zig       — RV32I base integer tests (41 tests, including fence_i)
       rv32um_test.zig       — RV32M multiply/divide tests (8 tests)
@@ -144,7 +132,7 @@ src/
       rv32uzbb/             — Zbb test binaries (clz.bin, cpop.bin, ...)
       rv32uzbs/             — Zbs test binaries (bclr.bin, bext.bin, ...)
 tools/
-  verify_decoders.zig     — exhaustive LUT-vs-branch decoder comparison over all 2^32 inputs (`zig build verify-decoders`)
+  verify_decoder.zig      — decoder vs. opcode registry on all 2^30 32-bit encodings (`zig build verify-decoder`)
   bench.zig               — benchmark: best-of-N time and MIPS per C corpus program, geometric mean (`zig build bench`)
   corpus_digests.zig      — runs every corpus program (compliance binaries and C programs) and prints/checks final-state digests and C program results (`zig build digests` / `test-digests`)
 tests/
@@ -160,7 +148,7 @@ tests/
       link.ld               — custom linker script (origin at 0x0)
     Makefile                — builds flat binaries from riscv-tests sources
     README.md               — rebuild instructions and toolchain setup
-build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoders, bench and programs steps; test-all runs every suite once per decoder)
+build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoder, bench and programs steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
 
@@ -170,7 +158,7 @@ All edges point downward — no cycles exist and none should be introduced.
 
 ```
 main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
-                       ↘ decoders.zig ─→ lut / branch
+                       ↘ decoders.zig ─→ branch
                                       ↘ bitfields.zig, expand.zig, registry.zig
 ```
 
@@ -186,7 +174,7 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 - The library module is named `"determinant"` — CLI imports it via `@import("determinant")`
 - **Companion file pattern**: `foo.zig` is the module root, `foo/` holds submodules and tests. This mirrors the Zig standard library convention (`std/os.zig` + `std/os/`). No pure hub-only files.
 - `src/` holds entry points (`root.zig`, `main.zig`) alongside the top-level modules (`cpu.zig`, `instructions.zig`, `decoders.zig`)
-- `decoders.zig` re-exports `branch`, `lut`, `expand`, `registry`, `bitfields`
+- `decoders.zig` re-exports `branch`, `expand`, `registry`, `bitfields`, plus `decode` and `DecodeError`
 - Each ISA extension has a companion file (`instructions/ext.zig` + `instructions/ext/tests.zig`); tests are pulled in via `test { _ = @import("ext/tests.zig"); }` blocks
 - **Test hub pattern**: inside each module directory, the test hub is always named `tests.zig`. Semantic test files drop the directory prefix (e.g., `cpu/boundary_test.zig` not `cpu/cpu_boundary_test.zig`)
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed

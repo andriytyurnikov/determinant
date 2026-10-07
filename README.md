@@ -29,7 +29,6 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ```sh
 zig build
-zig build -Ddecoder=branch   # use reference branch-based decoder instead of LUT (default: lut)
 zig build -Dmemory_size=1048576  # use 1 MB VM memory instead of default 64 KB
 ```
 
@@ -55,13 +54,13 @@ zig build test              # run unit and CLI tests with the selected decoder b
 zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
 zig build test-all          # run unit, CLI, compliance and digest tests with both decoder backends
 zig build test-digests      # check corpus final-state digests against tests/digests.txt
-zig build verify-decoders   # compare both decoders on all 2^32 instruction words (~20 s)
+zig build verify-decoder    # check the decoder against its spec on all 2^30 32-bit encodings
 zig build bench             # MIPS on the C program corpus (ReleaseFast)
 ```
 
 ### Cross-platform determinism
 
-`zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, on a big-endian target, and with both decoders, so every configuration must reach bit-identical final states.
+`zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, and on a big-endian target, so every configuration must reach bit-identical final states.
 
 ### RISC-V Compliance
 
@@ -75,7 +74,7 @@ Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.
 
 The library is available via `@import("determinant")`.
 
-- **`Cpu`** — VM state (decoder backend follows `-Ddecoder` build option, default: LUT)
+- **`Cpu`** — VM state (memory size follows the `-Dmemory_size` build option)
   - `init()` — return a zeroed VM by value (small memories only: the memory lives inside the struct)
   - `reset()` — zero a VM in place; use it on a heap-allocated VM for large memories
   - `readReg(u5) → u32` / `writeReg(u5, u32)` — register access (x0 hardwired to zero)
@@ -93,10 +92,8 @@ The library is available via `@import("determinant")`.
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
-- **`decode(u32)`** — decode using the primary comptime LUT decoder (fast, branchless), returns `Instruction` or `DecodeError`
-- **`decodeBranch(u32)`** — decode using the reference branch-based decoder (for conformance testing and readability)
-- **`decoders`** — access to both decoder modules (`decoders.branch`, `decoders.lut`)
-- **`branch_decoder`** — direct access to the reference branch-based decoder module
+- **`decode(u32)`** — decode a 32-bit word or a zero-extended 16-bit RV32C halfword, returns `Instruction` or `DecodeError`
+- **`decoders`** — the decoder's parts: `branch` (the decoder), `expand` (RV32C expansion), `registry` (the specification of every 32-bit encoding, with `lookup()`), `bitfields`
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"`, `ecall`, `ebreak`
 - **`default_memory_size`** — configured VM memory size in bytes (follows `-Dmemory_size` build option, default: 65536)

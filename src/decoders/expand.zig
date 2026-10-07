@@ -1,4 +1,4 @@
-//! Shared expandCompressed(): wraps rv32c.Expanded into a full Instruction (used by both decoders).
+//! expandCompressed(): wraps rv32c.Expanded into a full Instruction (used by the decoder).
 
 const std = @import("std");
 const instructions = @import("../instructions.zig");
@@ -6,7 +6,6 @@ const rv32c = instructions.rv32i.rv32c;
 const Instruction = instructions.Instruction;
 
 /// Expand a 16-bit compressed instruction (zero-extended to u32) into a full Instruction.
-/// Shared by both branch_decoder and lut_decoder — single source of truth for RV32C expansion.
 pub fn expandCompressed(raw: u32) error{IllegalInstruction}!Instruction {
     const exp = try rv32c.expand(@truncate(raw));
     return .{
