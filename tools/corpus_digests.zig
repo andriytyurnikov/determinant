@@ -5,9 +5,12 @@
 //!
 //! where <stop> is `ecall`, `ebreak`, `limit` or `error.<Name>`.
 //!
-//! usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--no-decode-cache] ROOT=DIR...
+//! usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--pass ROOT]...
+//!                       [--no-decode-cache] ROOT=DIR...
 //!
 //!   ROOT=DIR          run every *.bin under DIR, naming it ROOT/<path relative to DIR>
+//!   --pass ROOT       programs under ROOT follow the riscv-tests convention: each must
+//!                     stop at EBREAK with gp (x3) = 1; exit 1 otherwise
 //!   --no-decode-cache run on a VM without the decode cache (results must not change)
 //!   --check FILE      compare the lines with FILE instead of printing them; exit 1 on
 //!                     any difference
@@ -30,10 +33,10 @@ const CorpusCpu = det.CpuType(corpus_memory, .{});
 const UncachedCpu = det.CpuType(corpus_memory, .{ .decode_cache_entries = 0 });
 const max_cycles: u64 = 100_000_000;
 
-const Root = struct { name: []const u8, dir: []const u8, expect_dir: ?[]const u8 = null };
+const Root = struct { name: []const u8, dir: []const u8, expect_dir: ?[]const u8 = null, must_pass: bool = false };
 
 fn usage() noreturn {
-    std.debug.print("usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--no-decode-cache] ROOT=DIR...\n", .{});
+    std.debug.print("usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--pass ROOT]... [--no-decode-cache] ROOT=DIR...\n", .{});
     std.process.exit(2);
 }
 
@@ -50,6 +53,7 @@ pub fn main(init: std.process.Init) !void {
 
     var roots: std.ArrayList(Root) = .empty;
     var expects: std.ArrayList(Root) = .empty;
+    var passes: std.ArrayList([]const u8) = .empty;
     var check_path: ?[]const u8 = null;
     var decode_cache = true;
     var i: usize = 1;
@@ -60,6 +64,10 @@ pub fn main(init: std.process.Init) !void {
             i += 1;
             if (i == args.len) usage();
             check_path = args[i];
+        } else if (std.mem.eql(u8, args[i], "--pass")) {
+            i += 1;
+            if (i == args.len) usage();
+            try passes.append(arena, args[i]);
         } else if (std.mem.eql(u8, args[i], "--expect")) {
             i += 1;
             if (i == args.len) usage();
@@ -74,6 +82,11 @@ pub fn main(init: std.process.Init) !void {
     for (expects.items) |e| {
         for (roots.items) |*r| {
             if (std.mem.eql(u8, r.name, e.name)) r.expect_dir = e.dir;
+        }
+    }
+    for (passes.items) |name| {
+        for (roots.items) |*r| {
+            if (std.mem.eql(u8, r.name, name)) r.must_pass = true;
         }
     }
 
@@ -128,6 +141,10 @@ fn runCorpus(
             const stop = try runProgram(arena, vm, program);
             try out.print("{s}/{s} {s} {d} {x}\n", .{ root.name, p, stop, vm.cycle_count, &vm.stateDigest() });
             counts.programs += 1;
+            if (root.must_pass and !(std.mem.eql(u8, stop, "ebreak") and vm.readReg(3) == 1)) {
+                std.debug.print("{s}/{s}: did not pass (stop {s}, gp = {d})\n", .{ root.name, p, stop, vm.readReg(3) });
+                counts.unexpected += 1;
+            }
             if (root.expect_dir) |expect_dir| {
                 if (!try resultMatches(io, arena, vm, stop, expect_dir, p)) {
                     std.debug.print("{s}/{s}: result differs from the native run\n", .{ root.name, p });

@@ -92,3 +92,30 @@ jobs:
         with:
           use-cache: false
       - run: zig fmt --check src build.zig tools
+
+  compliance-rebuild:
+    name: compliance suite rebuilt from source (GCC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          cache-key: compliance-rebuild
+      - run: sudo apt-get update && sudo apt-get install -y gcc-riscv64-unknown-elf
+      # Every rebuilt binary must pass. Byte identity with src/compliance/bin is not
+      # required: other GCC/binutils versions encode a few tests differently.
+      - run: make -C tests/riscv-tests BIN_DIR="$RUNNER_TEMP/rebuilt" BUILD_DIR="$RUNNER_TEMP/build"
+      - run: zig build test-compliance-rebuild -Drebuilt_compliance="$RUNNER_TEMP/rebuilt"
+
+  corpus-reproducible:
+    name: C corpus rebuilds byte-identically
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          cache-key: corpus-reproducible
+      - run: zig build programs
+      - run: git diff --exit-code -- tests/programs

@@ -15,7 +15,8 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as 
 - `zig build test-all` — run unit, CLI, compliance and digest tests (what CI runs)
 - `zig build test-digests` — run the corpus (compliance binaries and the C programs in `tests/programs`), check each C program's result against a native run, and check every final-state digest against `tests/digests.txt`; `zig build digests > tests/digests.txt` regenerates it after an intended change in guest-visible behavior (review the diff)
 - `zig build bench` — benchmark the VM on the C corpus (always ReleaseFast; `-- --runs N`); measure before and after any change to the step loop or decoder
-- `zig build programs` — rebuild the C corpus binaries and their expected results with Zig's C compiler (see `tests/programs/README.md`)
+- `zig build programs` — rebuild the C corpus binaries and their expected results with Zig's C compiler (see `tests/programs/README.md`); CI checks the result is byte-identical to what is checked in
+- `zig build test-compliance-rebuild -Drebuilt_compliance=DIR` — check that compliance binaries rebuilt from source (`make -C tests/riscv-tests BIN_DIR=DIR`) all pass
 - `zig build verify-decoder` — check the decoder against the opcode registry on all 2^30 32-bit encodings (always ReleaseFast, ~10 s); run it after any decoder or registry change
 - `zig build run -- <args>` — pass arguments to the executable
 - `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
