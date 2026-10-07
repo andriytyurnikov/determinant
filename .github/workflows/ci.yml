@@ -1,14 +1,94 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# setup-zig installs the version in build.zig.zon's minimum_zig_version, so CI and
+# the declared requirement cannot drift apart.
+#
+# Every test-all run checks tests/digests.txt (zig build test-digests) with both
+# decoders, so all jobs below must reach bit-identical final VM states.
+
 jobs:
-  build-and-test:
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.optimize }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        optimize: [Debug, ReleaseFast]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          cache-key: test-${{ matrix.optimize }}
+      - run: zig build test-all -Doptimize=${{ matrix.optimize }} --summary all
+      - name: CLI smoke run
+        shell: bash
+        run: |
+          zig build run -Doptimize=${{ matrix.optimize }} -- src/compliance/bin/rv32ui/simple.bin | tee out.txt
+          grep -q "x3 = 1 " out.txt
+
+  big-endian:
+    name: test (s390x big-endian, qemu)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.15.2
-      - run: zig build
-      - run: zig build test
-      - run: zig build test-all
-      - run: zig fmt --check src/
+          cache-key: big-endian
+      - run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - run: zig build test-all -Dtarget=s390x-linux-musl -fqemu --summary all
+
+  memory-size:
+    name: test (memory_size=${{ matrix.memory_size }})
+    strategy:
+      fail-fast: false
+      matrix:
+        memory_size: [64, 1048576, 268435456]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          cache-key: memory-size-${{ matrix.memory_size }}
+      - run: zig build test-all -Dmemory_size=${{ matrix.memory_size }} --summary all
+      - name: CLI smoke run (Debug and ReleaseFast)
+        shell: bash
+        run: |
+          # ADDI x1, x0, 42; EBREAK — small enough for every memory size
+          printf '\223\000\240\002\163\000\020\000' > tiny.bin
+          for opt in Debug ReleaseFast; do
+            zig build run -Doptimize=$opt -Dmemory_size=${{ matrix.memory_size }} -- tiny.bin | tee out.txt
+            grep -q "x1 = 42" out.txt
+          done
+
+  decoders:
+    name: decoder equivalence (all 2^32 inputs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          cache-key: decoders
+      - run: zig build verify-decoders
+
+  fmt:
+    name: zig fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          use-cache: false
+      - run: zig fmt --check src build.zig tools
