@@ -148,7 +148,7 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
 
 ## State and digests
 
-The architectural state is: `pc`, the 32 registers, the memory image, `cycle_count`, the reservation and `mscratch`. `stateDigest()` is the SHA-256 of a canonical, versioned, explicitly little-endian encoding of exactly that state (`src/cpu/state.zig`). The decode cache is not part of it.
+The architectural state is: `pc`, the 32 registers, the memory image, `cycle_count`, the reservation and `mscratch`. `stateDigest()` is the SHA-256 of a canonical, versioned, explicitly little-endian encoding of exactly that state (`src/cpu/state.zig`). The same bytes are the snapshot that `writeSnapshot()` produces and `restoreSnapshot()` loads (`docs/design/snapshots.md`). The decode cache and `stop_pc` are not part of it.
 
 ## What "deterministic" covers
 

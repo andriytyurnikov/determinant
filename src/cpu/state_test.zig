@@ -69,3 +69,98 @@ test "state: digest depends on memory size" {
     const b = Cpu.init();
     try std.testing.expect(!std.mem.eql(u8, &a.stateDigest(), &b.stateDigest()));
 }
+
+// --- Snapshots ---
+
+fn busyState(cpu: *Cpu) void {
+    cpu.reset();
+    cpu.pc = 0x1234;
+    for (1..32) |i| cpu.regs[i] = @as(u32, @intCast(i)) *% 0x9E37_79B9;
+    for (&cpu.memory, 0..) |*b, i| b.* = @truncate(i *% 31 +% 7);
+    cpu.cycle_count = 0x0102_0304_0506_0708;
+    cpu.reservation = 0x400;
+    cpu.csrs.mscratch = 0xFEED_F00D;
+}
+
+test "snapshot: size and bytes are the digest's pre-image" {
+    const cpu = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(cpu);
+    busyState(cpu);
+    const buf = try std.testing.allocator.alloc(u8, Cpu.snapshot_size);
+    defer std.testing.allocator.free(buf);
+    var w: std.Io.Writer = .fixed(buf);
+    try cpu.writeSnapshot(&w);
+    try std.testing.expectEqual(Cpu.snapshot_size, w.end);
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(buf, &digest, .{});
+    try std.testing.expectEqualSlices(u8, &cpu.stateDigest(), &digest);
+}
+
+test "snapshot: restore reproduces the state exactly and resumes identically" {
+    const a = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(a);
+    const b = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(b);
+    busyState(a);
+    // A tiny loop at pc: ADDI x5, x5, 1; JAL x0, -4
+    std.mem.writeInt(u32, a.memory[0x1234..][0..4], 0x00128293, .little);
+    std.mem.writeInt(u32, a.memory[0x1238..][0..4], 0xFFDFF06F, .little);
+    _ = try a.runFor(7);
+
+    const buf = try std.testing.allocator.alloc(u8, Cpu.snapshot_size);
+    defer std.testing.allocator.free(buf);
+    var w: std.Io.Writer = .fixed(buf);
+    try a.writeSnapshot(&w);
+
+    b.reset();
+    b.stop_pc = 99;
+    var r: std.Io.Reader = .fixed(buf);
+    try b.restoreSnapshot(&r);
+    try std.testing.expectEqualSlices(u8, &a.stateDigest(), &b.stateDigest());
+    try std.testing.expectEqual(@as(u32, 0), b.stop_pc);
+
+    _ = try a.runFor(100);
+    _ = try b.runFor(100);
+    try std.testing.expectEqualSlices(u8, &a.stateDigest(), &b.stateDigest());
+}
+
+test "snapshot: malformed headers are rejected before anything changes" {
+    const cpu = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(cpu);
+    busyState(cpu);
+    const good = try std.testing.allocator.alloc(u8, Cpu.snapshot_size);
+    defer std.testing.allocator.free(good);
+    var w: std.Io.Writer = .fixed(good);
+    try cpu.writeSnapshot(&w);
+    const bad = try std.testing.allocator.alloc(u8, Cpu.snapshot_size);
+    defer std.testing.allocator.free(bad);
+
+    const Corruption = struct { offset: usize, value: u32 };
+    const corruptions = [_]Corruption{
+        .{ .offset = 0, .value = 0x4D52_5445 }, // magic "ETRM"
+        .{ .offset = 4, .value = 2 }, // unknown version
+        .{ .offset = 8, .value = 4096 }, // other memory size
+        .{ .offset = 16, .value = 1 }, // regs[0] != 0
+        .{ .offset = 152, .value = 2 }, // reservation flag not 0/1
+        .{ .offset = 156, .value = 0x402 }, // unaligned reservation
+        .{ .offset = 156, .value = Cpu.mem_size }, // reservation outside memory
+    };
+    busyState(cpu);
+    cpu.pc = 0xAAAA; // differs from the snapshot: must survive a rejected restore
+    const before = cpu.stateDigest();
+    for (corruptions) |c| {
+        @memcpy(bad, good);
+        std.mem.writeInt(u32, bad[c.offset..][0..4], c.value, .little);
+        var r: std.Io.Reader = .fixed(bad);
+        try std.testing.expectError(error.InvalidSnapshot, cpu.restoreSnapshot(&r));
+        try std.testing.expectEqualSlices(u8, &before, &cpu.stateDigest());
+    }
+    // No reservation, but a non-zero address
+    @memcpy(bad, good);
+    std.mem.writeInt(u32, bad[152..][0..4], 0, .little);
+    var r: std.Io.Reader = .fixed(bad);
+    try std.testing.expectError(error.InvalidSnapshot, cpu.restoreSnapshot(&r));
+    // A truncated snapshot
+    var short: std.Io.Reader = .fixed(good[0..100]);
+    try std.testing.expectError(error.EndOfStream, cpu.restoreSnapshot(&short));
+}

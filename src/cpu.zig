@@ -33,6 +33,9 @@ pub const StepError = error{
     AddressOutOfBounds,
 };
 
+/// Errors from CpuType.restoreSnapshot().
+pub const RestoreError = state.RestoreError;
+
 /// Details of a fault, for the host: see CpuType.describeFault().
 pub const Fault = struct {
     err: StepError,
@@ -114,6 +117,24 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
             self.cycle_count = 0;
             self.reservation = null;
             self.csrs = .{};
+            @memset(&self.decode_cache, empty_slot);
+            self.stop_pc = 0;
+        }
+
+        /// Size of a snapshot: the state header plus the memory image.
+        pub const snapshot_size: usize = state.header_len + mem_size;
+
+        /// Write a snapshot of the architectural state (versioned, little-endian; the
+        /// bytes stateDigest() hashes). See docs/design/snapshots.md.
+        pub fn writeSnapshot(self: *const Self, w: *std.Io.Writer) std.Io.Writer.Error!void {
+            return state.writeSnapshot(self, w);
+        }
+
+        /// Restore the architectural state from a snapshot written by a CpuType with the
+        /// same memory size. Empties the decode cache and sets stop_pc to 0. Returns
+        /// error.InvalidSnapshot, before changing anything, for a malformed header.
+        pub fn restoreSnapshot(self: *Self, r: *std.Io.Reader) state.RestoreError!void {
+            try state.restoreSnapshot(self, r);
             @memset(&self.decode_cache, empty_slot);
             self.stop_pc = 0;
         }
