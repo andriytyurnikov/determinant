@@ -18,6 +18,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as 
 - `zig build programs` — rebuild the C corpus binaries and their expected results with Zig's C compiler (see `tests/programs/README.md`); CI checks the result is byte-identical to what is checked in
 - `zig build test-compliance-rebuild -Drebuilt_compliance=DIR` — check that compliance binaries rebuilt from source (`make -C tests/riscv-tests BIN_DIR=DIR`) all pass
 - `zig build verify-decoder` — check the decoder against the opcode registry on all 2^30 32-bit encodings (always ReleaseFast, ~10 s); run it after any decoder or registry change
+- Opt-in oracles, not in CI (need local tools; see their READMEs): `zig build llvm-oracle -Dllvm_lib=/opt/homebrew/opt/llvm/lib/libLLVM.dylib -- c32 4` (decoder vs LLVM's disassembler), `python3 -I tools/spike_diff/{directed,fuzz,encsweep}.py --work DIR` (execution vs Spike). Run both before a release, with the mutation harness in `tools/mutation`
 - `zig build run -- <args>` — pass arguments to the executable
 - `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
 - `zig fmt src build.zig tools` — format all Zig sources (run after editing; CI runs `zig fmt --check` on the same paths)

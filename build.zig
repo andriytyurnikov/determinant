@@ -164,6 +164,51 @@ pub fn build(b: *std.Build) void {
     const bench_step = b.step("bench", "Benchmark the VM on the C program corpus (ReleaseFast; pass -- --runs N)");
     bench_step.dependOn(&run_bench.step);
 
+    // Opt-in verification tools that need software from outside this repository. They
+    // are not part of test-all; see their READMEs.
+
+    // The decoder against LLVM's RISC-V disassembler (tools/llvm_oracle), which is
+    // loaded at run time from -Dllvm_lib.
+    const llvm_lib = b.option([]const u8, "llvm_lib", "Absolute path of a shared libLLVM with the RISC-V target, for the llvm-oracle step");
+    const llvm_oracle_step = b.step("llvm-oracle", "Compare the decoder with LLVM's RISC-V disassembler (ReleaseFast; needs -Dllvm_lib; pass -- MODE ..., see tools/llvm_oracle)");
+    if (llvm_lib) |lib| {
+        const oracle_exe = b.addExecutable(.{
+            .name = "llvm-oracle",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tools/llvm_oracle/oracle.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+                .link_libc = true,
+                .imports = &.{
+                    .{ .name = "determinant", .module = release_mod },
+                },
+            }),
+        });
+        const run_oracle = b.addRunArtifact(oracle_exe);
+        run_oracle.addArg(lib);
+        if (b.args) |args| run_oracle.addArgs(args);
+        run_oracle.has_side_effects = true;
+        llvm_oracle_step.dependOn(&run_oracle.step);
+    } else {
+        llvm_oracle_step.dependOn(&b.addFail("llvm-oracle needs -Dllvm_lib=PATH, the absolute path of a shared libLLVM with the RISC-V target").step);
+    }
+
+    // The VM side of the Spike differential tests (tools/spike_diff): runs programs and
+    // prints their final state. The tests themselves need Spike and a RISC-V GNU toolchain.
+    const spike_runner = b.addExecutable(.{
+        .name = "spike-runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/spike_diff/runner.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "determinant", .module = mod },
+            },
+        }),
+    });
+    const spike_runner_step = b.step("spike-runner", "Build spike-runner for the Spike differential tests (see tools/spike_diff)");
+    spike_runner_step.dependOn(&b.addInstallArtifact(spike_runner, .{}).step);
+
     addProgramsStep(b);
 }
 
