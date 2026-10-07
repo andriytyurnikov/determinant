@@ -14,4 +14,5 @@ comptime {
     _ = @import("recovery_test.zig");
     _ = @import("state_test.zig");
     _ = @import("decode_cache_test.zig");
+    _ = @import("fault_test.zig");
 }

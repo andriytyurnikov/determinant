@@ -263,13 +263,13 @@ test "step: LR.W out of bounds" {
 
 test "step: LR.W misaligned leaves reservation unchanged" {
     var cpu = Cpu.init();
+    cpu.reservation = 0x200; // a live reservation the fault must not disturb
     cpu.writeReg(1, 0x101); // misaligned for word access
 
     // LR.W x3, (x1)
     h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
     try std.testing.expectError(error.MisalignedAccess, cpu.step());
-    // Reservation must remain null after the error
-    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+    try std.testing.expectEqual(@as(?u32, 0x200), cpu.reservation);
 }
 
 test "step: AMOADD.W misaligned address" {

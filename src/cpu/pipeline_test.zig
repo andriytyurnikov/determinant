@@ -273,29 +273,6 @@ test "step: load error preserves PC, cycle_count, and rd" {
     try std.testing.expectEqual(@as(u32, 42), cpu.readReg(2));
 }
 
-test "step: store error preserves PC, cycle_count, and memory" {
-    const h = @import("../instructions/test_helpers.zig");
-    var cpu = Cpu.init();
-    // ADDI x1, x0, 100 at address 0
-    h.loadInst(&cpu, h.encodeI(0b0010011, 0b000, 1, 0, 100));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 100), cpu.readReg(1));
-    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
-    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
-
-    // Write known value at memory[100], then point x1 OOB for SW
-    cpu.memory[100] = 0xAA;
-    cpu.writeReg(1, MEMORY_SIZE);
-    // SW x2, 0(x1) at address 4 — OOB store
-    h.loadInst(&cpu, h.encodeS(0b010, 1, 2, 0));
-    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
-
-    // PC, cycle_count, and memory unchanged after error
-    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
-    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
-    try std.testing.expectEqual(@as(u8, 0xAA), cpu.memory[100]);
-}
-
 test "step: fetch error preserves PC and cycle_count" {
     var cpu = Cpu.init();
     // NOP at address 0
