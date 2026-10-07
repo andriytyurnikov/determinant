@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as both a library and CLI executable. See `README.md` for public API, [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
+Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as both a library and CLI executable. See `README.md` for public API, [SEMANTICS.md](SEMANTICS.md) for the execution contract (keep it in sync with any guest-visible change), [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
 
 ## Build Commands
 
@@ -27,7 +27,7 @@ These are load-bearing constraints — violating any one breaks deterministic ex
 
 - **Wrapping arithmetic everywhere** — all VM arithmetic uses `+%`, `-%`, `*%` (wrapping operators). Zig's default `+`, `-`, `*` panic on overflow in debug mode and are undefined in release. Every ADD, SUB, address calculation, and PC update must wrap.
 - **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`. Never use `std.mem.sliceAsBytes` on typed arrays — it reinterprets in native byte order. See "Endianness" in Traps to Avoid.
-- **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct). Zero allocation failure modes.
+- **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct, decode cache). Zero allocation failure modes inside the VM. (Hosts — the CLI, the tools, tests — allocate the whole VM struct on the heap when its memory is large; the VM itself never allocates.)
 - **No floating-point** — intentional; FP non-determinism (rounding modes, NaN payloads) is avoided entirely.
 - **Single-hart** — no threading, FENCE/FENCE.I are no-ops.
 
@@ -66,7 +66,7 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 ### Compressed Instructions (RV32C)
 
 - RV32C is a decode-time front-end to rv32i, not an independent extension — it imports only `rv32i.zig` and `format.zig` (no upward dependency on `instructions.zig`)
-- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union (no execution path, no format)
+- `rv32c.zig` has its own `Opcode` enum (26 variants) for decode/display purposes — NOT part of the `instructions.Opcode` tagged union and never executed. Its `format()` is an approximate display aid only (e.g. it calls C.LW S-format); execution uses the expanded rv32i op
 - `expand()` (in `rv32c/expand.zig`, re-exported by `rv32c.zig`) returns `rv32c.Expanded` (struct with `op: rv32i.Opcode`, register fields, imm) — the decoder wraps this into a full `Instruction` with `.op = .{ .i = exp.op }` via `expandCompressed()` in `decoders/expand.zig`
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Immediate extraction helpers live in `rv32c/imm.zig` — pure stateless functions with no dependencies
@@ -102,14 +102,17 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 ### CSR Implementation
 
 - CSR storage (`Csr` struct with `read`/`write`) lives in `zicsr.zig`, not `cpu.zig` — cpu.zig embeds `csrs: zicsr.Csr`
-- Cycle counters (0xC00, 0xC80) are read-only; writes rejected with `IllegalInstruction` (checked via bits [11:10] = 0b11)
+- Counters cycle/instret (0xC00/0xC02) and cycleh/instreth (0xC80/0xC82) all read `cycle_count` (= retired instructions) and are read-only; writes are rejected with `IllegalInstruction` (checked via bits [11:10] = 0b11). `time`/`timeh` are deliberately absent (no time source). `mscratch` (0x340) is the only writable CSR; every other number is `IllegalInstruction`. SEMANTICS.md "CSRs" is the contract
 - CSR reads receive `cycle_count` as a parameter from step() — reads see the pre-step value per the pipeline invariant
 
 ### Testing Patterns
 
 - Each extension has comprehensive execute tests with edge cases (overflow, sign-extension boundaries, spec-mandated special cases like DIV-by-zero → -1)
-- Test files are grouped semantically (by topic, not by size): `*_branch_test.zig`, `*_atomic_test.zig`, `*_csr_test.zig`, etc.
-- CPU tests use `cpu/tests.zig` as a hub; extension tests use `ext/tests.zig` hubs — source files import only the hub
+- Test files are grouped semantically (by topic, not by size), e.g. `exec_branch_test.zig`, `atomic_test.zig`, `csr_test.zig`
+- A module with several test files pulls them in through a `tests.zig` hub in its companion directory (`cpu/tests.zig`, `instructions/zbb/tests.zig`, ...); a module with a single test file imports it directly from a `test {}` block (`bitfields_test.zig`, `registry_test.zig`)
+- Unit tests use `cpu.TestCpu` (fixed 64 KiB), never the `-Dmemory_size` `Cpu`; CLI tests use `det.Cpu` on the heap and skip explicitly when a program does not fit
+- Every behavior change gets a test that fails before the change and passes after it; guest-visible changes also update SEMANTICS.md and `tests/digests.txt`
+- **Zig cache hazard**: never share a `--cache-dir` between two copies of the tree, or copy a tree including `.zig-cache`. Zig trusts file metadata in its cache manifests, so a copied tree can report a stale "cached" pass for a changed source (this bit the mutation-testing harness). Use a fresh cache per tree copy
 
 ## Traps to Avoid
 
@@ -123,9 +126,9 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 Applies to ALL arithmetic: ADD, SUB, address calculations, PC updates, MUL.
 
 ### Shift Amount Masking (Critical)
-RISC-V masks shift amounts to 5 bits (RV32). Shifts by ≥32 are undefined without masking.
+RISC-V masks shift amounts to 5 bits (RV32). In Zig a u32 shift needs a u5 amount, and `@truncate` to u5 already keeps exactly the low 5 bits; the explicit `& 0x1F` in the code only documents the intent. What must never happen is shifting by a value that can be ≥ 32 (a compile error for runtime u32 amounts, or safety-checked UB if forced with `@intCast`).
 ```zig
-// WRONG:
+// WRONG (does not compile, and @intCast would trap on rs2_val >= 32):
 rs1_val << rs2_val
 // RIGHT:
 rs1_val << @truncate(rs2_val & 0x1F)
@@ -174,7 +177,7 @@ next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
 
 ### Cycle Limits
-`run(null)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. `run(0)` executes zero steps (returns `.continue` immediately). Use `--max-cycles N` to set a finite limit.
+`run(max_cycles)` stops when `cycle_count >= max_cycles` — the limit is **absolute**, compared with the VM's running `cycle_count`, not a budget for this call (a second `run(1000)` on a VM already at 1000 cycles returns `.continue` at once). `run(null)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. `run(0)` executes zero steps (returns `.continue` immediately). Use `--max-cycles N` to set a finite limit. Tests should pass a finite limit so a runaway program fails instead of hanging the suite.
 ```zig
 // Default — unlimited (runs until ECALL/EBREAK):
 const result = try vm.run(null);
