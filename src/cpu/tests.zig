@@ -16,4 +16,6 @@ comptime {
     _ = @import("decode_cache_test.zig");
     _ = @import("fault_test.zig");
     _ = @import("csr_table_test.zig");
+    _ = @import("aliasing_test.zig");
+    _ = @import("wraparound_test.zig");
 }
