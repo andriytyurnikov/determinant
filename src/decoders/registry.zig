@@ -8,7 +8,7 @@
 //!   opcode7 — bits [6:0], selects the decode strategy
 //!   f3      — bits [14:12]; null if not used for identification
 //!   f7      — bits [31:25]; null if not used for identification
-//!   rs2_eq  — bits [24:20] must equal this value (Zbb special cases)
+//!   rs2_eq  — bits [24:20] must equal this value (Zbb special cases, LR.W)
 //!   f5      — bits [31:27], atomics only
 //!   f12     — bits [31:20], ECALL/EBREAK only
 
@@ -121,7 +121,7 @@ pub const registry = [_]Entry{
     .{ .op = .{ .i = .BGEU }, .opcode7 = 0b1100011, .f3 = 0b111 },
 
     // ---- Atomic (11) ---- opcode 0b0101111, funct3 = 0b010
-    .{ .op = .{ .a = .LR_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00010 },
+    .{ .op = .{ .a = .LR_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00010, .rs2_eq = 0 },
     .{ .op = .{ .a = .SC_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00011 },
     .{ .op = .{ .a = .AMOSWAP_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00001 },
     .{ .op = .{ .a = .AMOADD_W }, .opcode7 = 0b0101111, .f3 = 0b010, .f5 = 0b00000 },

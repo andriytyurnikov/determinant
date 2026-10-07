@@ -28,8 +28,14 @@ test "Atomic: all 11 instructions" {
         .{ 0b11100, .{ .a = .AMOMAXU_W } },
     };
     for (cases) |c| {
-        try expectOp(c[1], decode(encodeAtomic(c[0], 1, 2, 3)));
+        const rs2: u5 = if (c[0] == 0b00010) 0 else 3; // LR.W requires rs2 = 0
+        try expectOp(c[1], decode(encodeAtomic(c[0], 1, 2, rs2)));
     }
+}
+
+test "Atomic: LR.W with rs2 ≠ 0 is reserved → null" {
+    try expectNull(decode(encodeAtomic(0b00010, 1, 2, 1)));
+    try expectNull(decode(encodeAtomic(0b00010, 1, 2, 31)));
 }
 
 test "Atomic: invalid funct5 → null" {
@@ -50,6 +56,13 @@ test "Atomic: funct3≠010 → null" {
 test "System: ECALL and EBREAK" {
     try expectOp(.{ .i = .ECALL }, decode(encodeSystem(0b000, 0, 0, 0x000)));
     try expectOp(.{ .i = .EBREAK }, decode(encodeSystem(0b000, 0, 0, 0x001)));
+}
+
+test "System: ECALL/EBREAK with rd or rs1 ≠ 0 are reserved → null" {
+    try expectNull(decode(encodeSystem(0b000, 1, 0, 0x000))); // ECALL, rd = 1
+    try expectNull(decode(encodeSystem(0b000, 0, 1, 0x000))); // ECALL, rs1 = 1
+    try expectNull(decode(encodeSystem(0b000, 31, 0, 0x001))); // EBREAK, rd = 31
+    try expectNull(decode(encodeSystem(0b000, 0, 31, 0x001))); // EBREAK, rs1 = 31
 }
 
 test "System: invalid funct12 with funct3=0 → null" {

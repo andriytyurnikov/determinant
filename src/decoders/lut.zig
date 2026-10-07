@@ -223,14 +223,8 @@ pub fn decodeOpcode(raw: u32) ?Opcode {
         .load => load_table[f3],
         .store => store_table[f3],
         .branch => branch_table[f3],
-        // Note: LR.W spec says rs2 "should be zero" (software convention, not hardware
-        // requirement). We accept non-zero rs2 for forward-compatibility with future extensions.
-        .atomic => if (f3 == 0b010) atomic_table[bf.funct5(raw)] else null,
-        .system => if (f3 == 0b000) switch (@as(u12, @truncate(raw >> 20))) {
-            0x000 => @as(?Opcode, .{ .i = .ECALL }),
-            0x001 => @as(?Opcode, .{ .i = .EBREAK }),
-            else => null,
-        } else system_table[f3],
+        .atomic => if (f3 == 0b010) atomicOp(raw) else null,
+        .system => if (f3 == 0b000) ecallEbreakOp(raw) else system_table[f3],
         .lui => .{ .i = .LUI },
         .auipc => .{ .i = .AUIPC },
         .jal => .{ .i = .JAL },
@@ -240,6 +234,25 @@ pub fn decodeOpcode(raw: u32) ?Opcode {
             0b001 => .{ .i = .FENCE_I },
             else => null,
         },
+    };
+}
+
+/// LR.W is encoded with rs2 = 0; other rs2 values are reserved encodings (Spike and
+/// LLVM reject them), so they decode to null.
+fn atomicOp(raw: u32) ?Opcode {
+    const op = atomic_table[bf.funct5(raw)] orelse return null;
+    if (op == .a and op.a == .LR_W and bf.rs2(raw) != 0) return null;
+    return op;
+}
+
+/// ECALL / EBREAK by funct12. rd and rs1 must be zero; other values are reserved
+/// encodings (Spike and LLVM reject them).
+fn ecallEbreakOp(raw: u32) ?Opcode {
+    if (bf.rd(raw) != 0 or bf.rs1(raw) != 0) return null;
+    return switch (bf.funct12(raw)) {
+        0x000 => .{ .i = .ECALL },
+        0x001 => .{ .i = .EBREAK },
+        else => null,
     };
 }
 

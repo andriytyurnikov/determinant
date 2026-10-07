@@ -15,6 +15,17 @@ test "decode all-ones instruction (0xFFFFFFFF) is illegal" {
     try std.testing.expectError(error.IllegalInstruction, decoder.decode(0xFFFFFFFF));
 }
 
+test "ECALL and EBREAK with rd or rs1 ≠ 0 are reserved encodings" {
+    const ecall: u32 = 0x00000073;
+    const ebreak: u32 = 0x00100073;
+    for ([_]u32{ ecall, ebreak }) |base| {
+        try std.testing.expectError(error.IllegalInstruction, decoder.decode(base | (1 << 7))); // rd = 1
+        try std.testing.expectError(error.IllegalInstruction, decoder.decode(base | (31 << 7))); // rd = 31
+        try std.testing.expectError(error.IllegalInstruction, decoder.decode(base | (1 << 15))); // rs1 = 1
+        try std.testing.expectError(error.IllegalInstruction, decoder.decode(base | (31 << 15))); // rs1 = 31
+    }
+}
+
 test "ECALL and EBREAK exact decode" {
     const ecall = try decoder.decode(0x00000073);
     try std.testing.expectEqual(Opcode{ .i = .ECALL }, ecall.op);

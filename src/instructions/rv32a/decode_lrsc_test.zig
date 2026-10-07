@@ -29,13 +29,29 @@ test "decode all RV32A opcodes" {
         .{ @as(u5, 0b11100), Opcode{ .a = .AMOMAXU_W } },
     };
     inline for (cases) |c| {
-        const raw = encodeAtomic(c[0], 4, 5, 6);
+        const rs2: u5 = if (c[0] == 0b00010) 0 else 6; // LR.W requires rs2 = 0
+        const raw = encodeAtomic(c[0], 4, 5, rs2);
         const inst = try decode(raw);
         try std.testing.expectEqual(c[1], inst.op);
         try std.testing.expectEqual(@as(u5, 4), inst.rd);
         try std.testing.expectEqual(@as(u5, 5), inst.rs1);
-        try std.testing.expectEqual(@as(u5, 6), inst.rs2);
+        try std.testing.expectEqual(rs2, inst.rs2);
     }
+}
+
+test "decode: LR.W with rs2 ≠ 0 is a reserved encoding" {
+    try std.testing.expectError(error.IllegalInstruction, decode(encodeAtomic(0b00010, 4, 5, 6)));
+}
+
+test "step: reserved LR.W encoding traps without touching state" {
+    var cpu = Cpu.init();
+    storeWordAt(&cpu, 0x100, 0x42);
+    cpu.writeReg(1, 0x100);
+    loadInst(&cpu, encodeAtomic(0b00010, 3, 1, 2)); // LR.W x3, (x1) with rs2 = 2
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
 }
 
 test "decode RV32A with aq/rl bits set" {

@@ -43,3 +43,19 @@ test "step: FENCE.I is no-op" {
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
 }
+
+test "step: ECALL with rd ≠ 0 is a reserved encoding and traps" {
+    var cpu = Cpu.init();
+    loadInst(&cpu, 0x00000073 | (5 << 7)); // ECALL with rd = 5
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 0), cpu.cycle_count);
+}
+
+test "step: EBREAK with rs1 ≠ 0 is a reserved encoding and traps" {
+    var cpu = Cpu.init();
+    loadInst(&cpu, 0x00100073 | (5 << 15)); // EBREAK with rs1 = 5
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 0), cpu.cycle_count);
+}

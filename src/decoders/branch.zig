@@ -163,15 +163,19 @@ fn decodeFence(raw: u32) DecodeError!Instruction {
 fn decodeAtomic(raw: u32) DecodeError!Instruction {
     if (funct3(raw) != 0b010) return error.IllegalInstruction;
     const a_op = rv32a.decodeR(funct5(raw)) orelse return error.IllegalInstruction;
-    // Note: LR.W spec says rs2 "should be zero" (software convention, not hardware
-    // requirement). We accept non-zero rs2 for forward-compatibility with future extensions.
+    // LR.W is encoded with rs2 = 0; other rs2 values are reserved encodings, which
+    // Spike and LLVM reject. Accepting them now and rejecting them later would change
+    // the outcome of existing programs, so they trap from the start.
+    if (a_op == .LR_W and rs2(raw) != 0) return error.IllegalInstruction;
     return .{ .op = .{ .a = a_op }, .rd = rd(raw), .rs1 = rs1(raw), .rs2 = rs2(raw), .raw = raw };
 }
 
 fn decodeSystem(raw: u32) DecodeError!Instruction {
     const f3 = funct3(raw);
     if (f3 == 0b000) {
-        // ECALL / EBREAK: distinguished by funct12
+        // ECALL / EBREAK: distinguished by funct12. rd and rs1 must be zero; other
+        // values are reserved encodings, which Spike and LLVM reject.
+        if (rd(raw) != 0 or rs1(raw) != 0) return error.IllegalInstruction;
         return switch (funct12(raw)) {
             0x000 => .{ .op = .{ .i = .ECALL }, .raw = raw },
             0x001 => .{ .op = .{ .i = .EBREAK }, .raw = raw },
