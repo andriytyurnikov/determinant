@@ -4,46 +4,81 @@ const std = @import("std");
 const Io = std.Io;
 const det = @import("determinant");
 
-const unlimited_cycles: ?u64 = null;
-
 pub const DumpFormat = enum { hexdump, raw };
 
-pub fn main(init: std.process.Init) !void {
+/// Process exit status.
+pub const ExitStatus = enum(u8) {
+    /// The program stopped at ECALL or EBREAK (or --help was shown).
+    ok = 0,
+    /// Usage error, or an I/O error (unreadable file, output that cannot be written).
+    usage_or_io = 1,
+    /// The cycle limit (--max-cycles) was reached before the program stopped.
+    cycle_limit = 2,
+    /// The VM raised a fault: illegal instruction, misaligned or out-of-bounds access, ...
+    vm_fault = 3,
+};
+
+pub fn main(init: std.process.Init) !u8 {
     const io = init.io;
     const arena = init.arena.allocator();
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_fw: Io.File.Writer = .init(Io.File.stdout(), io, &stdout_buffer);
-    const stdout: *Io.Writer = &stdout_fw.interface;
 
     var stderr_buffer: [4096]u8 = undefined;
     var stderr_fw: Io.File.Writer = .init(Io.File.stderr(), io, &stderr_buffer);
-    const stderr: *Io.Writer = &stderr_fw.interface;
-
-    defer stdout.flush() catch {};
-    defer stderr.flush() catch {};
 
     const args = try init.minimal.args.toSlice(arena);
-
-    mainInner(io, stdout, stderr, args) catch |err| switch (err) {
-        error.UserError => {
-            stdout.flush() catch {};
-            stderr.flush() catch {};
-            std.process.exit(1);
-        },
-        else => return err,
-    };
+    return run(io, &stdout_fw.interface, &stderr_fw.interface, args);
 }
+
+/// Run the CLI: parse the arguments, run the program and flush the output. Returns
+/// the process exit status (see ExitStatus). Failures, including output that cannot
+/// be written, are reported on stderr and give a non-zero status, never a stack trace.
+pub fn run(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, args: []const [:0]const u8) u8 {
+    const status: ExitStatus = mainInner(io, stdout, stderr, args) catch |err| switch (err) {
+        error.UserError => .usage_or_io, // already reported
+        error.WriteFailed => return outputFailed(stderr),
+        else => blk: {
+            stderr.print("Error: {s}\n", .{@errorName(err)}) catch {};
+            break :blk .usage_or_io;
+        },
+    };
+    // Flush with error checking: buffered output that cannot be written must not
+    // end in a zero exit status.
+    stdout.flush() catch return outputFailed(stderr);
+    stderr.flush() catch {};
+    return @intFromEnum(status);
+}
+
+fn outputFailed(stderr: *Io.Writer) u8 {
+    stderr.print("Error: cannot write output\n", .{}) catch {};
+    stderr.flush() catch {};
+    return @intFromEnum(ExitStatus.usage_or_io);
+}
+
+/// Exact memory size for messages: "64 KiB", "1 MiB" or "100 bytes".
+const MemSize = struct {
+    bytes: u32,
+
+    pub fn format(self: MemSize, w: *Io.Writer) Io.Writer.Error!void {
+        if (self.bytes % (1024 * 1024) == 0) return w.print("{d} MiB", .{self.bytes / (1024 * 1024)});
+        if (self.bytes % 1024 == 0) return w.print("{d} KiB", .{self.bytes / 1024});
+        return w.print("{d} bytes", .{self.bytes});
+    }
+};
+
+const vm_mem_size: MemSize = .{ .bytes = det.Cpu.mem_size };
 
 pub fn mainInner(
     io: Io,
     stdout: *Io.Writer,
     stderr: *Io.Writer,
     args: []const [:0]const u8,
-) !void {
+) !ExitStatus {
     // args[0] is the program name; iterate args[1..].
     var path: ?[]const u8 = null;
-    var max_cycles: ?u64 = unlimited_cycles;
+    var max_cycles: ?u64 = null; // unlimited
     var dump_format: ?DumpFormat = null;
 
     var i: usize = 1;
@@ -55,8 +90,10 @@ pub fn mainInner(
             try stdout.print("  --max-cycles N      Maximum execution cycles (default: unlimited)\n", .{});
             try stdout.print("  --dump-memory [raw] Dump VM memory after execution (hexdump or raw hex)\n", .{});
             try stdout.print("\nWith no arguments, runs a built-in demo program.\n", .{});
-            try stdout.print("Compiled with {d} KB VM memory.\n", .{det.Cpu.mem_size / 1024});
-            return;
+            try stdout.print("Compiled with {f} of VM memory.\n", .{vm_mem_size});
+            try stdout.print("\nExit status: 0 stopped at ECALL/EBREAK, 1 usage or I/O error,\n", .{});
+            try stdout.print("             2 cycle limit reached, 3 VM fault.\n", .{});
+            return .ok;
         } else if (std.mem.eql(u8, arg, "--max-cycles")) {
             i += 1;
             if (i < args.len) {
@@ -88,10 +125,18 @@ pub fn mainInner(
     }
 
     if (path) |p| {
-        try runFile(io, stdout, stderr, p, max_cycles, dump_format);
+        return runFile(io, stdout, stderr, p, max_cycles, dump_format);
     } else {
-        try runDemo(stdout, stderr, dump_format);
+        return runDemo(stdout, stderr, max_cycles, dump_format);
     }
+}
+
+/// Exit status for the way a run stopped.
+fn stopStatus(result: det.StepResult) ExitStatus {
+    return switch (result) {
+        .ecall, .ebreak => .ok,
+        .@"continue" => .cycle_limit,
+    };
 }
 
 /// Built-in 5-instruction RV32I demo program:
@@ -126,8 +171,8 @@ fn destroyVm(vm: *det.Cpu) void {
     std.heap.page_allocator.destroy(vm);
 }
 
-pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat) !void {
-    try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
+pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, max_cycles: ?u64, dump_format: ?DumpFormat) !ExitStatus {
+    try stdout.print("Determinant — RV32I Executor Demo ({f} memory)\n\n", .{vm_mem_size});
 
     const program = demo_program;
 
@@ -135,7 +180,7 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat)
     const vm = try createVm();
     defer destroyVm(vm);
     vm.loadProgram(&program, 0) catch {
-        try stderr.print("Error: the demo program needs {d} bytes of VM memory, but only {d} are configured\n", .{ program.len, det.Cpu.mem_size });
+        try stderr.print("Error: the demo program needs {d} bytes of VM memory, but only {f} are configured\n", .{ program.len, vm_mem_size });
         return error.UserError;
     };
 
@@ -173,11 +218,11 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat)
         }
     }
 
-    // Execute — unlimited cycles (demo terminates via ECALL)
+    // Execute (the demo stops at its ECALL unless --max-cycles stops it first)
     try stdout.print("\nExecuting...\n", .{});
-    const result = vm.run(unlimited_cycles) catch |err| {
+    const result = vm.run(max_cycles) catch |err| {
         try stderr.print("\nDemo execution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
-        return error.UserError;
+        return .vm_fault;
     };
 
     try printResult(stdout, vm, result);
@@ -191,9 +236,10 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat)
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
+    return stopStatus(result);
 }
 
-pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !void {
+pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, max_cycles: ?u64, dump_format: ?DumpFormat) !ExitStatus {
     // Open and read the binary file
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
         try stderr.print("Error: cannot open '{s}': {s}\n", .{ path, @errorName(err) });
@@ -234,7 +280,7 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
     }
     vm.clearReservation();
 
-    try stdout.print("Determinant — Loading {s} ({d} KB memory)\n\n", .{ path, det.Cpu.mem_size / 1024 });
+    try stdout.print("Determinant — Loading {s} ({f} memory)\n\n", .{ path, vm_mem_size });
 
     if (max_cycles) |mc| {
         try stdout.print("Loaded {d} bytes, executing (max {d} cycles)...\n", .{ size, mc });
@@ -251,7 +297,7 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
                 try stderr.print("  x{d} = {d} (0x{X:0>8})\n", .{ i, @as(i32, @bitCast(val)), val });
             }
         }
-        return error.UserError;
+        return .vm_fault;
     };
 
     try printResult(stdout, vm, result);
@@ -260,6 +306,7 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
+    return stopStatus(result);
 }
 
 pub fn printResult(stdout: *Io.Writer, vm: *const det.Cpu, result: det.StepResult) !void {

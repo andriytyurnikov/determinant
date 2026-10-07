@@ -15,7 +15,7 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
 
 const Args = []const [:0]const u8;
 
-fn runArgs(args: Args, stdout: *Io.Writer, stderr: *Io.Writer) !void {
+fn runArgs(args: Args, stdout: *Io.Writer, stderr: *Io.Writer) !main_mod.ExitStatus {
     return main_mod.mainInner(io, stdout, stderr, args);
 }
 
@@ -27,7 +27,7 @@ test "mainInner: no args runs demo" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{"determinant"};
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Demo");
 }
@@ -39,7 +39,7 @@ test "mainInner: --help" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{ "determinant", "--help" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Usage:");
     try expectContains(stdout_aw.written(), "--max-cycles");
@@ -52,22 +52,24 @@ test "mainInner: -h" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{ "determinant", "-h" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Usage:");
 }
 
-test "mainInner: --max-cycles without file runs demo with limit" {
+test "mainInner: --max-cycles without file limits the demo" {
     if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var stdout_aw: Io.Writer.Allocating = .init(alloc);
     defer stdout_aw.deinit();
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
     defer stderr_aw.deinit();
 
-    const args: Args = &.{ "determinant", "--max-cycles", "10" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    // The demo needs 5 cycles; stop it after 2.
+    const args: Args = &.{ "determinant", "--max-cycles", "2" };
+    try std.testing.expectEqual(main_mod.ExitStatus.cycle_limit, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Demo");
+    try expectContains(stdout_aw.written(), "Cycle limit reached after 2 cycles");
 }
 
 test "mainInner: unknown flag after path" {
@@ -162,7 +164,7 @@ test "mainInner: --dump-memory runs demo with hexdump" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{ "determinant", "--dump-memory" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Demo");
     try expectContains(stdout_aw.written(), "|");
@@ -178,7 +180,7 @@ test "mainInner: --dump-memory raw runs demo with raw format" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{ "determinant", "--dump-memory", "raw" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "Demo");
     try expectContains(stdout_aw.written(), "00000000");
@@ -191,7 +193,7 @@ test "mainInner: --help shows --dump-memory" {
     defer stderr_aw.deinit();
 
     const args: Args = &.{ "determinant", "--help" };
-    try runArgs(args, &stdout_aw.writer, &stderr_aw.writer);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
 
     try expectContains(stdout_aw.written(), "--dump-memory");
 }

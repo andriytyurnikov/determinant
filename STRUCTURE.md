@@ -3,16 +3,16 @@
 ```
 src/
   root.zig                — library root; decode() = LUT primary, decodeBranch() = reference; re-exports cpu, instructions, decoders, branch_decoder
-  main.zig                — CLI entry point: runDemo() (built-in program) or runFile() (load flat binary), imports the library as @import("determinant") (companion file for main/)
+  main.zig                — CLI entry point: run() maps the outcome to an exit status (ExitStatus) and flushes output; runDemo() (built-in program) or runFile() (load flat binary); imports the library as @import("determinant") (companion file for main/)
   main/
-    test_helpers.zig      — SliceIterator (fake arg iterator for mainInner tests)
-    tests.zig             — hub → disassembly, result, demo, args, file, dump
+    tests.zig             — hub → disassembly, result, demo, args, file, dump, exit
       disassembly_test.zig      — printInstruction output for all extension families (RV32I/M/A, Zicsr, Zba/Zbb/Zbs, compressed)
       result_test.zig           — printResult: ecall/ebreak/continue, register dump, PC format, zero omission
       demo_test.zig             — runDemo deterministic output, reproducibility
       args_test.zig             — mainInner arg parsing: help, flag errors, missing/invalid --max-cycles
       file_test.zig             — runFile: empty/large/nonexistent files, successful execution, cycle limits
       dump_test.zig             — dumpMemory: hexdump and raw format output
+      exit_test.zig             — run(): every exit status (0/1/2/3), unwritable stdout
   cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)

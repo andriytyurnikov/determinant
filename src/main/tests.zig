@@ -5,4 +5,5 @@ comptime {
     _ = @import("args_test.zig");
     _ = @import("file_test.zig");
     _ = @import("dump_test.zig");
+    _ = @import("exit_test.zig");
 }
