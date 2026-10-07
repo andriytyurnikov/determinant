@@ -66,10 +66,12 @@ The CLI runs a RISC-V program:
 
 The CLI's exit status tells how the run ended:
 - If the program called `exit(status)`, the CLI exits with `status & 0xFF` and prints `Program exited with status N`.
-- `0`: the program stopped at ECALL or EBREAK.
+- `0`: the program stopped at EBREAK, or at an ECALL that is not a host call.
 - `1`: a usage or I/O error, including output that could not be written.
 - `2`: the `--max-cycles` limit was reached.
-- `3`: the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
+- `3`: the VM raised a fault (illegal instruction, misaligned or out-of-bounds access).
+
+`zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
 
 ## Test
 
@@ -96,7 +98,7 @@ The VM passes 89 tests from the official [riscv-tests](https://github.com/riscv-
 
 ## Architecture
 
-Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the full annotated file tree and module conventions.
+Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the full annotated file tree and module conventions, and [docs/design](docs/design) for the design notes. Changes are listed in [CHANGELOG.md](CHANGELOG.md), and third-party material in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Public API
 
