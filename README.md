@@ -2,16 +2,16 @@
 
 A deterministic RISC-V execution substrate for sandboxed computation.
 
-Determinant is a virtual machine that executes RISC-V code with guaranteed deterministic behavior. Same inputs always produce identical outputs, enabling perfect reproducibility, distributed verification, and trustworthy sandboxing.
+Determinant is a virtual machine that executes RV32 RISC-V code deterministically. The same initial state and the same host actions produce bit-identical results on every host, in every build mode. This enables reproducibility, distributed verification and sandboxing. [SEMANTICS.md](SEMANTICS.md) is the precise contract.
 
 ## Why Determinant?
 
 Traditional VMs introduce non-determinism through timing, memory layout randomization, and platform differences. Determinant eliminates these by design:
 
-- Fixed memory layout
+- Fixed, flat memory layout
 - Instruction counting instead of wall-clock time
-- Deterministic I/O through controlled syscall interface
-- No undefined behavior, no platform-specific quirks
+- No ambient inputs: no clock, no randomness and no host I/O inside the guest. The guest stops at ECALL or EBREAK, and the host decides what happens next
+- No undefined behavior and no platform-specific quirks: every configuration CI tests (Linux, macOS, Debug, ReleaseFast, big-endian) must reach the same final-state digests
 
 ## Use Cases
 
@@ -29,7 +29,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ```sh
 zig build
-zig build -Dmemory_size=1048576  # use 1 MB VM memory instead of default 64 KB
+zig build -Dmemory_size=1048576  # use 1 MiB VM memory instead of default 64 KiB
 ```
 
 ## Run
@@ -45,14 +45,22 @@ zig build run -- program.bin
 zig build run -- program.bin --max-cycles 1000
 ```
 
+### Program contract
+
+The CLI runs a flat binary:
+- **Loading.** The file is loaded at address 0, and execution starts at `pc` = 0 with every register zero. That includes `sp`: the program sets up its own stack (see `tests/programs/src/crt0.S`).
+- **Memory.** One flat region of `-Dmemory_size` bytes (default 64 KiB), zero-filled.
+- **Stopping.** The program stops at ECALL or EBREAK, or when `--max-cycles` is reached. The CLI then prints the stop reason, `pc` and the non-zero registers. Add `--dump-memory` (hexdump) or `--dump-memory raw` (hex digits) to also print the memory.
+- **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), it prints the error, `pc` and the registers to stderr.
+
 The CLI's exit status tells how the run ended: `0` the program stopped at ECALL or EBREAK, `1` usage or I/O error (including output that could not be written), `2` the `--max-cycles` limit was reached, `3` the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
 
 ## Test
 
 ```sh
-zig build test              # run unit and CLI tests with the selected decoder backend
+zig build test              # run unit and CLI tests
 zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
-zig build test-all          # run unit, CLI, compliance and digest tests with both decoder backends
+zig build test-all          # run unit, CLI, compliance and digest tests (what CI runs)
 zig build test-digests      # check corpus final-state digests against tests/digests.txt
 zig build verify-decoder    # check the decoder against its spec on all 2^30 32-bit encodings
 zig build bench             # MIPS on the C program corpus (ReleaseFast)
@@ -76,7 +84,7 @@ Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.
 
 ## Public API
 
-The library is available via `@import("determinant")`.
+The library is available via `@import("determinant")`. Execution semantics are specified in [SEMANTICS.md](SEMANTICS.md).
 
 - **`Cpu`** — VM state (memory size follows the `-Dmemory_size` build option)
   - `init()` — return a zeroed VM by value (small memories only: the memory lives inside the struct)
@@ -85,9 +93,10 @@ The library is available via `@import("determinant")`.
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset (drops an LR reservation on any word it overwrites)
   - `clearReservation()` — drop the LR reservation; call it after writing `memory` directly
-  - `step() → StepResult` — fetch, decode, execute one instruction
+  - `step() → StepResult` — fetch, decode and execute one instruction. A fault returns an error and leaves the state unchanged: `IllegalInstruction`, `MisalignedPC`, `PCOutOfBounds`, `MisalignedAccess` or `AddressOutOfBounds`
   - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
-  - `run(max_cycles: ?u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (null = unlimited, 0 = zero steps)
+  - `run(max_cycles: ?u64) → StepResult` — step until ECALL/EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is absolute, not relative to this call; `null` means unlimited. Returns `.continue` when it stops at the limit. After `.ecall`/`.ebreak`, `pc` points past that instruction, so calling `run()` again continues
+  - `pc`, `regs`, `memory`, `cycle_count` (retired instructions), `reservation`, `csrs` — the state, as public fields
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
 - **`CpuType(comptime memory_size: u32, comptime options: CpuOptions)`** — generic VM constructor. `CpuOptions` fields: `decode` (decoder function, default `decode`) and `decode_cache_entries` (size of the per-PC decode cache, a power of two or 0 to disable; default 4096). The cache never changes results; it only skips re-decoding unchanged instructions
@@ -99,5 +108,5 @@ The library is available via `@import("determinant")`.
 - **`decode(u32)`** — decode a 32-bit word or a zero-extended 16-bit RV32C halfword, returns `Instruction` or `DecodeError`
 - **`decoders`** — the decoder's parts: `branch` (the decoder), `expand` (RV32C expansion), `registry` (the specification of every 32-bit encoding, with `lookup()`), `bitfields`
 - **`DecodeError`** — error set for decode failures
-- **`StepResult`** — enum: `@"continue"`, `ecall`, `ebreak`
+- **`StepResult`** — enum: `@"continue"` (still running, or stopped at the cycle limit), `ecall`, `ebreak`
 - **`default_memory_size`** — configured VM memory size in bytes (follows `-Dmemory_size` build option, default: 65536)
