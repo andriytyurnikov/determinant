@@ -51,7 +51,7 @@ The CLI runs a flat binary:
 - **Loading.** The file is loaded at address 0, and execution starts at `pc` = 0 with every register zero. That includes `sp`: the program sets up its own stack (see `tests/programs/src/crt0.S`).
 - **Memory.** One flat region of `-Dmemory_size` bytes (default 64 KiB), zero-filled.
 - **Stopping.** The program stops at ECALL or EBREAK, or when `--max-cycles` is reached. The CLI then prints the stop reason, `pc` and the non-zero registers. Add `--dump-memory` (hexdump) or `--dump-memory raw` (hex digits) to also print the memory.
-- **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), it prints the error, `pc` and the registers to stderr.
+- **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), it prints to stderr the error, `pc`, the instruction (with its disassembly), the faulting address and the registers.
 
 The CLI's exit status tells how the run ended: `0` the program stopped at ECALL or EBREAK, `1` usage or I/O error (including output that could not be written), `2` the `--max-cycles` limit was reached, `3` the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
 
@@ -93,9 +93,11 @@ The library is available via `@import("determinant")`. Execution semantics are s
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset (drops an LR reservation on any word it overwrites)
   - `clearReservation()` — drop the LR reservation; call it after writing `memory` directly
-  - `step() → StepResult` — fetch, decode and execute one instruction. A fault returns an error and leaves the state unchanged: `IllegalInstruction`, `MisalignedPC`, `PCOutOfBounds`, `MisalignedAccess` or `AddressOutOfBounds`
+  - `step() → StepError!StepResult` — fetch, decode and execute one instruction. A fault returns a `StepError` (`IllegalInstruction`, `MisalignedPC`, `PCOutOfBounds`, `MisalignedAccess`, `AddressOutOfBounds`) and leaves the state unchanged
+  - `describeFault(StepError) → Fault` — after a fault: the instruction's address and bits and the faulting address
   - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
-  - `run(max_cycles: ?u64) → StepResult` — step until ECALL/EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is absolute, not relative to this call; `null` means unlimited. Returns `.continue` when it stops at the limit. After `.ecall`/`.ebreak`, `pc` points past that instruction, so calling `run()` again continues
+  - `run(max_cycles: ?u64) → StepError!StepResult` — step until ECALL/EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is absolute, not relative to this call; `null` means unlimited. Returns `.continue` when it stops at the limit. After `.ecall`/`.ebreak`, `pc` points past that instruction and `stop_pc` at it, so calling `run()` again continues
+  - `runFor(steps: u64) → StepError!StepResult` — run at most `steps` more instructions
   - `pc`, `regs`, `memory`, `cycle_count` (retired instructions), `reservation`, `csrs` — the state, as public fields
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
@@ -109,4 +111,5 @@ The library is available via `@import("determinant")`. Execution semantics are s
 - **`decoders`** — the decoder's parts: `branch` (the decoder), `expand` (RV32C expansion), `registry` (the specification of every 32-bit encoding, with `lookup()`), `bitfields`
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"` (still running, or stopped at the cycle limit), `ecall`, `ebreak`
+- **`StepError`**, **`Fault`** — the fault error set, and `describeFault()`'s report
 - **`default_memory_size`** — configured VM memory size in bytes (follows `-Dmemory_size` build option, default: 65536)

@@ -134,3 +134,37 @@ test "run: unwritable output beats the program's own status" {
     try std.testing.expectEqual(@intFromEnum(ExitStatus.usage_or_io), main_mod.run(io, &buffered, &stderr_aw.writer, args));
     try expectContains(stderr_aw.written(), "cannot write output");
 }
+
+test "run: a fault reports the instruction and the faulting address" {
+    var out: Output = .init();
+    defer out.deinit();
+    if (det.Cpu.mem_size < 8) return error.SkipZigTest;
+    // LUI x1, 0x80000 (x1 = 0x80000000); LW x2, 4(x1) — far out of bounds
+    const program = [_]u8{ 0xB7, 0x00, 0x00, 0x80, 0x03, 0xA1, 0x40, 0x00 };
+    try std.testing.expectEqual(@intFromEnum(ExitStatus.vm_fault), try runProgram(&program, &.{}, &out));
+    try expectContains(out.stderr.written(), "AddressOutOfBounds");
+    try expectContains(out.stderr.written(), "PC = 0x00000004");
+    try expectContains(out.stderr.written(), "instruction: 0x0040A103 LW x2, 4(x1)");
+    try expectContains(out.stderr.written(), "address: 0x80000004");
+}
+
+test "stdStreamWriter: output appends at the file's offset instead of overwriting" {
+    // Like `determinant --help >> log.txt`: the file already holds data and its offset
+    // is at the end. A positional writer would overwrite "EXISTING" from offset 0.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const f = try tmp.dir.createFile(io, "log.txt", .{ .read = true });
+    defer f.close(io);
+    try f.writeStreamingAll(io, "EXISTING\n");
+
+    var buf: [256]u8 = undefined;
+    var fw = main_mod.stdStreamWriter(f, io, &buf);
+    const args: Args = &.{ "determinant", "--help" };
+    var stderr_aw: Io.Writer.Allocating = .init(alloc);
+    defer stderr_aw.deinit();
+    try std.testing.expectEqual(@intFromEnum(ExitStatus.ok), main_mod.run(io, &fw.interface, &stderr_aw.writer, args));
+
+    var content: [64]u8 = undefined;
+    const n = try f.readPositionalAll(io, &content, 0);
+    try std.testing.expectStringStartsWith(content[0..n], "EXISTING\nUsage: determinant");
+}

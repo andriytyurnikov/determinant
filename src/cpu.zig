@@ -18,6 +18,33 @@ pub const DecodeFn = *const fn (u32) decoders.DecodeError!instructions.Instructi
 
 pub const StepResult = cpu_exec_i.Result;
 
+/// Everything step() and run() can fail with. A fault leaves the whole VM state as it
+/// was before the faulting instruction (see SEMANTICS.md, "Faults").
+pub const StepError = error{
+    /// The instruction does not decode, or it accesses a CSR it may not.
+    IllegalInstruction,
+    /// pc is odd.
+    MisalignedPC,
+    /// The instruction at pc does not lie entirely inside memory.
+    PCOutOfBounds,
+    /// A halfword or word data access (including LR/SC/AMO) is not naturally aligned.
+    MisalignedAccess,
+    /// A data access touches a byte outside memory.
+    AddressOutOfBounds,
+};
+
+/// Details of a fault, for the host: see CpuType.describeFault().
+pub const Fault = struct {
+    err: StepError,
+    /// Address of the faulting instruction (the VM's pc, which the fault left there).
+    pc: u32,
+    /// The faulting instruction's bits, unless fetching them was the fault.
+    raw: ?u32,
+    /// The address that faulted: the data address of a load, store, AMO, LR or SC, or
+    /// pc for a fetch fault. null for decode and CSR faults.
+    addr: ?u32,
+};
+
 /// Compile-time configuration of a CpuType.
 pub const Options = struct {
     /// Instruction decoder.
@@ -54,6 +81,10 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
         /// returns exactly what decoding would, and stale entries (after self-modifying
         /// code or host writes) simply miss. Excluded from stateDigest().
         decode_cache: [cache_entries]instructions.Instruction,
+        /// Address of the ECALL or EBREAK that last stopped step()/run() (pc is already
+        /// past it). Host-facing metadata, not architectural state: excluded from
+        /// stateDigest(). 0 after reset().
+        stop_pc: u32,
 
         /// Marks an empty cache slot. fetch() never returns this value: a 32-bit
         /// instruction has low bits 0b11, and a 16-bit one is zero-extended.
@@ -84,6 +115,7 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
             self.reservation = null;
             self.csrs = .{};
             @memset(&self.decode_cache, empty_slot);
+            self.stop_pc = 0;
         }
 
         /// SHA-256 of the canonical state encoding (see cpu/state.zig): pc, all 32
@@ -202,9 +234,11 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
 
         // --- Execution loop ---
 
-        /// Run until ECALL, EBREAK, or max_cycles is reached. Returns the StepResult that stopped execution.
-        /// If max_cycles is null, runs without a cycle limit. If 0, returns immediately with .continue.
-        pub fn run(self: *Self, max_cycles: ?u64) !StepResult {
+        /// Run until ECALL, EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is
+        /// absolute (compared with cycle_count, which keeps counting across calls); use
+        /// runFor() for a budget relative to now. null means no limit; a limit already
+        /// reached returns .continue without executing anything.
+        pub fn run(self: *Self, max_cycles: ?u64) StepError!StepResult {
             var result: StepResult = .@"continue";
             while (result == .@"continue") {
                 if (max_cycles) |limit| {
@@ -213,6 +247,11 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
                 result = try self.step();
             }
             return result;
+        }
+
+        /// Run at most `steps` more instructions: run(cycle_count + steps).
+        pub fn runFor(self: *Self, steps: u64) StepError!StepResult {
+            return self.run(self.cycle_count +| steps);
         }
 
         /// Fetch, decode, and execute one instruction. Advances PC and increments cycle_count.
@@ -224,7 +263,7 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
         ///   4. execute           — modify registers/memory (may update next_pc for branches/jumps)
         ///   5. update PC         — written AFTER execution so branches see the old PC
         ///   6. increment cycle   — AFTER everything, so CSR reads of cycle see the pre-step count
-        pub fn step(self: *Self) !StepResult {
+        pub fn step(self: *Self) StepError!StepResult {
             const raw = try self.fetch();
             const inst = try self.decodeCached(raw);
             const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
@@ -252,9 +291,33 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
                 .zbs => |op| self.executeZbs(op, inst.rd, rs1_val, rs2_val, inst.immUnsigned()),
             }
 
+            if (result != .@"continue") self.stop_pc = self.pc;
             self.pc = next_pc; // INVARIANT: pipeline step 5 — PC updated AFTER execution
             self.cycle_count +%= 1; // INVARIANT: pipeline step 6 — cycle incremented last (CSR reads see pre-step value)
             return result;
+        }
+
+        /// Describe a fault that step() or run() just returned. A fault leaves the state
+        /// unchanged, so the faulting instruction is still at pc; call this before
+        /// changing the state.
+        pub fn describeFault(self: *const Self, err: StepError) Fault {
+            var fault: Fault = .{ .err = err, .pc = self.pc, .raw = null, .addr = null };
+            const raw = self.fetch() catch {
+                fault.addr = self.pc;
+                return fault;
+            };
+            fault.raw = raw;
+            const inst = decodeFn(raw) catch return fault;
+            const rs1_val = self.readReg(inst.rs1);
+            switch (inst.op) {
+                .i => |op| switch (op) {
+                    .LB, .LH, .LW, .LBU, .LHU, .SB, .SH, .SW => fault.addr = rs1_val +% inst.immUnsigned(),
+                    else => {},
+                },
+                .a => fault.addr = rs1_val,
+                else => {},
+            }
+            return fault;
         }
 
         /// decodeFn(raw), memoized per pc in decode_cache. A hit requires the slot to

@@ -25,13 +25,21 @@ pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
 
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_fw: Io.File.Writer = .init(Io.File.stdout(), io, &stdout_buffer);
+    var stdout_fw = stdStreamWriter(Io.File.stdout(), io, &stdout_buffer);
 
     var stderr_buffer: [4096]u8 = undefined;
-    var stderr_fw: Io.File.Writer = .init(Io.File.stderr(), io, &stderr_buffer);
+    var stderr_fw = stdStreamWriter(Io.File.stderr(), io, &stderr_buffer);
 
     const args = try init.minimal.args.toSlice(arena);
     return run(io, &stdout_fw.interface, &stderr_fw.interface, args);
+}
+
+/// Writer for stdout or stderr. It must stream (write at the file's current offset):
+/// the default positional mode writes each stream from its own offset 0, so with
+/// `> out.txt 2>&1` stdout and stderr would overwrite each other, and `>> log.txt`
+/// would overwrite the log instead of appending to it.
+pub fn stdStreamWriter(file: Io.File, io: Io, buffer: []u8) Io.File.Writer {
+    return .initStreaming(file, io, buffer);
 }
 
 /// Run the CLI: parse the arguments, run the program and flush the output. Returns
@@ -223,7 +231,8 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, max_cycles: ?u64, dump_fo
     // Execute (the demo stops at its ECALL unless --max-cycles stops it first)
     try stdout.print("\nExecuting...\n", .{});
     const result = vm.run(max_cycles) catch |err| {
-        try stderr.print("\nDemo execution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
+        try stdout.flush(); // what stdout has so far comes before the fault report
+        try printFault(stderr, vm, err);
         return .vm_fault;
     };
 
@@ -291,7 +300,8 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
     }
 
     const result = vm.run(max_cycles) catch |err| {
-        try stderr.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, vm.pc, @errorName(err) });
+        try stdout.flush(); // what stdout has so far comes before the fault report
+        try printFault(stderr, vm, err);
         try stderr.print("\nRegisters:\n", .{});
         for (0..32) |i| {
             const val = vm.readReg(@intCast(i));
@@ -309,6 +319,26 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
         try dumpMemory(stdout, &vm.memory, fmt);
     }
     return stopStatus(result);
+}
+
+/// Report a fault: the error, where it happened, the instruction and the address.
+pub fn printFault(w: *Io.Writer, vm: *const det.Cpu, err: det.StepError) !void {
+    const fault = vm.describeFault(err);
+    try w.print("\nExecution error after {d} cycles at PC = 0x{X:0>8}: {s}\n", .{ vm.cycle_count, fault.pc, @errorName(err) });
+    if (fault.raw) |raw| {
+        if (det.instructions.isCompressed(raw)) {
+            try w.print("  instruction: 0x{X:0>4} ", .{raw});
+        } else {
+            try w.print("  instruction: 0x{X:0>8} ", .{raw});
+        }
+        if (det.decode(raw)) |inst| {
+            try printInstruction(w, inst);
+        } else |_| {
+            try w.print("(does not decode)", .{});
+        }
+        try w.print("\n", .{});
+    }
+    if (fault.addr) |addr| try w.print("  address: 0x{X:0>8}\n", .{addr});
 }
 
 pub fn printResult(stdout: *Io.Writer, vm: *const det.Cpu, result: det.StepResult) !void {
