@@ -36,7 +36,7 @@ These are load-bearing constraints — violating any one breaks deterministic ex
 The `step()` method in `cpu.zig` follows a strict order that is **load-bearing**:
 
 1. `fetch()` — read raw instruction bits at current PC
-2. `decode()` — parse into Instruction struct
+2. `decode()` — parse into Instruction struct (through the decode cache, see below)
 3. read rs1, rs2 — register reads happen BEFORE execution
 4. execute — modify registers/memory (may update next_pc for branches/jumps)
 5. update PC — written AFTER execution so branches see the old PC
@@ -76,7 +76,8 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 ### Decoder
 
 - One decoder: `decoders/branch.zig`, exported as `decode()` from `decoders.zig` and `root.zig`. It switches on opcode[6:0], then asks each extension's `decodeR()`/`decodeIAlu()`/... by funct3/funct7 (and rs2 where an instruction fixes it)
-- `CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)` — the decoder is a comptime parameter (default `decoders.decode`), no runtime dispatch. `DecodeFn = *const fn (u32) DecodeError!Instruction`
+- `CpuType(comptime memory_size: u32, comptime options: Options)` — `Options.decode` is the decoder (default `decoders.decode`), a comptime parameter with no runtime dispatch. `DecodeFn = *const fn (u32) DecodeError!Instruction`
+- **Decode cache**: `step()` decodes through `decode_cache`, `Options.decode_cache_entries` slots (default 4096, power of two, 0 disables) indexed by `pc >> 1` and validated by the fetched raw bits. Decode is a pure function of those bits, so the cache can never change a result and needs no invalidation: self-modifying code and host writes just miss. It is not architectural state and is excluded from `stateDigest()`. `test-digests` runs the corpus with the cache on and off
 - Sub-decoders use semantic names matching their rv32i counterparts: `decodeStore`, `decodeBranch`, `decodeLoad`, `decodeAtomic`, `decodeSystem`
 - The order in which extensions are tried (M → RV32I → Zba → Zbb → Zbs for R-type) does not affect results: the registry test proves no two encodings overlap
 - **I-type ALU shift special case**: for opcode 0b0010011 with funct3=001 or 101, the immediate comes from the rs2 field [24:20], NOT the 12-bit I-immediate. This covers SLLI/SRLI/SRAI, RORI, the Zbs immediate forms, and the Zbb unary ops (whose `imm` is the rs2 selector). `decodeIAlu()` handles this with a conditional extraction

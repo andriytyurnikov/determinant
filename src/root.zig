@@ -8,6 +8,7 @@ pub const decoders = @import("decoders.zig");
 
 // Convenience aliases
 pub const CpuType = cpu.CpuType;
+pub const CpuOptions = cpu.Options;
 pub const Cpu = cpu.Cpu;
 pub const default_memory_size = cpu.default_memory_size;
 pub const DecodeFn = cpu.DecodeFn;

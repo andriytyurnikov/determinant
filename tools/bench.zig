@@ -11,7 +11,7 @@ const std = @import("std");
 const Io = std.Io;
 const det = @import("determinant");
 
-const BenchCpu = det.CpuType(256 * 1024, det.Cpu.decode);
+const BenchCpu = det.CpuType(256 * 1024, .{});
 const max_cycles: u64 = 1_000_000_000;
 
 pub fn main(init: std.process.Init) !void {

@@ -18,15 +18,30 @@ pub const DecodeFn = *const fn (u32) decoders.DecodeError!instructions.Instructi
 
 pub const StepResult = cpu_exec_i.Result;
 
-pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
+/// Compile-time configuration of a CpuType.
+pub const Options = struct {
+    /// Instruction decoder.
+    decode: DecodeFn = &decoders.decode,
+    /// Entries in the decode cache: a power of two, or 0 to disable the cache. Each
+    /// entry holds one decoded Instruction (16 bytes) and covers one halfword of code,
+    /// so the default caches 8 KiB of code at a time.
+    decode_cache_entries: u32 = 4096,
+};
+
+pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
     comptime {
         if (memory_size < 4) @compileError("memory_size must be >= 4");
         if (memory_size % 4 != 0) @compileError("memory_size must be divisible by 4");
+        if (options.decode_cache_entries != 0 and !std.math.isPowerOfTwo(options.decode_cache_entries))
+            @compileError("decode_cache_entries must be a power of two, or 0");
     }
+    const decodeFn = options.decode;
+    const cache_entries = options.decode_cache_entries;
     return struct {
         const Self = @This();
         pub const mem_size: u32 = memory_size;
         pub const decode = decodeFn;
+        pub const decode_cache_entries = cache_entries;
 
         pc: u32,
         regs: [32]u32,
@@ -34,6 +49,19 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         cycle_count: u64,
         reservation: ?u32,
         csrs: zicsr.Csr,
+        /// Memo of decode(), indexed by pc and validated by the fetched instruction bits.
+        /// Not architectural state: decode is a pure function of those bits, so a hit
+        /// returns exactly what decoding would, and stale entries (after self-modifying
+        /// code or host writes) simply miss. Excluded from stateDigest().
+        decode_cache: [cache_entries]instructions.Instruction,
+
+        /// Marks an empty cache slot. fetch() never returns this value: a 32-bit
+        /// instruction has low bits 0b11, and a 16-bit one is zero-extended.
+        const empty_slot: instructions.Instruction = .{ .op = .{ .i = .ECALL }, .raw = 0xFFFF_FFFC };
+        comptime {
+            if (!instructions.isCompressed(empty_slot.raw) or empty_slot.raw <= 0xFFFF)
+                @compileError("empty_slot.raw must be a value fetch() cannot return");
+        }
 
         /// Return a zeroed VM by value. The whole memory lives inside Self, so this
         /// is for small memories only: for large ones, place Self on the heap or in
@@ -55,6 +83,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             self.cycle_count = 0;
             self.reservation = null;
             self.csrs = .{};
+            @memset(&self.decode_cache, empty_slot);
         }
 
         /// SHA-256 of the canonical state encoding (see cpu/state.zig): pc, all 32
@@ -196,7 +225,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         ///   6. increment cycle   — AFTER everything, so CSR reads of cycle see the pre-step count
         pub fn step(self: *Self) !StepResult {
             const raw = try self.fetch();
-            const inst = try decodeFn(raw);
+            const inst = try self.decodeCached(raw);
             const inst_size: u32 = if (instructions.isCompressed(raw)) 2 else 4;
 
             // INVARIANT: pipeline step 3 — register reads BEFORE execution
@@ -221,6 +250,15 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             self.pc = next_pc; // INVARIANT: pipeline step 5 — PC updated AFTER execution
             self.cycle_count +%= 1; // INVARIANT: pipeline step 6 — cycle incremented last (CSR reads see pre-step value)
             return result;
+        }
+
+        /// decodeFn(raw), memoized per pc in decode_cache. A hit requires the slot to
+        /// hold exactly `raw`, so the result is always what decodeFn(raw) returns.
+        inline fn decodeCached(self: *Self, raw: u32) decoders.DecodeError!instructions.Instruction {
+            if (cache_entries == 0) return decodeFn(raw);
+            const slot = &self.decode_cache[(self.pc >> 1) & (cache_entries - 1)];
+            if (slot.raw != raw) slot.* = try decodeFn(raw);
+            return slot.*;
         }
 
         // --- RV32M helpers ---
@@ -301,20 +339,18 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
     };
 }
 
-const default_decode: DecodeFn = &decoders.decode;
-
 /// Default memory size — follows the `-Dmemory_size` build option (default: 64 KB).
 pub const default_memory_size: u32 = build_options.memory_size;
 
 /// Default Cpu — memory size follows `-Dmemory_size`.
-pub const Cpu = CpuType(default_memory_size, default_decode);
+pub const Cpu = CpuType(default_memory_size, .{});
 
 /// CPU for the unit tests: always 64 KiB of memory, so the tests behave the same
 /// at every `-Dmemory_size`.
-pub const TestCpu = CpuType(64 * 1024, default_decode);
+pub const TestCpu = CpuType(64 * 1024, .{});
 
 test "CpuType: custom memory size" {
-    const SmallCpu = CpuType(4096, &decoders.decode);
+    const SmallCpu = CpuType(4096, .{});
     var c = SmallCpu.init();
     try std.testing.expectEqual(@as(u32, 4096), SmallCpu.mem_size);
     c.writeReg(1, 42);
@@ -323,7 +359,7 @@ test "CpuType: custom memory size" {
 }
 
 test "CpuType: minimum memory size" {
-    const TinyCpu = CpuType(4, &decoders.decode);
+    const TinyCpu = CpuType(4, .{});
     var c = TinyCpu.init();
     try c.writeByte(0, 0xFF);
     try std.testing.expectEqual(@as(u8, 0xFF), try c.readByte(0));

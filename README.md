@@ -86,7 +86,7 @@ The library is available via `@import("determinant")`.
   - `run(max_cycles: ?u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (null = unlimited, 0 = zero steps)
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
-- **`CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)`** — generic VM constructor for custom memory size and decoder
+- **`CpuType(comptime memory_size: u32, comptime options: CpuOptions)`** — generic VM constructor. `CpuOptions` fields: `decode` (decoder function, default `decode`) and `decode_cache_entries` (size of the per-PC decode cache, a power of two or 0 to disable; default 4096). The cache never changes results; it only skips re-decoding unchanged instructions
 - **`DecodeFn`** — decoder function pointer type (`*const fn (u32) DecodeError!Instruction`)
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`, `compressed_op`
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods

@@ -82,13 +82,16 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    const check_digests = b.addRunArtifact(digests_exe);
-    addCorpusArgs(b, check_digests);
-    check_digests.addArg("--check");
-    check_digests.addFileArg(b.path("tests/digests.txt"));
-    check_digests.has_side_effects = true;
-    const check_digests_step = b.step("test-digests", "Run the corpus and check its final-state digests against tests/digests.txt");
-    check_digests_step.dependOn(&check_digests.step);
+    const check_digests_step = b.step("test-digests", "Run the corpus (decode cache on and off) and check its final-state digests against tests/digests.txt");
+    for ([_]bool{ true, false }) |decode_cache| {
+        const check_digests = b.addRunArtifact(digests_exe);
+        addCorpusArgs(b, check_digests);
+        if (!decode_cache) check_digests.addArg("--no-decode-cache");
+        check_digests.addArg("--check");
+        check_digests.addFileArg(b.path("tests/digests.txt"));
+        check_digests.has_side_effects = true;
+        check_digests_step.dependOn(&check_digests.step);
+    }
 
     // Print the corpus digest table (regenerate tests/digests.txt with it)
     const print_digests = b.addRunArtifact(digests_exe);
@@ -101,7 +104,7 @@ pub fn build(b: *std.Build) void {
     test_all_step.dependOn(&run_unit_tests.step);
     test_all_step.dependOn(&run_cli_tests.step);
     test_all_step.dependOn(&run_compliance_tests.step);
-    test_all_step.dependOn(&check_digests.step);
+    test_all_step.dependOn(check_digests_step);
 
     // Tools that need speed are always built ReleaseFast.
     const release_mod = b.createModule(.{

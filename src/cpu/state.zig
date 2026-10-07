@@ -19,7 +19,9 @@ pub const header_len = 164;
 /// Fields of CpuType that the encoding covers. A new field must either be encoded
 /// (and `version` bumped) or listed in `excluded_fields` with a reason.
 const encoded_fields = [_][]const u8{ "pc", "regs", "memory", "cycle_count", "reservation", "csrs" };
-const excluded_fields = [_][]const u8{};
+const excluded_fields = [_][]const u8{
+    "decode_cache", // a memo of decode(), not architectural state
+};
 
 comptime {
     // Every CSR must be encoded: update encodeHeader and bump `version` when adding one.
