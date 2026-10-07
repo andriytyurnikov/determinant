@@ -145,6 +145,7 @@ src/
       rv32uzbs/             — Zbs test binaries (bclr.bin, bext.bin, ...)
 tools/
   verify_decoders.zig     — exhaustive LUT-vs-branch decoder comparison over all 2^32 inputs (`zig build verify-decoders`)
+  bench.zig               — benchmark: best-of-N time and MIPS per C corpus program, geometric mean (`zig build bench`)
   corpus_digests.zig      — runs every corpus program (compliance binaries and C programs) and prints/checks final-state digests and C program results (`zig build digests` / `test-digests`)
 tests/
   digests.txt             — golden final-state digests of the corpus; every CI configuration must match it
@@ -159,7 +160,7 @@ tests/
       link.ld               — custom linker script (origin at 0x0)
     Makefile                — builds flat binaries from riscv-tests sources
     README.md               — rebuild instructions and toolchain setup
-build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoders and programs steps; test-all runs every suite once per decoder)
+build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoders, bench and programs steps; test-all runs every suite once per decoder)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
 
