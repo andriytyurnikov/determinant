@@ -30,8 +30,8 @@ pub const Opcode = enum {
 
 /// Decode an M-extension R-type instruction from funct3.
 /// Returns non-optional: all 8 funct3 values are valid when funct7 = 0b0000001.
-/// The caller in decoder.zig guards funct7 before calling — this preserves the
-/// type-level guarantee of exhaustive funct3 coverage (no null possible).
+/// The caller (decodeR in decoders/branch.zig) checks funct7 before calling — this
+/// preserves the type-level guarantee of exhaustive funct3 coverage (no null possible).
 pub fn decodeR(f3: u3) Opcode {
     return switch (f3) {
         0b000 => .MUL,

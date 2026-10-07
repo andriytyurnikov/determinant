@@ -1,4 +1,6 @@
-//! CLI executable: loads flat binary, runs VM, prints disassembly and register dump.
+//! CLI executable: runs a flat binary loaded at address 0 (or a built-in demo, shown
+//! with its disassembly) and prints how it stopped, pc and the registers, optionally
+//! the memory. The exit status reports how the run ended (see ExitStatus).
 
 const std = @import("std");
 const Io = std.Io;

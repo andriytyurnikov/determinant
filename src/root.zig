@@ -38,8 +38,9 @@ test "integration: load, fetch, decode" {
 }
 
 test "regression: demo program second instruction encodes ADDI x2, x0, 10" {
-    // Bytes from main.zig line 19 — ADDI x2, x0, 10 = 0x00A00113.
-    // Previously had 0x0A/0xA0 transposed, encoding ADDI x2, x20, 0 instead.
+    // The demo program's second instruction (main.zig, demo_program[4..8]):
+    // ADDI x2, x0, 10 = 0x00A00113. Its bytes were once transposed to 0x0A/0xA0,
+    // which encodes ADDI x2, x20, 0.
     const demo_bytes = [_]u8{ 0x13, 0x01, 0xA0, 0x00 };
     const raw = std.mem.readInt(u32, &demo_bytes, .little);
     const inst = try decode(raw);
