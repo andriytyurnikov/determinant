@@ -35,6 +35,9 @@ test "rv32ui: bltu" {
 test "rv32ui: bne" {
     try runner.expectPass("bne", @embedFile("bin/rv32ui/bne.bin"));
 }
+test "rv32ui: fence_i" {
+    try runner.expectPass("fence_i", @embedFile("bin/rv32ui/fence_i.bin"));
+}
 test "rv32ui: jal" {
     try runner.expectPass("jal", @embedFile("bin/rv32ui/jal.bin"));
 }

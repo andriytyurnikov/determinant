@@ -126,7 +126,7 @@ src/
   compliance/
     runner.zig              — ComplianceCpu (256KB, decoder follows -Ddecoder), runTest(), expectPass()
     tests.zig               — hub → rv32ui, rv32um, rv32ua, rv32uc, rv32uzba, rv32uzbb, rv32uzbs
-      rv32ui_test.zig       — RV32I base integer tests (~39 tests)
+      rv32ui_test.zig       — RV32I base integer tests (41 tests, including fence_i)
       rv32um_test.zig       — RV32M multiply/divide tests (8 tests)
       rv32ua_test.zig       — RV32A atomic tests (10 tests)
       rv32uc_test.zig       — RV32C compressed test (1 test)
