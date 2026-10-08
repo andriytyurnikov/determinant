@@ -168,3 +168,30 @@ test "stdStreamWriter: output appends at the file's offset instead of overwritin
     const n = try f.readPositionalAll(io, &content, 0);
     try std.testing.expectStringStartsWith(content[0..n], "EXISTING\nUsage: determinant");
 }
+
+test "run: the fault report comes after the program's output, even with unbuffered stderr" {
+    // stdout buffered, stderr unbuffered, both into one file as with `> log 2>&1`.
+    // Only the flush before the report keeps the report after what stdout printed.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const prog = try tmp.dir.createFile(io, "prog.bin", .{});
+    try prog.writeStreamingAll(io, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }); // illegal
+    prog.close(io);
+    const path = try std.fmt.allocPrintSentinel(alloc, ".zig-cache/tmp/{s}/prog.bin", .{&tmp.sub_path}, 0);
+    defer alloc.free(path);
+
+    const log = try tmp.dir.createFile(io, "log.txt", .{ .read = true });
+    defer log.close(io);
+    var out_buf: [4096]u8 = undefined;
+    var no_buf: [0]u8 = undefined;
+    var out_fw = main_mod.stdStreamWriter(log, io, &out_buf);
+    var err_fw = main_mod.stdStreamWriter(log, io, &no_buf);
+    const args: Args = &.{ "determinant", path };
+    try std.testing.expectEqual(@intFromEnum(ExitStatus.vm_fault), main_mod.run(io, &out_fw.interface, &err_fw.interface, args));
+
+    var content: [4096]u8 = undefined;
+    const n = try log.readPositionalAll(io, &content, 0);
+    const output = std.mem.indexOf(u8, content[0..n], "Loaded 4 bytes") orelse return error.TestExpectedEqual;
+    const report = std.mem.indexOf(u8, content[0..n], "Execution error") orelse return error.TestExpectedEqual;
+    try std.testing.expect(output < report);
+}

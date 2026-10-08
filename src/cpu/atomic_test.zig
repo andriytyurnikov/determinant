@@ -391,9 +391,11 @@ test "loadProgram: overlap with the reserved word is byte-exact" {
     // Starts just after it (260..263): kept
     try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 260);
     try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
-    // Empty program at the reserved address writes nothing: kept
-    try cpu.loadProgram(&.{}, 256);
-    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    // An empty program writes nothing, even inside the reserved word: kept
+    for ([_]u32{ 256, 257, 258, 259 }) |offset| {
+        try cpu.loadProgram(&.{}, offset);
+        try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    }
     // Covers only the first byte (253..256): cleared
     try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 253);
     try std.testing.expectEqual(@as(?u32, null), cpu.reservation);

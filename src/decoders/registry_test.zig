@@ -92,3 +92,15 @@ test "registry: decoder accepts exactly the registry's encodings (structured swe
         }
     }
 }
+
+test "registry: decoder agrees with the registry one bit away from every entry" {
+    // The structured sweep varies rd and rs1 only for SYSTEM, and only as 1 or 31, so
+    // it misses a field the registry constrains only partly, or constrains where the
+    // decoder does not. Bits 0-1 stay 0b11: other values select the 16-bit encodings,
+    // which are outside the registry.
+    for (reg.registry) |e| {
+        for (2..32) |bit| {
+            try expectAgreesWithRegistry(e.match() ^ (@as(u32, 1) << @intCast(bit)));
+        }
+    }
+}
