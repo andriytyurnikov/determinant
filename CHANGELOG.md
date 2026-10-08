@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-10-09
 
-This release follows the 2026-10-07 review (`REMEDIATION_PLAN.md`). [SEMANTICS.md](SEMANTICS.md) is new and is the contract from now on.
+This release follows a review of the project on 2026-10-07. [SEMANTICS.md](SEMANTICS.md) is new and is the contract from now on.
 
 ### Guest-visible semantic changes
 
@@ -76,9 +76,38 @@ These were reviewed and kept, and are now documented in SEMANTICS.md:
   - An ECALL stop no longer counts as a pass.
   - The suite runs with every configuration.
   - The Makefile no longer deletes the checked-in binaries on `make clean`.
+- **Release checks.** These are not in CI and need local tools (see their READMEs):
+  - `tools/llvm_oracle` compares the decoder with LLVM's disassembler;
+  - `tools/spike_diff` compares execution with Spike;
+  - `tools/mutation` checks that the tests catch injected bugs.
 - **New tests.** A precise-fault table, an exhaustive CSR table, resume semantics, register aliasing, address wrap-around, decode-cache safety, snapshots, host calls and ELF loading.
 - **Test cleanup.** One-instruction tests are now tables, and duplicated tests are removed.
 - **Notices.** `THIRD_PARTY_NOTICES.md` covers riscv-tests (BSD-3-Clause) and Zig compiler-rt (MIT).
+
+### Verification
+
+These checks were run for this release, in addition to CI.
+
+- **Decoder vs LLVM** (`zig build llvm-oracle`). Every 16-bit encoding and all 2^30 32-bit encodings were compared with the LLVM 23 and LLVM 22 disassemblers, and nothing differs outside the documented classes. The decoder accepts 224,997,378 of the 32-bit encodings. With LLVM 23:
+  - 216,596,738 disassemble identically;
+  - 8,388,350 are FENCE or FENCE.I with nonzero fields that the spec says to ignore, which LLVM rejects;
+  - 12,290 get a different name (the Zicbop prefetch hints, FENCE.TSO, UNIMP).
+
+  The 1,028 encodings that LLVM accepts and the decoder rejects are privileged instructions.
+- **Decoder vs registry** (`zig build verify-decoder`). All 2^30 32-bit encodings: 0 differences.
+- **Execution vs Spike** (`tools/spike_diff`):
+  - 21,000 random programs in seven instruction mixes, ending in EBREAK, ECALL and every kind of fault: 0 differences;
+  - 114 directed edge cases: 0 unexpected;
+  - 8,000 single-instruction programs: 0 unexplained (40 use addresses outside Spike's memory, 2 read absolute counter values);
+  - all 122 implemented instructions executed.
+- **Portability.** `zig build test-all`, digest checks included, passes on:
+  - macOS (Debug and ReleaseFast);
+  - Linux aarch64 (Debug, ReleaseSafe and ReleaseFast);
+  - big-endian s390x under qemu;
+  - `-Dmemory_size` from 4 B to 256 MiB.
+
+  The CLI runs the demo and programs with 64 KiB, 1 MiB and 256 MiB of memory.
+- **Compliance from source.** Rebuilt with GCC 13, 86 of the 89 compliance binaries are byte-identical to the checked-in ones, and all 89 pass.
 
 ## 0.1.29 and earlier
 
