@@ -51,8 +51,10 @@ pub const Instruction = struct {
     /// Decoded immediate, sign-extended to 32 bits.
     /// For unsigned use (addresses, shifts), call immUnsigned().
     /// For CSR addresses (I-format), call csrAddr().
-    /// Note: for unary I-type Zbb ops (CLZ, CTZ, CPOP, SEXT_B, SEXT_H) the imm field
-    /// contains the rs2 encoding (0-5) used to distinguish them — not a meaningful operand.
+    /// Note: for I-type ALU instructions with funct3 001/101 (opcode 0b0010011), imm is
+    /// the 5-bit rs2 field: the shift amount for SLLI/SRLI/SRAI/RORI and the Zbs
+    /// immediate forms, and only a selector — not an operand — for the Zbb unary ops
+    /// CLZ/CTZ/CPOP/SEXT.B/SEXT.H (0-5), ORC.B (7) and REV8 (24).
     imm: i32 = 0,
     raw: u32,
     /// Original compressed opcode when this instruction was expanded from RV32C.
