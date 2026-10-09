@@ -51,7 +51,8 @@ pub fn main(init: std.process.Init) !void {
     var walker = try dir.walk(gpa);
     defer walker.deinit();
     while (try walker.next(io)) |entry| {
-        if (entry.kind != .file or !std.mem.endsWith(u8, entry.path, ".bin")) continue;
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".bin")) continue;
+        if (entry.basename[0] == '.') continue; // e.g. macOS AppleDouble "._x.bin" files
         const p = try arena.dupe(u8, entry.path);
         std.mem.replaceScalar(u8, p, std.fs.path.sep, '/');
         try paths.append(arena, p);
