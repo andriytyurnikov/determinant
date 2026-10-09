@@ -439,5 +439,4 @@ EQUIVALENT = {
     "Z04": "write()'s switch rejects every CSR but mscratch anyway; the read-only check only guards writable CSRs added later",
     "D20": "no two registry entries overlap (registry_test), so the order in which decodeR asks the extensions cannot change its result",
     "D22": "no two registry entries overlap (registry_test), so the order in which decodeR asks the extensions cannot change its result",
-    "SO03": "every guest write to stdout flushes stderr first, and everything else on stderr follows the preamble in the same buffer, so the order is the same; the flush only shows the line before a long run starts, which no test can see",
 }

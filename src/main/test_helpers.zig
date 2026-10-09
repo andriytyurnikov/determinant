@@ -158,6 +158,47 @@ pub const Fixture = struct {
     }
 };
 
+/// A buffered writer that keeps each write reaching its sink apart, as a terminal
+/// shows each one when it arrives. A write is what a flush, or a full buffer, sends.
+pub const Writes = struct {
+    writer: Io.Writer,
+    log: std.ArrayList([]u8) = .empty,
+
+    pub fn init(buffer: []u8) Writes {
+        return .{ .writer = .{ .vtable = &.{ .drain = drain }, .buffer = buffer } };
+    }
+
+    pub fn deinit(self: *Writes) void {
+        for (self.log.items) |w| alloc.free(w);
+        self.log.deinit(alloc);
+    }
+
+    fn drain(w: *Io.Writer, data: []const []const u8, splat: usize) Io.Writer.Error!usize {
+        const self: *Writes = @alignCast(@fieldParentPtr("writer", w));
+        var bytes: std.ArrayList(u8) = .empty;
+        defer bytes.deinit(alloc);
+        var n: usize = 0;
+        bytes.appendSlice(alloc, w.buffered()) catch return error.WriteFailed;
+        for (data[0 .. data.len - 1]) |d| {
+            bytes.appendSlice(alloc, d) catch return error.WriteFailed;
+            n += d.len;
+        }
+        for (0..splat) |_| {
+            bytes.appendSlice(alloc, data[data.len - 1]) catch return error.WriteFailed;
+            n += data[data.len - 1].len;
+        }
+        w.end = 0;
+        if (bytes.items.len != 0) {
+            const write = bytes.toOwnedSlice(alloc) catch return error.WriteFailed;
+            self.log.append(alloc, write) catch {
+                alloc.free(write);
+                return error.WriteFailed;
+            };
+        }
+        return n;
+    }
+};
+
 /// `template` with this build's values: {path} is `path`, {mem} the memory size, {sp}
 /// the initial sp in 8 hex digits and {sp_dec} in signed decimal. The caller frees it.
 pub fn expand(template: []const u8, path: []const u8) ![]u8 {

@@ -522,6 +522,32 @@ test "stdout carries only the program's output, and the streams keep their order
     try std.testing.expectEqualStrings("B\n", fx.stderr());
 }
 
+test "the preamble is written before the program starts, so it shows while the program runs" {
+    // A program that runs for a long time, or hangs, must already show its "Running"
+    // line. With --trace, each instruction writes its line as it retires, so the
+    // preamble must arrive in a write of its own, before the first trace line; without
+    // it, before the report.
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    const prog = try fx.file("loop.bin", &h.loop);
+    const want = try h.expand("Running {path} (4 bytes at 0x00000000) in {mem} of VM memory, at most 3 cycles\n", prog);
+    defer h.alloc.free(want);
+    const argvs = [_][]const [:0]const u8{
+        &.{ "determinant", prog, "--max-cycles", "3" },
+        &.{ "determinant", prog, "--max-cycles", "3", "--trace" },
+    };
+    for (argvs) |argv| {
+        var buf: [4096]u8 = undefined;
+        var writes: h.Writes = .init(&buf);
+        defer writes.deinit();
+        var cli = fx.cli();
+        cli.stderr = &writes.writer;
+        try std.testing.expectEqual(h.status(.cycle_limit), cli.run(argv));
+        try std.testing.expect(writes.log.items.len >= 2);
+        try std.testing.expectEqualStrings(want, writes.log.items[0]);
+    }
+}
+
 test "printStop: an exit status is shown signed, as the program passed it" {
     const vm = try h.alloc.create(det.Cpu);
     defer h.alloc.destroy(vm);
