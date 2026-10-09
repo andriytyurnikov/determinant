@@ -41,7 +41,7 @@ fn usage() noreturn {
 }
 
 fn splitAssignment(arg: []const u8) struct { []const u8, []const u8 } {
-    const eq = std.mem.indexOfScalar(u8, arg, '=') orelse usage();
+    const eq = std.mem.findScalar(u8, arg, '=') orelse usage();
     return .{ arg[0..eq], arg[eq + 1 ..] };
 }
 
@@ -164,7 +164,7 @@ fn collectPrograms(io: Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, dir
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".bin")) continue;
         if (entry.basename[0] == '.') continue; // e.g. macOS AppleDouble "._x.bin" files
         const p = try arena.dupe(u8, entry.path);
-        std.mem.replaceScalar(u8, p, std.fs.path.sep, '/');
+        std.mem.replaceScalar(u8, p, std.Io.Dir.path.sep, '/');
         try paths.append(arena, p);
     }
     std.mem.sort([]const u8, paths.items, {}, struct {
@@ -177,8 +177,8 @@ fn collectPrograms(io: Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, dir
 
 /// Load and run one program; returns how it stopped.
 fn runProgram(arena: std.mem.Allocator, vm: anytype, program: []const u8) ![]const u8 {
-    vm.loadProgram(program, 0) catch |err| return std.fmt.allocPrint(arena, "error.{s}", .{@errorName(err)});
-    const result = vm.run(max_cycles) catch |err| return std.fmt.allocPrint(arena, "error.{s}", .{@errorName(err)});
+    vm.loadProgram(program, 0) catch |err| return arena.print("error.{s}", .{@errorName(err)});
+    const result = vm.run(max_cycles) catch |err| return arena.print("error.{s}", .{@errorName(err)});
     return switch (result) {
         .ecall => "ecall",
         .ebreak => "ebreak",
@@ -190,9 +190,9 @@ fn runProgram(arena: std.mem.Allocator, vm: anytype, program: []const u8) ![]con
 /// text in `expect_dir`/<program name>.txt, formatted like native_main.c prints it.
 fn resultMatches(io: Io, arena: std.mem.Allocator, vm: anytype, stop: []const u8, expect_dir: []const u8, path: []const u8) !bool {
     if (!std.mem.eql(u8, stop, "ebreak")) return false;
-    const base = std.fs.path.basenamePosix(path);
+    const base = std.Io.Dir.path.basenamePosix(path);
     const name = base[0 .. base.len - ".bin".len];
-    const expect_path = try std.fmt.allocPrint(arena, "{s}/{s}.txt", .{ expect_dir, name });
+    const expect_path = try arena.print("{s}/{s}.txt", .{ expect_dir, name });
     const expected = try Io.Dir.cwd().readFileAlloc(io, expect_path, arena, .limited(4096));
 
     var got: Io.Writer.Allocating = .init(arena);

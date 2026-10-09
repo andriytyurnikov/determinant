@@ -13,7 +13,7 @@ fn dumpToString(memory: []const u8, format: main_mod.DumpFormat) ![]u8 {
 }
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.indexOf(u8, haystack, needle) == null) {
+    if (std.mem.find(u8, haystack, needle) == null) {
         std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }
@@ -32,7 +32,7 @@ test "hexdump: single line" {
 }
 
 test "hexdump: zero-run collapsing" {
-    var data = [_]u8{0} ** 64;
+    var data: [64]u8 = @splat(0);
     _ = &data;
     const result = try dumpToString(&data, .hexdump);
     defer alloc.free(result);
@@ -41,13 +41,13 @@ test "hexdump: zero-run collapsing" {
     try expectContains(result, "*\n");
     try expectContains(result, "00000040\n");
 
-    if (std.mem.indexOf(u8, result, "00000010")) |_| {
+    if (std.mem.find(u8, result, "00000010")) |_| {
         return error.TestExpectedEqual;
     }
 }
 
 test "hexdump: collapsing then resumption" {
-    var data = [_]u8{0} ** 32 ++ [_]u8{0xFF} ** 16;
+    var data = @as([32]u8, @splat(0)) ++ @as([16]u8, @splat(0xFF));
     _ = &data;
     const result = try dumpToString(&data, .hexdump);
     defer alloc.free(result);
@@ -70,7 +70,7 @@ test "hexdump: partial last line" {
 }
 
 test "hexdump: ASCII printable range" {
-    var data = [_]u8{0} ** 16;
+    var data: [16]u8 = @splat(0);
     data[0] = 0x1F;
     data[1] = 0x20;
     data[2] = 0x7E;
@@ -90,7 +90,7 @@ test "raw: hex encoding" {
 }
 
 test "raw: line breaks at 32 bytes" {
-    var data = [_]u8{0xAB} ** 64;
+    var data: [64]u8 = @splat(0xAB);
     _ = &data;
     const result = try dumpToString(&data, .raw);
     defer alloc.free(result);
@@ -103,12 +103,12 @@ test "raw: line breaks at 32 bytes" {
 }
 
 test "raw: no collapsing" {
-    var data = [_]u8{0} ** 64;
+    var data: [64]u8 = @splat(0);
     _ = &data;
     const result = try dumpToString(&data, .raw);
     defer alloc.free(result);
 
-    if (std.mem.indexOf(u8, result, "*")) |_| {
+    if (std.mem.find(u8, result, "*")) |_| {
         return error.TestExpectedEqual;
     }
 

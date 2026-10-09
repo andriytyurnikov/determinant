@@ -16,7 +16,7 @@ step needs LLVM.
 
 ## Prerequisites
 
-- Zig 0.16.0.
+- Zig 0.17.0.
 - A shared libLLVM built with the RISC-V target. Tested with Homebrew's LLVM 23.1
   (`/opt/homebrew/opt/llvm/lib/libLLVM.dylib`) and 22.1
   (`/opt/homebrew/opt/llvm@22/lib/libLLVM.dylib`) on macOS. On Linux, a distribution's
@@ -34,7 +34,7 @@ zig build llvm-oracle -Dllvm_lib=$LLVM -- c32 4 0 4000000        # only x in [0,
 zig build llvm-oracle -Dllvm_lib=$LLVM -- probe 8330000f 0x0000  # both decodes of some encodings
 ```
 
-The step always builds ReleaseFast. Its arguments, after `--`, are:
+The step always builds with `-Doptimize=fast`. Its arguments, after `--`, are:
 
 - `c16 [THREADS]`: every halfword whose low two bits are not `0b11`.
 - `c32 [THREADS [LO [N]]]`: the 32-bit encodings `raw = (x << 2) | 0b11` for x in

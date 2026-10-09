@@ -43,9 +43,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     // Unit tests (library) and CLI tests (executable)
     const run_unit_tests = b.addRunArtifact(b.addTest(.{ .root_module = mod }));
@@ -121,11 +119,11 @@ pub fn build(b: *std.Build) void {
     test_all_step.dependOn(&run_compliance_tests.step);
     test_all_step.dependOn(check_digests_step);
 
-    // Tools that need speed are always built ReleaseFast.
+    // Tools that need speed are always built in fast mode.
     const release_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
     });
     release_mod.addOptions("build_options", options);
 
@@ -136,13 +134,13 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/verify_decoder.zig"),
             .target = target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .imports = &.{
                 .{ .name = "determinant", .module = release_mod },
             },
         }),
     });
-    const verify_step = b.step("verify-decoder", "Check the decoder against the opcode registry on all 2^30 32-bit encodings (ReleaseFast)");
+    const verify_step = b.step("verify-decoder", "Check the decoder against the opcode registry on all 2^30 32-bit encodings (optimize=fast)");
     verify_step.dependOn(&b.addRunArtifact(verify_exe).step);
 
     // Benchmark over the C program corpus.
@@ -151,17 +149,17 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/bench.zig"),
             .target = target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .imports = &.{
                 .{ .name = "determinant", .module = release_mod },
             },
         }),
     });
     const run_bench = b.addRunArtifact(bench_exe);
-    run_bench.addDirectoryArg(b.path("tests/programs/bin"));
-    if (b.args) |args| run_bench.addArgs(args);
+    run_bench.addDirectoryArg2(b.path("tests/programs/bin"), .{});
+    run_bench.addPassthruArgs();
     run_bench.has_side_effects = true;
-    const bench_step = b.step("bench", "Benchmark the VM on the C program corpus (ReleaseFast; pass -- --runs N)");
+    const bench_step = b.step("bench", "Benchmark the VM on the C program corpus (optimize=fast; pass -- --runs N)");
     bench_step.dependOn(&run_bench.step);
 
     // Opt-in verification tools that need software from outside this repository. They
@@ -170,14 +168,14 @@ pub fn build(b: *std.Build) void {
     // The decoder against LLVM's RISC-V disassembler (tools/llvm_oracle), which is
     // loaded at run time from -Dllvm_lib.
     const llvm_lib = b.option([]const u8, "llvm_lib", "Absolute path of a shared libLLVM with the RISC-V target, for the llvm-oracle step");
-    const llvm_oracle_step = b.step("llvm-oracle", "Compare the decoder with LLVM's RISC-V disassembler (ReleaseFast; needs -Dllvm_lib; pass -- MODE ..., see tools/llvm_oracle)");
+    const llvm_oracle_step = b.step("llvm-oracle", "Compare the decoder with LLVM's RISC-V disassembler (optimize=fast; needs -Dllvm_lib; pass -- MODE ..., see tools/llvm_oracle)");
     if (llvm_lib) |lib| {
         const oracle_exe = b.addExecutable(.{
             .name = "llvm-oracle",
             .root_module = b.createModule(.{
                 .root_source_file = b.path("tools/llvm_oracle/oracle.zig"),
                 .target = target,
-                .optimize = .ReleaseFast,
+                .optimize = .fast,
                 .link_libc = true,
                 .imports = &.{
                     .{ .name = "determinant", .module = release_mod },
@@ -186,7 +184,7 @@ pub fn build(b: *std.Build) void {
         });
         const run_oracle = b.addRunArtifact(oracle_exe);
         run_oracle.addArg(lib);
-        if (b.args) |args| run_oracle.addArgs(args);
+        run_oracle.addPassthruArgs();
         run_oracle.has_side_effects = true;
         llvm_oracle_step.dependOn(&run_oracle.step);
     } else {
@@ -215,10 +213,10 @@ pub fn build(b: *std.Build) void {
 /// The corpus: the riscv-tests compliance binaries and the C programs, whose results
 /// are also checked against a native run of the same C.
 fn addCorpusArgs(b: *std.Build, run: *std.Build.Step.Run) void {
-    run.addPrefixedDirectoryArg("compliance=", b.path("src/compliance/bin"));
-    run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/bin"));
+    run.addDirectoryArg2(b.path("src/compliance/bin"), .{ .prefix = "compliance=" });
+    run.addDirectoryArg2(b.path("tests/programs/bin"), .{ .prefix = "programs=" });
     run.addArgs(&.{ "--pass", "compliance", "--expect" });
-    run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/expected"));
+    run.addDirectoryArg2(b.path("tests/programs/expected"), .{ .prefix = "programs=" });
 }
 
 /// C programs of the corpus (tests/programs/src/<name>.c).
@@ -229,11 +227,11 @@ const corpus_programs = [_][]const u8{ "arith64", "atomics", "bitops", "crc32", 
 const CorpusConfig = struct {
     name: []const u8,
     features: []const std.Target.riscv.Feature,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 };
 const corpus_configs = [_]CorpusConfig{
-    .{ .name = "imac_zb-O2", .features = &.{ .m, .a, .c, .zba, .zbb, .zbs }, .optimize = .ReleaseFast },
-    .{ .name = "ima-Os", .features = &.{ .m, .a }, .optimize = .ReleaseSmall },
+    .{ .name = "imac_zb-O2", .features = &.{ .m, .a, .c, .zba, .zbb, .zbs }, .optimize = .fast },
+    .{ .name = "ima-Os", .features = &.{ .m, .a }, .optimize = .small },
 };
 
 /// `zig build programs`: rebuild the checked-in corpus binaries (tests/programs/bin)
@@ -266,7 +264,7 @@ fn addProgramsStep(b: *std.Build) void {
             });
             exe.setLinkerScript(b.path("tests/programs/src/link.ld"));
             exe.entry = .{ .symbol_name = "_start" };
-            const bin = b.addObjCopy(exe.getEmittedBin(), .{ .format = .bin });
+            const bin = b.addObjCopy(exe.getEmittedBin(), .{ .format = .binary });
             update.addCopyFileToSource(bin.getOutput(), b.fmt("tests/programs/bin/{s}/{s}.bin", .{ cfg.name, name }));
             // One ELF, for the CLI's ELF-loading test.
             if (std.mem.eql(u8, name, "crc32") and std.mem.eql(u8, cfg.name, "imac_zb-O2")) {
@@ -275,12 +273,12 @@ fn addProgramsStep(b: *std.Build) void {
         }
 
         // Expected results: the same program built for the host and run natively
-        // (Debug, so the C undefined-behavior sanitizer would trap).
+        // (debug, so the C undefined-behavior sanitizer would trap).
         const native = b.addExecutable(.{
             .name = b.fmt("{s}-native", .{name}),
             .root_module = b.createModule(.{
                 .target = b.graph.host,
-                .optimize = .Debug,
+                .optimize = .debug,
                 .link_libc = true,
             }),
         });

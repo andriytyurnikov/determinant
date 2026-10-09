@@ -76,13 +76,13 @@ pub fn run(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, args: []const [:0]con
     // end in a zero exit status.
     stdout.flush() catch return outputFailed(stderr);
     stderr.flush() catch {};
-    return @intFromEnum(status);
+    return @backingInt(status);
 }
 
 fn outputFailed(stderr: *Io.Writer) u8 {
     stderr.print("Error: cannot write output\n", .{}) catch {};
     stderr.flush() catch {};
-    return @intFromEnum(ExitStatus.usage_or_io);
+    return @backingInt(ExitStatus.usage_or_io);
 }
 
 /// Exact memory size for messages: "64 KiB", "1 MiB" or "100 bytes".
@@ -242,7 +242,7 @@ fn executeAndReport(vm: *det.Cpu, stdout: *Io.Writer, stderr: *Io.Writer, opts: 
             try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
             try stdout.print("\nRegisters:\n", .{});
             try printRegisters(stdout, vm);
-            return .{ .status = @enumFromInt(@as(u8, @truncate(status))) };
+            return .{ .status = @fromBackingInt(@as(u8, @truncate(status))) };
         },
     }
 }

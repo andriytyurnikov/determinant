@@ -100,7 +100,7 @@ test "loadProgram at offset" {
 
 test "loadProgram out of bounds" {
     var cpu = Cpu.init();
-    const program = [_]u8{0xFF} ** 8;
+    const program: [8]u8 = @splat(0xFF);
     try std.testing.expectError(error.AddressOutOfBounds, cpu.loadProgram(&program, MEMORY_SIZE - 4));
 }
 

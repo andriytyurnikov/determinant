@@ -6,7 +6,7 @@ const det = @import("determinant");
 const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.indexOf(u8, haystack, needle) == null) {
+    if (std.mem.find(u8, haystack, needle) == null) {
         std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }
@@ -20,7 +20,7 @@ fn createVm() !*det.Cpu {
 }
 
 fn expectNotContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.indexOf(u8, haystack, needle) != null) {
+    if (std.mem.find(u8, haystack, needle) != null) {
         std.debug.print("\nExpected output NOT to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }

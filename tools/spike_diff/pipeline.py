@@ -129,12 +129,12 @@ def setup(args, subdir=None, need_runner=True):
 
 
 def build_runner(work):
-    """`zig build spike-runner` (ReleaseSafe) from the repository, installed and cached in
+    """`zig build spike-runner` (-Doptimize=safe) from the repository, installed and cached in
     the work directory, so that the runner always matches the current sources."""
     if shutil.which("zig") is None:
         fail("zig not found on PATH (or pass --runner)")
     prefix = os.path.join(work, "runner")
-    cmd = ["zig", "build", "spike-runner", "-Doptimize=ReleaseSafe", "--prefix", prefix,
+    cmd = ["zig", "build", "spike-runner", "-Doptimize=safe", "--prefix", prefix,
            "--cache-dir", os.path.join(work, "zig-cache")]
     print(f"building the runner: {' '.join(cmd)}", file=sys.stderr, flush=True)
     r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)

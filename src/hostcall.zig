@@ -49,7 +49,7 @@ pub fn handle(vm: anytype, env: *Env) std.Io.Writer.Error!Outcome {
     const a0 = vm.readReg(10);
     const a1 = vm.readReg(11);
     const a2 = vm.readReg(12);
-    switch (@as(Call, @enumFromInt(number))) {
+    switch (@as(Call, @fromBackingInt(number))) {
         .exit, .exit_group => return .{ .exit = a0 },
         .write => {
             const out = switch (a0) {

@@ -36,7 +36,7 @@ MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 
 ## Zig compiler-rt
 
-- **What:** the C corpus binaries in `tests/programs/bin/` and `tests/programs/elf/` are compiled by Zig 0.16.0 and link routines from Zig's compiler-rt, for example 64-bit division.
+- **What:** the C corpus binaries in `tests/programs/bin/` and `tests/programs/elf/` are compiled by Zig 0.17.0 and link routines from Zig's compiler-rt, for example 64-bit division.
 - **License:** MIT (Expat).
 
 ```

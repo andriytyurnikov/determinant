@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        optimize: [Debug, ReleaseFast]
+        optimize: [debug, fast]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,12 +63,12 @@ jobs:
         with:
           cache-key: memory-size-${{ matrix.memory_size }}
       - run: zig build test-all -Dmemory_size=${{ matrix.memory_size }} --summary all
-      - name: CLI smoke run (Debug and ReleaseFast)
+      - name: CLI smoke run (debug and fast)
         shell: bash
         run: |
           # ADDI x1, x0, 42; EBREAK — small enough for every memory size
           printf '\223\000\240\002\163\000\020\000' > tiny.bin
-          for opt in Debug ReleaseFast; do
+          for opt in debug fast; do
             zig build run -Doptimize=$opt -Dmemory_size=${{ matrix.memory_size }} -- tiny.bin | tee out.txt
             grep -q "x1 = 42" out.txt
           done

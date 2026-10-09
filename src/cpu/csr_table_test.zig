@@ -43,7 +43,7 @@ const Expected = union(enum) {
 
 /// The model: what the instruction must do, from SEMANTICS.md alone.
 fn expected(op: Op, n: u12, rd: u5, src_nonzero: bool) Expected {
-    const immediate = @intFromEnum(op) >= 0b101;
+    const immediate = @backingInt(op) >= 0b101;
     const src: u32 = if (!src_nonzero) 0 else if (immediate) uimm else rs1_val;
     const reads = switch (op) {
         .csrrw, .csrrwi => rd != 0,
@@ -75,7 +75,7 @@ test "CSR table: all 4096 CSR numbers x 6 instructions x rd x source" {
         for (std.enums.values(Op)) |op| {
             for ([_]u5{ 0, 5 }) |rd| {
                 for ([_]bool{ false, true }) |src_nonzero| {
-                    const immediate = @intFromEnum(op) >= 0b101;
+                    const immediate = @backingInt(op) >= 0b101;
                     // rs1 field: a register for the plain forms, the uimm for the I forms
                     const rs1_field: u5 = if (!src_nonzero) 0 else if (immediate) uimm else 6;
                     cpu.pc = 0;
@@ -83,7 +83,7 @@ test "CSR table: all 4096 CSR numbers x 6 instructions x rd x source" {
                     cpu.csrs.mscratch = mscratch_init;
                     cpu.writeReg(5, rd_sentinel);
                     cpu.writeReg(6, rs1_val);
-                    std.mem.writeInt(u32, cpu.memory[0..4], h.encodeCsr(@intFromEnum(op), rd, rs1_field, n), .little);
+                    std.mem.writeInt(u32, cpu.memory[0..4], h.encodeCsr(@backingInt(op), rd, rs1_field, n), .little);
 
                     const want = expected(op, n, rd, src_nonzero);
                     const got = cpu.step();

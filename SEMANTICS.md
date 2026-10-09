@@ -160,7 +160,7 @@ Take the same initial state and the same sequence of host actions (state changes
 - in every build mode;
 - with any decode cache size.
 
-CI checks this on every change: Linux and macOS, Debug and ReleaseFast, a big-endian s390x target, and the decode cache on and off, all against `tests/digests.txt`.
+CI checks this on every change: Linux and macOS, `debug` and `fast` builds, a big-endian s390x target, and the decode cache on and off, all against `tests/digests.txt`.
 
 Outside the guarantee:
 - how long execution takes;

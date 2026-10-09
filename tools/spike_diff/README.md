@@ -30,7 +30,7 @@ These tools need Spike and a RISC-V toolchain, so CI does not run them.
   Tested with binutils 2.45 from Homebrew's `riscv-gnu-toolchain`. GCC itself is not
   used.
 - Python 3.8 or later. Only the standard library is used.
-- Zig 0.16.0, to build the runner.
+- Zig 0.17.0, to build the runner.
 - No `dtc`. Spike shells out to `dtc` to compile its device tree, so `pipeline.py`
   writes a stub `dtc` into the work directory and puts it first on Spike's `PATH`. The
   stub returns the blob `mkdtb.py` built: one rv32 hart and the memory, with no CLINT,
@@ -65,7 +65,7 @@ Common options:
   and `--keep`. `directed.py` takes `-k SUBSTRING` and `-v`. See `--help`.
 
 Each script except `coverage.py` first builds the runner from the repository:
-`zig build spike-runner -Doptimize=ReleaseSafe --prefix WORK/runner --cache-dir WORK/zig-cache`.
+`zig build spike-runner -Doptimize=safe --prefix WORK/runner --cache-dir WORK/zig-cache`.
 This way the runner always matches the current sources, and its safety checks stay on.
 The first build in a new work directory takes 10 to 20 seconds. With `--runner PATH`,
 the scripts use that executable instead. For example, `zig build spike-runner` installs
