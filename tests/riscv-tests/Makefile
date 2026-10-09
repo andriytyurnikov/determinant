@@ -28,13 +28,13 @@ UPSTREAM_ENV := $(RISCV_TESTS)/env
 BIN_DIR := ../../src/compliance/bin
 BUILD_DIR := build
 
-# Common compiler flags
-CFLAGS := -march=rv32i_m_a_zicsr_zba_zbb_zbs -mabi=ilp32 -nostdlib -nostartfiles \
+# Common compiler flags (GCC 12+ needs _zifencei before it accepts fence.i)
+CFLAGS := -march=rv32i_m_a_zicsr_zifencei_zba_zbb_zbs -mabi=ilp32 -nostdlib -nostartfiles \
           -I$(ENV_DIR) -I$(UPSTREAM_ENV) -I$(ISA_DIR)/macros/scalar \
           -T$(ENV_DIR)/link.ld -DDETERMINANT
 
-# Per-extension test lists (skipping fence_i and ma_data from rv32ui)
-RV32UI_TESTS := add addi and andi auipc beq bge bgeu blt bltu bne \
+# Per-extension test lists (rv32ui skips ma_data; see README.md)
+RV32UI_TESTS := add addi and andi auipc beq bge bgeu blt bltu bne fence_i \
                 jal jalr lb lbu lh lhu lui lw or ori sb sh simple \
                 sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori
 
@@ -80,63 +80,18 @@ $(BIN_DIR)/rv32uc/%.bin: CFLAGS := -march=rv32i_m_a_c_zicsr -mabi=ilp32 -nostdli
           -I$(ENV_DIR) -I$(UPSTREAM_ENV) -I$(ISA_DIR)/macros/scalar \
           -T$(ENV_DIR)/link.ld -DDETERMINANT
 
-# Generic rule: .S → ELF → flat binary
-# The rv32ui tests include from rv64ui, rv32um from rv64um, etc.
-$(BIN_DIR)/%/.dir:
-	mkdir -p $(dir $@)
-	touch $@
+# Generic rule: .S → ELF → flat binary. The bin/ layout mirrors isa/
+# (e.g. isa/rv32ui/add.S → bin/rv32ui/add.bin); the rv32* sources include
+# their rv64* counterparts.
+$(BIN_DIR)/%.bin: $(ISA_DIR)/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
+	@mkdir -p $(dir $@) $(dir $(BUILD_DIR)/$*)
+	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$*.elf $<
+	$(OBJCOPY) -O binary $(BUILD_DIR)/$*.elf $@
 
-# Build pattern for each extension
-define BUILD_RULE
-$(BIN_DIR)/$(1)/%.bin: $(ISA_DIR)/$(1)/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld | $(BIN_DIR)/$(1)/.dir
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$(1)/$$*.elf $$<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/$(1)/$$*.elf $$@
-endef
-
-# Create build directories
-$(BUILD_DIR)/%/.dir:
-	mkdir -p $(dir $@)
-	touch $@
-
-# Expand rules for each extension, with build dir dependency
-$(BIN_DIR)/rv32ui/%.bin: $(ISA_DIR)/rv32ui/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32ui $(BUILD_DIR)/rv32ui
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32ui/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32ui/$*.elf $@
-
-$(BIN_DIR)/rv32um/%.bin: $(ISA_DIR)/rv32um/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32um $(BUILD_DIR)/rv32um
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32um/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32um/$*.elf $@
-
-$(BIN_DIR)/rv32ua/%.bin: $(ISA_DIR)/rv32ua/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32ua $(BUILD_DIR)/rv32ua
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32ua/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32ua/$*.elf $@
-
-$(BIN_DIR)/rv32uc/%.bin: $(ISA_DIR)/rv32uc/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32uc $(BUILD_DIR)/rv32uc
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32uc/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32uc/$*.elf $@
-
-$(BIN_DIR)/rv32uzba/%.bin: $(ISA_DIR)/rv32uzba/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32uzba $(BUILD_DIR)/rv32uzba
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32uzba/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32uzba/$*.elf $@
-
-$(BIN_DIR)/rv32uzbb/%.bin: $(ISA_DIR)/rv32uzbb/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32uzbb $(BUILD_DIR)/rv32uzbb
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32uzbb/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32uzbb/$*.elf $@
-
-$(BIN_DIR)/rv32uzbs/%.bin: $(ISA_DIR)/rv32uzbs/%.S $(ENV_DIR)/riscv_test.h $(ENV_DIR)/link.ld
-	@mkdir -p $(BIN_DIR)/rv32uzbs $(BUILD_DIR)/rv32uzbs
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/rv32uzbs/$*.elf $<
-	$(OBJCOPY) -O binary $(BUILD_DIR)/rv32uzbs/$*.elf $@
-
+# Removes the ELF intermediates only. The binaries in $(BIN_DIR) are checked in;
+# use `make -B` to rebuild them all.
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -rf $(BIN_DIR)
 
 # Print discovered tests (useful for debugging)
 .PHONY: list

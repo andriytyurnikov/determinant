@@ -16,6 +16,9 @@ pub const TestResult = union(enum) {
     fail: u32,
     timeout,
     runtime_error,
+    /// The test stopped at an ECALL. Our riscv_test.h ends every test with EBREAK
+    /// (some tests execute ECALL themselves), so this is never a pass.
+    unexpected_ecall,
 };
 
 /// Run a compliance test binary. Returns the test result.
@@ -31,12 +34,7 @@ pub fn runTest(binary: []const u8) TestResult {
             if (gp == 1) return .pass;
             return .{ .fail = gp >> 1 };
         },
-        .ecall => {
-            // riscv_test.h uses the gp (x3) PASS/FAIL convention for both EBREAK and ECALL exits.
-            const gp = vm.readReg(3);
-            if (gp == 1) return .pass;
-            return .{ .fail = gp >> 1 };
-        },
+        .ecall => .unexpected_ecall,
         .@"continue" => .timeout,
     };
 }
@@ -58,5 +56,31 @@ pub fn expectPass(comptime name: []const u8, binary: []const u8) !void {
             std.debug.print("COMPLIANCE FAIL: {s} — runtime error\n", .{name});
             return error.ComplianceTestRuntimeError;
         },
+        .unexpected_ecall => {
+            std.debug.print("COMPLIANCE FAIL: {s} — stopped at ECALL instead of the EBREAK that ends a test\n", .{name});
+            return error.ComplianceTestUnexpectedEcall;
+        },
     }
+}
+
+test "runTest: an ECALL stop is not a pass, even with gp == 1" {
+    // li gp, 1; ecall
+    const program = [_]u8{
+        0x93, 0x01, 0x10, 0x00, // ADDI x3, x0, 1
+        0x73, 0x00, 0x00, 0x00, // ECALL
+    };
+    try std.testing.expectEqual(TestResult.unexpected_ecall, runTest(&program));
+}
+
+test "runTest: EBREAK with gp == 1 passes; gp == (N << 1 | 1) fails test N" {
+    const pass = [_]u8{
+        0x93, 0x01, 0x10, 0x00, // ADDI x3, x0, 1
+        0x73, 0x00, 0x10, 0x00, // EBREAK
+    };
+    try std.testing.expectEqual(TestResult.pass, runTest(&pass));
+    const fail = [_]u8{
+        0x93, 0x01, 0x70, 0x00, // ADDI x3, x0, 7  (test case 3 failed)
+        0x73, 0x00, 0x10, 0x00, // EBREAK
+    };
+    try std.testing.expectEqual(TestResult{ .fail = 3 }, runTest(&fail));
 }

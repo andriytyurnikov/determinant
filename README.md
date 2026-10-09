@@ -56,7 +56,7 @@ zig build test-all          # run unit, CLI and compliance tests with both decod
 
 ### RISC-V Compliance
 
-The VM passes 88 tests from the official [riscv-tests](https://github.com/riscv-software-src/riscv-tests) ISA test suite covering all supported extensions: RV32I (39), RV32M (8), RV32A (10), RV32C (1), Zba (3), Zbb (18), Zbs (8). Pre-compiled test binaries are checked in — no RISC-V toolchain needed to run them. See [tests/riscv-tests/README.md](tests/riscv-tests/README.md) for rebuild instructions.
+The VM passes 89 tests from the official [riscv-tests](https://github.com/riscv-software-src/riscv-tests) ISA test suite: RV32I (41, including `fence_i`), RV32M (8), RV32A (10), RV32C (1), Zba (3), Zbb (18), Zbs (8). Zicsr has no user-mode tests in the suite, so the CSR instructions are covered by unit tests only. `ma_data` is skipped because misaligned data accesses are fatal by design. Pre-compiled test binaries are checked in — no RISC-V toolchain needed to run them. See [tests/riscv-tests/README.md](tests/riscv-tests/README.md) for rebuild instructions.
 
 ## Architecture
 
