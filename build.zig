@@ -99,6 +99,21 @@ pub fn build(b: *std.Build) void {
     const digests_step = b.step("digests", "Print the final-state digest of every corpus program");
     digests_step.dependOn(&print_digests.step);
 
+    // A compliance suite rebuilt from source (CI rebuilds it with the distro's RISC-V
+    // GCC): every binary must pass. Byte identity with src/compliance/bin is not
+    // required, since other GCC/binutils versions encode a few tests differently.
+    const rebuilt_dir = b.option([]const u8, "rebuilt_compliance", "Directory of riscv-tests binaries rebuilt with tests/riscv-tests/Makefile");
+    const rebuilt_step = b.step("test-compliance-rebuild", "Check that every binary in -Drebuilt_compliance=DIR passes (riscv-tests convention)");
+    if (rebuilt_dir) |dir| {
+        const check_rebuilt = b.addRunArtifact(digests_exe);
+        check_rebuilt.addArg(b.fmt("rebuilt={s}", .{dir}));
+        check_rebuilt.addArgs(&.{ "--pass", "rebuilt" });
+        check_rebuilt.has_side_effects = true;
+        rebuilt_step.dependOn(&check_rebuilt.step);
+    } else {
+        rebuilt_step.dependOn(&b.addFail("test-compliance-rebuild needs -Drebuilt_compliance=DIR").step);
+    }
+
     // Test-all step: unit, CLI, compliance and digest tests
     const test_all_step = b.step("test-all", "Run unit, CLI, compliance and digest tests");
     test_all_step.dependOn(&run_unit_tests.step);
@@ -157,7 +172,7 @@ pub fn build(b: *std.Build) void {
 fn addCorpusArgs(b: *std.Build, run: *std.Build.Step.Run) void {
     run.addPrefixedDirectoryArg("compliance=", b.path("src/compliance/bin"));
     run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/bin"));
-    run.addArg("--expect");
+    run.addArgs(&.{ "--pass", "compliance", "--expect" });
     run.addPrefixedDirectoryArg("programs=", b.path("tests/programs/expected"));
 }
 

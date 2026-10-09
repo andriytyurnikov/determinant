@@ -46,6 +46,13 @@ make list       # shows all test names and count
 
 Output goes to `src/compliance/bin/<extension>/<test>.bin`. With GCC 15.1 / binutils 2.45 (Homebrew `riscv-gnu-toolchain`) at submodule commit `f443f44`, the rebuild is byte-identical to the checked-in binaries. The linker warns that the ELF has an RWX `LOAD` segment; that is expected, because the test image is one flat, writable, executable region.
 
+Other toolchain versions can encode a few tests differently. Ubuntu 24.04's GCC 13.2 / binutils 2.42 differs on `rvc`, `auipc` and `fence_i`. So CI does not compare bytes. Instead, its `compliance-rebuild` job rebuilds the whole suite from the submodule with the distro GCC and requires every rebuilt binary to pass:
+
+```bash
+make BIN_DIR=/tmp/rebuilt BUILD_DIR=/tmp/build
+zig build test-compliance-rebuild -Drebuilt_compliance=/tmp/rebuilt   # from the repository root
+```
+
 ## Custom test environment
 
 The `env/determinant/` directory contains a custom test harness that adapts riscv-tests to our VM:
