@@ -15,6 +15,7 @@ pub const DecodeFn = cpu.DecodeFn;
 pub const StepResult = cpu.StepResult;
 pub const StepError = cpu.StepError;
 pub const Fault = cpu.Fault;
+pub const RestoreError = cpu.RestoreError;
 pub const Instruction = instructions.Instruction;
 pub const Opcode = instructions.Opcode;
 pub const Format = instructions.Format;

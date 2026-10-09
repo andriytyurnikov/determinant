@@ -96,6 +96,7 @@ The library is available via `@import("determinant")`. Execution semantics are s
   - `step() → StepError!StepResult` — fetch, decode and execute one instruction. A fault returns a `StepError` (`IllegalInstruction`, `MisalignedPC`, `PCOutOfBounds`, `MisalignedAccess`, `AddressOutOfBounds`) and leaves the state unchanged
   - `describeFault(StepError) → Fault` — after a fault: the instruction's address and bits and the faulting address
   - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
+  - `writeSnapshot(*Io.Writer)` / `restoreSnapshot(*Io.Reader)` — save and load the exact architectural state (`snapshot_size` bytes; the digest is the SHA-256 of the snapshot). A restore validates the header first and returns `error.InvalidSnapshot` on a mismatch. See [docs/design/snapshots.md](docs/design/snapshots.md)
   - `run(max_cycles: ?u64) → StepError!StepResult` — step until ECALL/EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is absolute, not relative to this call; `null` means unlimited. Returns `.continue` when it stops at the limit. After `.ecall`/`.ebreak`, `pc` points past that instruction and `stop_pc` at it, so calling `run()` again continues
   - `runFor(steps: u64) → StepError!StepResult` — run at most `steps` more instructions
   - `pc`, `regs`, `memory`, `cycle_count` (retired instructions), `reservation`, `csrs` — the state, as public fields
