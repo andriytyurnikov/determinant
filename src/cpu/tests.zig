@@ -15,4 +15,5 @@ comptime {
     _ = @import("csr_table_test.zig");
     _ = @import("aliasing_test.zig");
     _ = @import("wraparound_test.zig");
+    _ = @import("host_api_test.zig");
 }

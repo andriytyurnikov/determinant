@@ -21,6 +21,7 @@ pub const header_len = 164;
 const encoded_fields = [_][]const u8{ "pc", "regs", "memory", "cycle_count", "reservation", "csrs" };
 const excluded_fields = [_][]const u8{
     "decode_cache", // a memo of decode(), not architectural state
+    "stop_pc", // where the last ECALL/EBREAK was: host-facing metadata
 };
 
 comptime {

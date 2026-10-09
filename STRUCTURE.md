@@ -17,7 +17,7 @@ src/
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
     state.zig             — canonical little-endian state encoding (versioned header + memory) and its SHA-256 digest
-    tests.zig             — hub → init, memory, pipeline, run, determinism, atomic, csr, invariant, integration, recovery, state, decode_cache, fault, csr_table, aliasing, wraparound
+    tests.zig             — hub → init, memory, pipeline, run, determinism, atomic, csr, invariant, integration, recovery, state, decode_cache, fault, csr_table, aliasing, wraparound, host_api
       init_test.zig             — init and register tests
       memory_test.zig           — memory read/write tests
       pipeline_test.zig         — pipeline infrastructure: cycle counting, multi-instruction sequences, branch/jump targets beyond memory
@@ -34,6 +34,7 @@ src/
       csr_table_test.zig        — all 4096 CSR numbers × 6 CSR instructions × rd/source, against a model of SEMANTICS.md
       aliasing_test.zig         — rd = rs1/rs2 for loads, AMOs, LR/SC, CSRRW, JALR (sources read before execution)
       wraparound_test.zig       — address, branch, JALR and AUIPC arithmetic wraps modulo 2^32
+      host_api_test.zig         — StepError set, describeFault(), runFor(), stop_pc
   instructions.zig        — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction (companion file for instructions/)
   instructions/
     format.zig            — Format enum (R/I/S/B/U/J), shared by all extensions

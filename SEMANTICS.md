@@ -70,7 +70,11 @@ An instruction either completes all of these steps (it *retires*) or raises a fa
 
 ## Faults
 
-Execution stops with a Zig error, and the VM state is left exactly as it was before the instruction: `pc`, all registers, memory, `cycle_count`, the reservation and the CSRs. The faulting instruction does not retire. The host sees the error from `step()` or `run()`. It can inspect the state, change it (for example, skip the instruction by advancing `pc`), and continue.
+Execution stops with an error from the `StepError` set, and the VM state is left exactly as it was before the instruction: `pc`, all registers, memory, `cycle_count`, the reservation and the CSRs. The faulting instruction does not retire.
+
+The host sees the error from `step()` or `run()`.
+- **Details.** `describeFault(err)` reports the instruction's address and bits, and the faulting address (data address or `pc`). Call it before changing the state.
+- **Continuing.** The host can inspect the state, change it (for example, skip the instruction by advancing `pc`), and continue.
 
 | Error | Raised when |
 |---|---|
@@ -108,7 +112,7 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
 - **They retire.** `cycle_count` is incremented and `pc` already points past the instruction: `pc + 4`, or `pc + 2` for C.EBREAK. There is no C.ECALL.
 - **Continuing.** Calling `run()` again continues with the next instruction.
 - **The host's role.** The host is responsible for whatever the call means, for example reading arguments from `a0`–`a7` and writing results back.
-- **The stopping instruction's address** is `pc - 4` after `.ecall`. After `.ebreak` it is `pc - 4` or `pc - 2`, depending on whether the instruction at `pc - 2` decodes as C.EBREAK.
+- **The stopping instruction's address** is in `stop_pc`: `pc - 4` for ECALL and EBREAK, `pc - 2` for C.EBREAK. `stop_pc` is host-facing metadata, not part of the architectural state or the digest.
 
 ## CSRs
 
@@ -131,6 +135,7 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
 - **`run(max_cycles)` repeats `step()`** until an ECALL or EBREAK, a fault, or `cycle_count >= max_cycles`. In the last case it returns `.continue`, possibly without executing anything.
   - The limit is absolute: it is compared with `cycle_count`, which keeps counting across calls. It is not a budget for this call.
   - `run(null)` has no limit, and `run(0)` executes nothing.
+  - `runFor(n)` is `run(cycle_count + n)`, saturating: at most `n` more instructions.
 - **Initial state.** After `init()` or `reset()`, `pc` = 0, all registers are 0 (including `sp`), memory is all zero, `cycle_count` = 0, there is no reservation, and `mscratch` = 0.
 - **The CLI.** It loads a flat binary at address 0 and starts there. The program must set up its own stack pointer.
 
