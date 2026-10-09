@@ -123,7 +123,7 @@ src/
         edge_test.zig           — edge cases: invalid encodings, operand isolation, zero instruction
   compliance.zig            — RISC-V compliance tests companion file (imports compliance/tests.zig)
   compliance/
-    runner.zig              — ComplianceCpu (256KB, LUT decoder), runTest(), expectPass()
+    runner.zig              — ComplianceCpu (256KB, decoder follows -Ddecoder), runTest(), expectPass()
     tests.zig               — hub → rv32ui, rv32um, rv32ua, rv32uc, rv32uzba, rv32uzbb, rv32uzbs
       rv32ui_test.zig       — RV32I base integer tests (~39 tests)
       rv32um_test.zig       — RV32M multiply/divide tests (8 tests)
@@ -148,7 +148,7 @@ tests/
       link.ld               — custom linker script (origin at 0x0)
     Makefile                — builds flat binaries from riscv-tests sources
     README.md               — rebuild instructions and toolchain setup
-build.zig                 — build system configuration (library module, executable, test, test-compliance, and test-all steps)
+build.zig                 — build system configuration (library module, executable, test, test-compliance, and test-all steps; test-all runs every suite once per decoder)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 ```
 
