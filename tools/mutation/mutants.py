@@ -60,19 +60,19 @@ HC = "src/hostcall.zig"
 LD = "src/loader.zig"
 
 S32 = "@as(i32, @bitCast(rs1_val)) < @as(i32, @bitCast(rs2_val))"
-SC_CHECK = "try checkWordAccess(addr);\n                    // reservation is guaranteed"
+SC_CHECK = "try self.checkWordAccess(addr);\n                    // reservation is guaranteed"
 STEP_ZERO = "self.regs[0] = 0;\n            const rs1_val"
 WRITE_REG = "self.regs[reg] = value;\n            self.regs[0] = 0;"
 NEXT_PC = "var next_pc: u32 = self.pc +% inst_size;"
-READ_WORD = "try checkWordAccess(addr);\n            return std.mem.readInt(u32"
-WRITE_WORD = "try checkWordAccess(addr);\n            std.mem.writeInt(u32"
+READ_WORD = "try self.checkWordAccess(addr);\n            return std.mem.readInt(u32"
+WRITE_WORD = "try self.checkWordAccess(addr);\n            std.mem.writeInt(u32"
 DECODE_CACHED = "if (slot.raw != raw) slot.* = try decodeFn(raw);"
 
 
 def inline_word_check(align, bound_op, tail):
     """A private copy of checkWordAccess() for one method, with a faulty check."""
     return (f"if (addr % {align} != 0) return error.MisalignedAccess;\n"
-            f"            if (addr {bound_op} mem_size - 4) return error.AddressOutOfBounds;\n"
+            f"            if (addr {bound_op} self.memSize() - 4) return error.AddressOutOfBounds;\n"
             f"            {tail}")
 
 
@@ -118,16 +118,16 @@ PORTED = [
     dict(id="C08", file=CPU, desc="SC.W success/failure codes swapped", edits=[("self.writeReg(rd, 0); // success", "self.writeReg(rd, 1); // success"), ("self.writeReg(rd, 1); // failure", "self.writeReg(rd, 0); // failure")]),
     dict(id="C09", file=CPU, desc="AMO writes rd before memory write", edits=[("const old = try self.readWord(addr);", "const old = try self.readWord(addr);\n                    self.writeReg(rd, old);")]),
     dict(id="C10", file=CPU, desc="AMO returns new value in rd", edits=[("self.writeReg(rd, old);", "self.writeReg(rd, rv32a.execute(op, old, rs2_val));")]),
-    dict(id="C11", file=CPU, desc="fetch bound mem_size-2 -> mem_size-1", edits=[("if (self.pc > mem_size - 2) return error.PCOutOfBounds;", "if (self.pc > mem_size - 1) return error.PCOutOfBounds;")]),
-    dict(id="C12", file=CPU, desc="fetch bound mem_size-4 -> mem_size-3", edits=[("if (self.pc > mem_size - 4) return error.PCOutOfBounds;", "if (self.pc > mem_size - 3) return error.PCOutOfBounds;")]),
-    dict(id="C13", file=CPU, desc="fetch bound mem_size-4 -> mem_size-2 (32-bit fetch can overrun)", edits=[("if (self.pc > mem_size - 4) return error.PCOutOfBounds;", "if (self.pc > mem_size - 2) return error.PCOutOfBounds;")]),
+    dict(id="C11", file=CPU, desc="fetch bound mem_size-2 -> mem_size-1", edits=[("if (self.pc > self.memSize() - 2) return error.PCOutOfBounds;", "if (self.pc > self.memSize() - 1) return error.PCOutOfBounds;")]),
+    dict(id="C12", file=CPU, desc="fetch bound mem_size-4 -> mem_size-3", edits=[("if (self.pc > self.memSize() - 4) return error.PCOutOfBounds;", "if (self.pc > self.memSize() - 3) return error.PCOutOfBounds;")]),
+    dict(id="C13", file=CPU, desc="fetch bound mem_size-4 -> mem_size-2 (32-bit fetch can overrun)", edits=[("if (self.pc > self.memSize() - 4) return error.PCOutOfBounds;", "if (self.pc > self.memSize() - 2) return error.PCOutOfBounds;")]),
     dict(id="C14", file=CPU, desc="fetch misaligned-PC check removed", edits=[("if (self.pc % 2 != 0) return error.MisalignedPC;", "{}")]),
-    dict(id="C15", file=CPU, desc="readHalfword bound > -> >= (rejects last halfword)", edits=[("if (addr > mem_size - 2) return error.AddressOutOfBounds;\n            return std.mem.readInt(u16", "if (addr >= mem_size - 2) return error.AddressOutOfBounds;\n            return std.mem.readInt(u16")]),
+    dict(id="C15", file=CPU, desc="readHalfword bound > -> >= (rejects last halfword)", edits=[("if (addr > self.memSize() - 2) return error.AddressOutOfBounds;\n            return std.mem.readInt(u16", "if (addr >= self.memSize() - 2) return error.AddressOutOfBounds;\n            return std.mem.readInt(u16")]),
     dict(id="C16", file=CPU, desc="readHalfword alignment check removed", edits=[("pub fn readHalfword(self: *const Self, addr: u32) !u16 {\n            if (addr % 2 != 0) return error.MisalignedAccess;", "pub fn readHalfword(self: *const Self, addr: u32) !u16 {\n            {}")]),
     dict(id="C17", file=CPU, desc="readWord alignment %4 -> %2 (re-targeted: private copy of the word check in readWord)", edits=[(READ_WORD, inline_word_check(2, ">", "return std.mem.readInt(u32"))]),
     dict(id="C18", file=CPU, desc="readWord bound > -> >= (rejects last word; re-targeted: private copy in readWord)", edits=[(READ_WORD, inline_word_check(4, ">=", "return std.mem.readInt(u32"))]),
-    dict(id="C19", file=CPU, desc="readByte bound >= -> > (off-by-one)", edits=[("pub fn readByte(self: *const Self, addr: u32) !u8 {\n            if (addr >= mem_size)", "pub fn readByte(self: *const Self, addr: u32) !u8 {\n            if (addr > mem_size)")]),
-    dict(id="C20", file=CPU, desc="writeByte bound >= -> > (off-by-one)", edits=[("pub fn writeByte(self: *Self, addr: u32, value: u8) !void {\n            if (addr >= mem_size)", "pub fn writeByte(self: *Self, addr: u32, value: u8) !void {\n            if (addr > mem_size)")]),
+    dict(id="C19", file=CPU, desc="readByte bound >= -> > (off-by-one)", edits=[("pub fn readByte(self: *const Self, addr: u32) !u8 {\n            if (addr >= self.memSize())", "pub fn readByte(self: *const Self, addr: u32) !u8 {\n            if (addr > self.memSize())")]),
+    dict(id="C20", file=CPU, desc="writeByte bound >= -> > (off-by-one)", edits=[("pub fn writeByte(self: *Self, addr: u32, value: u8) !void {\n            if (addr >= self.memSize())", "pub fn writeByte(self: *Self, addr: u32, value: u8) !void {\n            if (addr > self.memSize())")]),
     dict(id="C21", file=CPU, desc="writeHalfword alignment check removed", edits=[("pub fn writeHalfword(self: *Self, addr: u32, value: u16) !void {\n            if (addr % 2 != 0) return error.MisalignedAccess;", "pub fn writeHalfword(self: *Self, addr: u32, value: u16) !void {\n            {}")]),
     dict(id="C22", file=CPU, desc="writeWord alignment %4 -> %2 (re-targeted: private copy of the word check in writeWord)", edits=[(WRITE_WORD, inline_word_check(2, ">", "std.mem.writeInt(u32"))]),
     dict(id="C23", file=CPU, desc="writeWord bound > -> >= (rejects last word; re-targeted: private copy in writeWord)", edits=[(WRITE_WORD, inline_word_check(4, ">=", "std.mem.writeInt(u32"))]),
@@ -274,7 +274,7 @@ NEW = [
     dict(id="ST03", file=STATE, desc="pc encoded big-endian", edits=[("std.mem.writeInt(u32, buf[12..16], cpu.pc, .little);", "std.mem.writeInt(u32, buf[12..16], cpu.pc, .big);")]),
     dict(id="ST04", file=STATE, desc="reservation valid flag and address written at each other's offsets", edits=[("std.mem.writeInt(u32, buf[152..156], @intFromBool(cpu.reservation != null), .little);", "std.mem.writeInt(u32, buf[156..160], @intFromBool(cpu.reservation != null), .little);"), ("std.mem.writeInt(u32, buf[156..160], cpu.reservation orelse 0, .little);", "std.mem.writeInt(u32, buf[152..156], cpu.reservation orelse 0, .little);")]),
     dict(id="ST05", file=STATE, desc="reservation valid flag dropped (a reservation at 0 encodes like none)", edits=[("@intFromBool(cpu.reservation != null)", "0")]),
-    dict(id="ST06", file=STATE, desc="last memory byte not hashed", edits=[("hasher.update(&cpu.memory);", "hasher.update(cpu.memory[0 .. cpu.memory.len - 1]);")]),
+    dict(id="ST06", file=STATE, desc="last memory byte not hashed", edits=[("hasher.update(cpu.memory[0..]);", "hasher.update(cpu.memory[0 .. cpu.memory.len - 1]);")]),
     dict(id="ST07", file=STATE, desc="regs[0] encoded as 0 instead of its stored value", edits=[("std.mem.writeInt(u32, buf[16 + 4 * i ..][0..4], r, .little);", "std.mem.writeInt(u32, buf[16 + 4 * i ..][0..4], if (i == 0) 0 else r, .little);")]),
 
     # ---------------- registry: the decoder's specification ----------------
@@ -288,9 +288,9 @@ NEW = [
 
     # ---------------- checkWordAccess (shared by readWord, writeWord, SC.W) ----------------
     dict(id="CW01", file=CPU, desc="checkWordAccess alignment %4 -> %2", edits=[("if (addr % 4 != 0) return error.MisalignedAccess;", "if (addr % 2 != 0) return error.MisalignedAccess;")]),
-    dict(id="CW02", file=CPU, desc="checkWordAccess bound > -> >= (rejects the last word)", edits=[("if (addr > mem_size - 4) return error.AddressOutOfBounds;", "if (addr >= mem_size - 4) return error.AddressOutOfBounds;")]),
-    dict(id="CW03", file=CPU, desc="checkWordAccess checks bounds before alignment", edits=[("if (addr % 4 != 0) return error.MisalignedAccess;\n            if (addr > mem_size - 4) return error.AddressOutOfBounds;", "if (addr > mem_size - 4) return error.AddressOutOfBounds;\n            if (addr % 4 != 0) return error.MisalignedAccess;")]),
-    dict(id="CW04", file=CPU, desc="checkWordAccess bound written as addr + 4 > mem_size (overflows near 0xFFFFFFFF)", edits=[("if (addr > mem_size - 4) return error.AddressOutOfBounds;", "if (addr + 4 > mem_size) return error.AddressOutOfBounds;")]),
+    dict(id="CW02", file=CPU, desc="checkWordAccess bound > -> >= (rejects the last word)", edits=[("if (addr > self.memSize() - 4) return error.AddressOutOfBounds;", "if (addr >= self.memSize() - 4) return error.AddressOutOfBounds;")]),
+    dict(id="CW03", file=CPU, desc="checkWordAccess checks bounds before alignment", edits=[("if (addr % 4 != 0) return error.MisalignedAccess;\n            if (addr > self.memSize() - 4) return error.AddressOutOfBounds;", "if (addr > self.memSize() - 4) return error.AddressOutOfBounds;\n            if (addr % 4 != 0) return error.MisalignedAccess;")]),
+    dict(id="CW04", file=CPU, desc="checkWordAccess bound written as addr + 4 > mem_size (overflows near 0xFFFFFFFF)", edits=[("if (addr > self.memSize() - 4) return error.AddressOutOfBounds;", "if (addr + 4 > self.memSize()) return error.AddressOutOfBounds;")]),
 
     # ---------------- SC.W ----------------
     dict(id="SC01", file=CPU, desc="SC.W clears the reservation even when its address check faults", edits=[(SC_CHECK, "errdefer self.reservation = null;\n                    " + SC_CHECK)]),
@@ -366,10 +366,10 @@ NEW = [
     # ---------------- snapshots (state.zig, restoreSnapshot) ----------------
     dict(id="SN01", file=STATE, desc="snapshot magic not checked", edits=[("if (!std.mem.eql(u8, hdr[0..4], &magic)) return error.InvalidSnapshot;\n", "")]),
     dict(id="SN02", file=STATE, desc="snapshot version not checked", edits=[("if (readU32(&hdr, 4) != version) return error.InvalidSnapshot;\n", "")]),
-    dict(id="SN03", file=STATE, desc="snapshot memory size not checked", edits=[("if (readU32(&hdr, 8) != Cpu.mem_size) return error.InvalidSnapshot;\n", "")]),
+    dict(id="SN03", file=STATE, desc="snapshot memory size not checked", edits=[("if (readU32(&hdr, 8) != cpu.memSize()) return error.InvalidSnapshot;\n", "")]),
     dict(id="SN04", file=STATE, desc="a snapshot with regs[0] != 0 accepted", edits=[("if (readU32(&hdr, 16) != 0) return error.InvalidSnapshot; // regs[0]\n", "")]),
-    dict(id="SN05", file=STATE, desc="a misaligned reservation accepted", edits=[("1 => if (res_addr % 4 != 0 or res_addr > Cpu.mem_size - 4)", "1 => if (res_addr > Cpu.mem_size - 4)")]),
-    dict(id="SN06", file=STATE, desc="a reservation on the last word rejected", edits=[("res_addr > Cpu.mem_size - 4", "res_addr >= Cpu.mem_size - 4")]),
+    dict(id="SN05", file=STATE, desc="a misaligned reservation accepted", edits=[("1 => if (res_addr % 4 != 0 or res_addr > cpu.memSize() - 4)", "1 => if (res_addr > cpu.memSize() - 4)")]),
+    dict(id="SN06", file=STATE, desc="a reservation on the last word rejected", edits=[("res_addr > cpu.memSize() - 4", "res_addr >= cpu.memSize() - 4")]),
     dict(id="SN07", file=STATE, desc="no reservation but a nonzero reservation address accepted", edits=[("0 => if (res_addr != 0) return error.InvalidSnapshot,", "0 => {},")]),
     dict(id="SN08", file=STATE, desc="a reservation flag other than 0 or 1 accepted (as none)", edits=[("else => return error.InvalidSnapshot,\n    }", "else => {},\n    }")]),
     dict(id="SN09", file=STATE, desc="mscratch not restored", edits=[("cpu.csrs = .{ .mscratch = readU32(&hdr, 160) };", "cpu.csrs = .{};")]),
@@ -379,8 +379,8 @@ NEW = [
     dict(id="SN13", file=STATE, desc="the reservation's valid flag is not encoded (a reservation is lost on restore)", edits=[("std.mem.writeInt(u32, buf[152..156], @intFromBool(cpu.reservation != null), .little);", "std.mem.writeInt(u32, buf[152..156], 0, .little);")]),
 
     # ---------------- CLI loading and exit (main.zig, main/load.zig) ----------------
-    dict(id="CL01", file=MAIN, desc="initial sp 16 bytes below the top of memory", edits=[("pub const initial_sp: u32 = det.Cpu.mem_size & ~@as(u32, 15);", "pub const initial_sp: u32 = (det.Cpu.mem_size & ~@as(u32, 15)) -% 16;")]),
-    dict(id="CL02", file=ARGS, desc="an odd --load-addr accepted", edits=[("if (addr % 2 != 0 or addr >= mem_size)", "if (addr >= mem_size)")]),
+    dict(id="CL01", file=MAIN, desc="initial sp 16 bytes below the top of memory", edits=[("    return memory & ~@as(u32, 15);\n", "    return (memory & ~@as(u32, 15)) -% 16;\n")]),
+    dict(id="CL02", file=ARGS, desc="an odd --load-addr accepted", edits=[("                if (addr % 2 != 0) return fail(diag, \"--load-addr '{s}' must be even\", .{value.?});\n", "")]),
     dict(id="CL03", file=LOADC, desc="a flat binary starts at 0 instead of its load address", edits=[("        .entry = addr,\n", "        .entry = 0,\n")]),
     dict(id="CL04", file=MAIN, desc="--input ignored", edits=[(".{ .input = input, .stdout = cli.stdout", ".{ .input = &.{}, .stdout = cli.stdout")]),
     dict(id="CL05", file=MAIN, desc="exit status saturates at 255 instead of keeping the low 8 bits", edits=[(".exit => |s| @fromBackingInt(@as(u8, @truncate(s))),", ".exit => |s| @fromBackingInt(@as(u8, @intCast(@min(s, 255)))),")]),
@@ -395,8 +395,8 @@ NEW = [
     dict(id="AR03", file=ARGS, desc="the --help/--version scan does not stop at '--'", edits=[("        if (std.mem.eql(u8, arg, \"--\")) break;\n", "")]),
     dict(id="AR04", file=ARGS, desc="a second program argument replaces the first", edits=[("            if (program) |first| return fail(diag, \"unexpected argument '{s}' after the program '{s}' (programs take no arguments)\", .{ arg, first });\n", "")]),
     dict(id="AR05", file=ARGS, desc="a negative number is not reported as negative", edits=[("    if (std.mem.startsWith(u8, text, \"-\")) return fail(diag, \"{s} '{s}' is negative\", .{ option, text });\n", "")]),
-    dict(id="AR06", file=ARGS, desc="a --dump-range that ends at the top of memory is rejected", edits=[("if (@as(u64, range.start) + range.len > mem_size)", "if (@as(u64, range.start) + range.len >= mem_size)")]),
-    dict(id="AR07", file=ARGS, desc="the --dump-range end wraps around 2^32", edits=[("if (@as(u64, range.start) + range.len > mem_size)", "if (range.start +% range.len > mem_size)")]),
+    dict(id="AR06", file=ARGS, desc="a --dump-range that ends at the top of memory is rejected", edits=[("if (@as(u64, r.start) + r.len > config.memory)", "if (@as(u64, r.start) + r.len >= config.memory)")]),
+    dict(id="AR07", file=ARGS, desc="the --dump-range end wraps around 2^32", edits=[("if (@as(u64, r.start) + r.len > config.memory)", "if (r.start +% r.len > config.memory)")]),
     dict(id="AR08", file=ARGS, desc="--disassemble accepts the options that only apply to a run", edits=[("            if (o[1]) return fail(diag, \"{s} does not apply to --disassemble", "            if (false and o[1]) return fail(diag, \"{s} does not apply to --disassemble")]),
     dict(id="AR09", file=ARGS, desc="--load-addr accepted with --demo", edits=[("        if (config.load_addr != null) return fail(diag, \"--load-addr does not apply to --demo\", .{});\n", "")]),
     dict(id="AR10", file=ARGS, desc="--input - names a file '-' instead of stdin", edits=[(".input => config.input = if (std.mem.eql(u8, value.?, \"-\")) .stdin else .{ .file = value.? },", ".input => config.input = .{ .file = value.? },")]),
@@ -418,8 +418,35 @@ NEW = [
     dict(id="DS02", file=DISASM, desc="the listing steps 4 bytes over a 16-bit instruction", edits=[("addr += if (det.instructions.isCompressed(raw)) 2 else 4;", "addr += 4;")]),
     dict(id="DS03", file=DISASM, desc="a branch target is relative to the next instruction, not to its own address", edits=[("return w.print(\"0x{X:0>8}\", .{pc +% @as(u32, @bitCast(self.offset))});", "return w.print(\"0x{X:0>8}\", .{pc +% 4 +% @as(u32, @bitCast(self.offset))});")]),
     dict(id="DM01", file=DUMP, desc="hexdump addresses ignore the base address", edits=[("try w.print(\"{X:0>8}  \", .{base + offset});", "try w.print(\"{X:0>8}  \", .{offset});")]),
-    dict(id="DM02", file=MAIN, desc="--dump-range dumps all of memory", edits=[("const range = d.range orelse args.Range{ .start = 0, .len = det.Cpu.mem_size };", "const range = args.Range{ .start = 0, .len = det.Cpu.mem_size };")]),
+    dict(id="DM02", file=MAIN, desc="--dump-range dumps all of memory", edits=[("const range = d.range orelse args.Range{ .start = 0, .len = vm.memSize() };", "const range = args.Range{ .start = 0, .len = vm.memSize() };")]),
     dict(id="UN01", file=UNITS, desc="0 is counted as singular (\"0 cycle\")", edits=[("if (self.n == 1) \"\" else \"s\"", "if (self.n <= 1) \"\" else \"s\"")]),
+    # ---------------- the two kinds of memory (docs/design/memory-size.md) ----------------
+    dict(id="MK01", file=CPU, desc="a RuntimeCpuType's memSize() is 4 bytes short", edits=[(".runtime => @intCast(self.memory.len),", ".runtime => @intCast(self.memory.len - 4),")]),
+    dict(id="MK02", file=CPU, desc="validMemorySize() accepts a size that is not a multiple of 4", edits=[("return len >= 4 and len % 4 == 0 and len <=", "return len >= 4 and len <=")]),
+    dict(id="MK03", file=CPU, desc="validMemorySize() accepts 2^32 bytes", edits=[("len <= std.math.maxInt(u32);", "len <= @as(usize, std.math.maxInt(u32)) + 1;")]),
+    dict(id="MK04", file=CPU, desc="validMemorySize() accepts 0 bytes", edits=[("return len >= 4 and len % 4 == 0", "return len % 4 == 0")]),
+    dict(id="MK05", file=CPU, desc="a RuntimeCpuType's init does not check the memory size", edits=[("            if (!validMemorySize(memory.len)) return error.InvalidMemorySize;\n            self.memory = memory;", "            self.memory = memory;")]),
+    dict(id="MK06", file=CPU, desc="initInPlace() takes the new memory before it rejects its size", edits=[("            if (!validMemorySize(memory.len)) return error.InvalidMemorySize;\n            self.memory = memory;", "            self.memory = memory;\n            if (!validMemorySize(memory.len)) return error.InvalidMemorySize;")]),
+    dict(id="MK07", file=CPU, desc="reset() leaves a RuntimeCpuType's memory as it was", edits=[("            @memset(self.memory[0..], 0);", "            if (kind == .fixed) @memset(self.memory[0..], 0);")]),
+    dict(id="MK08", file=CPU, desc="snapshotSize() leaves out the header", edits=[("return state.header_len + @as(usize, self.memSize());", "return @as(usize, self.memSize());")]),
+    dict(id="MK09", file=STATE, desc="snapshotMemorySize() does not check the version", edits=[("    if (std.mem.readInt(u32, snapshot_start[4..8], .little) != version) return error.InvalidSnapshot;\n", "")]),
+    dict(id="MK10", file=STATE, desc="snapshotMemorySize() accepts a size that is not a multiple of 4", edits=[("if (size < 4 or size % 4 != 0) return error.InvalidSnapshot;", "if (size < 4) return error.InvalidSnapshot;")]),
+    dict(id="MK11", file=STATE, desc="snapshotMemorySize() does not check the magic", edits=[("    if (!std.mem.eql(u8, snapshot_start[0..4], &magic)) return error.InvalidSnapshot;\n    if (std.mem.readInt(u32, snapshot_start[4..8]", "    if (std.mem.readInt(u32, snapshot_start[4..8]")]),
+    dict(id="ME01", file=ARGS, desc="--memory is parsed but ignored", edits=[(".memory => config.memory = try memorySize(value.?, diag),", ".memory => _ = try memorySize(value.?, diag),")]),
+    dict(id="ME02", file=ARGS, desc="KiB means 1000 bytes", edits=[('.{ "KiB", 1 << 10 }', '.{ "KiB", 1000 }')]),
+    dict(id="ME03", file=ARGS, desc="--memory '64 KiB' (a space before the unit) is rejected", edits=[('digits = std.mem.trimEnd(u8, text[0 .. text.len - suffix[0].len], " ");', "digits = text[0 .. text.len - suffix[0].len];")]),
+    dict(id="ME04", file=ARGS, desc="a negative --memory is reported as too large", edits=[('    if (std.mem.startsWith(u8, digits, "-")) return fail(diag, "--memory \'{s}\' is not a size (bytes, or a number with KiB, MiB or GiB)", .{text});\n', "")]),
+    dict(id="ME05", file=ARGS, desc="a --memory of 4 GiB or more is not reported as too large", edits=[('    if (bytes > std.math.maxInt(u32)) return fail(diag, "--memory \'{s}\' is too large: it must be less than 4 GiB", .{text});\n', "")]),
+    dict(id="ME06", file=ARGS, desc="--load-addr is not checked against the memory size", edits=[("    if (config.load_addr) |addr| if (addr >= config.memory)", "    if (config.load_addr) |addr| if (addr >= std.math.maxInt(u32))")]),
+    dict(id="ME07", file=ARGS, desc="--dump-range is checked against the default memory, not --memory", edits=[("if (@as(u64, r.start) + r.len > config.memory)", "if (@as(u64, r.start) + r.len > det.default_memory_size)")]),
+    dict(id="ME08", file=MAIN, desc="VM memory that cannot be allocated gives the generic out-of-memory error", edits=[("""        const memory = cli.gpa.alloc(u8, config.memory) catch |err| switch (err) {
+            error.OutOfMemory => return report.userError(cli.stderr, "cannot allocate {f} of VM memory", .{units.MemSize{ .bytes = config.memory }}),
+        };""", "        const memory = try cli.gpa.alloc(u8, config.memory);")]),
+    dict(id="ME09", file=MAIN, desc="the CLI's VM gets the default memory, not --memory", edits=[("cli.gpa.alloc(u8, config.memory) catch", "cli.gpa.alloc(u8, det.default_memory_size) catch")]),
+    dict(id="ME10", file=MAIN, desc="the preamble names the default memory size", edits=[("units.MemSize{ .bytes = vm.memSize() }, Limit{", "units.MemSize{ .bytes = det.default_memory_size }, Limit{")]),
+    dict(id="ME11", file=REPORT, desc="a fault outside memory names the default memory size", edits=[("const mem_size: units.MemSize = .{ .bytes = vm.memSize() };", "const mem_size: units.MemSize = .{ .bytes = det.default_memory_size };")]),
+    dict(id="ME12", file=LOADC, desc="a flat binary's room is computed from the default memory", edits=[("    const room = vm.memSize() - addr;", "    const room = det.default_memory_size - addr;")]),
+    dict(id="ME13", file=UNITS, desc="a size in GiB is printed in MiB", edits=[('        if (self.bytes != 0 and self.bytes % (1024 * 1024 * 1024) == 0) return w.print("{d} GiB", .{self.bytes / (1024 * 1024 * 1024)});\n', "")]),
     dict(id="LD14", file=LD, desc="segments() returns an iterator that the checks already ran to the end", edits=[("return .{ .entry = entry, .segments = all };", "return .{ .entry = entry, .segments = it };")]),
 ]
 

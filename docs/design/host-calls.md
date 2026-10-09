@@ -48,7 +48,7 @@ while (true) {
 }
 ```
 
-`handle()` works on any `CpuType`. It fails only if the host's output writer fails (`error.WriteFailed`), which is a host problem, not a guest-visible result.
+`handle()` works on any `CpuType` or `RuntimeCpuType`. It fails only if the host's output writer fails (`error.WriteFailed`), which is a host problem, not a guest-visible result.
 
 ## CLI
 

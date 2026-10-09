@@ -39,6 +39,12 @@ jobs:
           # The report goes to stderr; the program's output alone to stdout.
           zig build run -Doptimize=${{ matrix.optimize }} -- src/compliance/bin/rv32ui/simple.bin 2>&1 | tee out.txt
           grep -q "x3   gp   0x00000001  1$" out.txt
+          # ADDI x1, x0, 42; EBREAK, with the smallest memory it fits in and larger ones
+          printf '\223\000\240\002\163\000\020\000' > tiny.bin
+          for memory in 8 1MiB 256MiB; do
+            zig build run -Doptimize=${{ matrix.optimize }} -- tiny.bin --memory $memory 2>&1 | tee out.txt
+            grep -q "x1   ra   0x0000002A  42$" out.txt
+          done
 
   big-endian:
     name: test (s390x big-endian, qemu)
@@ -50,29 +56,6 @@ jobs:
           cache-key: big-endian
       - run: sudo apt-get update && sudo apt-get install -y qemu-user
       - run: zig build test-all -Dtarget=s390x-linux-musl -fqemu --summary all
-
-  memory-size:
-    name: test (memory_size=${{ matrix.memory_size }})
-    strategy:
-      fail-fast: false
-      matrix:
-        memory_size: [64, 1048576, 268435456]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          cache-key: memory-size-${{ matrix.memory_size }}
-      - run: zig build test-all -Dmemory_size=${{ matrix.memory_size }} --summary all
-      - name: CLI smoke run (debug and fast)
-        shell: bash
-        run: |
-          # ADDI x1, x0, 42; EBREAK — small enough for every memory size
-          printf '\223\000\240\002\163\000\020\000' > tiny.bin
-          for opt in debug fast; do
-            zig build run -Doptimize=$opt -Dmemory_size=${{ matrix.memory_size }} -- tiny.bin 2>&1 | tee out.txt
-            grep -q "x1   ra   0x0000002A  42$" out.txt
-          done
 
   decoder:
     name: decoder vs registry (all 2^30 32-bit encodings)

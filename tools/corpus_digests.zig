@@ -6,12 +6,14 @@
 //! where <stop> is `ecall`, `ebreak`, `limit` or `error.<Name>`.
 //!
 //! usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--pass ROOT]...
-//!                       [--no-decode-cache] ROOT=DIR...
+//!                       [--no-decode-cache] [--runtime-memory] ROOT=DIR...
 //!
 //!   ROOT=DIR          run every *.bin under DIR, naming it ROOT/<path relative to DIR>
 //!   --pass ROOT       programs under ROOT follow the riscv-tests convention: each must
 //!                     stop at EBREAK with gp (x3) = 1; exit 1 otherwise
 //!   --no-decode-cache run on a VM without the decode cache (results must not change)
+//!   --runtime-memory  run on a RuntimeCpuType, with a host buffer as its memory, instead
+//!                     of a CpuType (results must not change)
 //!   --check FILE      compare the lines with FILE instead of printing them; exit 1 on
 //!                     any difference
 //!   --expect ROOT=DIR programs under ROOT follow the C corpus convention (crt0 ends with
@@ -29,14 +31,12 @@ const det = @import("determinant");
 
 /// Every corpus program runs with 256 KiB of memory, like the compliance suite.
 const corpus_memory = 256 * 1024;
-const CorpusCpu = det.CpuType(corpus_memory, .{});
-const UncachedCpu = det.CpuType(corpus_memory, .{ .decode_cache_entries = 0 });
 const max_cycles: u64 = 100_000_000;
 
 const Root = struct { name: []const u8, dir: []const u8, expect_dir: ?[]const u8 = null, must_pass: bool = false };
 
 fn usage() noreturn {
-    std.debug.print("usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--pass ROOT]... [--no-decode-cache] ROOT=DIR...\n", .{});
+    std.debug.print("usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... [--pass ROOT]... [--no-decode-cache] [--runtime-memory] ROOT=DIR...\n", .{});
     std.process.exit(2);
 }
 
@@ -56,10 +56,13 @@ pub fn main(init: std.process.Init) !void {
     var passes: std.ArrayList([]const u8) = .empty;
     var check_path: ?[]const u8 = null;
     var decode_cache = true;
+    var runtime_memory = false;
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--no-decode-cache")) {
             decode_cache = false;
+        } else if (std.mem.eql(u8, args[i], "--runtime-memory")) {
+            runtime_memory = true;
         } else if (std.mem.eql(u8, args[i], "--check")) {
             i += 1;
             if (i == args.len) usage();
@@ -94,9 +97,9 @@ pub fn main(init: std.process.Init) !void {
     defer out.deinit();
     var counts: Counts = .{};
     if (decode_cache) {
-        try runCorpus(CorpusCpu, io, gpa, arena, roots.items, &out.writer, &counts);
+        try runOn(.{}, runtime_memory, io, gpa, arena, roots.items, &out.writer, &counts);
     } else {
-        try runCorpus(UncachedCpu, io, gpa, arena, roots.items, &out.writer, &counts);
+        try runOn(.{ .decode_cache_entries = 0 }, runtime_memory, io, gpa, arena, roots.items, &out.writer, &counts);
     }
     const n_programs = counts.programs;
     const n_unexpected = counts.unexpected;
@@ -108,7 +111,12 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("corpus digests differ from {s}; if the change is intended, regenerate it with `zig build digests`\n", .{golden_path});
             std.process.exit(1);
         }
-        std.debug.print("corpus digests: {d} programs match {s}{s}\n", .{ n_programs, golden_path, if (decode_cache) "" else " (decode cache off)" });
+        std.debug.print("corpus digests: {d} programs match {s}{s}{s}\n", .{
+            n_programs,
+            golden_path,
+            if (decode_cache) "" else " (decode cache off)",
+            if (runtime_memory) " (runtime memory)" else "",
+        });
     } else {
         var buf: [4096]u8 = undefined;
         var fw: Io.File.Writer = .initStreaming(Io.File.stdout(), io, &buf);
@@ -120,8 +128,11 @@ pub fn main(init: std.process.Init) !void {
 
 const Counts = struct { programs: usize = 0, unexpected: usize = 0 };
 
-fn runCorpus(
-    comptime Cpu: type,
+/// Run the corpus on a VM with these options and 256 KiB of memory, inside the VM or
+/// (`runtime_memory`) as a host buffer.
+fn runOn(
+    comptime options: det.CpuOptions,
+    runtime_memory: bool,
     io: Io,
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
@@ -129,14 +140,35 @@ fn runCorpus(
     out: *Io.Writer,
     counts: *Counts,
 ) !void {
-    const vm = try gpa.create(Cpu);
-    defer gpa.destroy(vm);
+    if (runtime_memory) {
+        const memory = try gpa.alloc(u8, corpus_memory);
+        defer gpa.free(memory);
+        const vm = try gpa.create(det.RuntimeCpuType(options));
+        defer gpa.destroy(vm);
+        try vm.initInPlace(memory);
+        try runCorpus(vm, io, gpa, arena, roots, out, counts);
+    } else {
+        const vm = try gpa.create(det.CpuType(corpus_memory, options));
+        defer gpa.destroy(vm);
+        try runCorpus(vm, io, gpa, arena, roots, out, counts);
+    }
+}
+
+fn runCorpus(
+    vm: anytype,
+    io: Io,
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    roots: []const Root,
+    out: *Io.Writer,
+    counts: *Counts,
+) !void {
     for (roots) |root| {
         var dir = try Io.Dir.cwd().openDir(io, root.dir, .{ .iterate = true });
         defer dir.close(io);
         const paths = try collectPrograms(io, gpa, arena, dir);
         for (paths) |p| {
-            const program = try dir.readFileAlloc(io, p, arena, .limited(Cpu.mem_size + 1));
+            const program = try dir.readFileAlloc(io, p, arena, .limited(@as(usize, vm.memSize()) + 1));
             vm.reset();
             const stop = try runProgram(arena, vm, program);
             try out.print("{s}/{s} {s} {d} {x}\n", .{ root.name, p, stop, vm.cycle_count, &vm.stateDigest() });

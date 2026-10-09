@@ -1,6 +1,6 @@
 # The CLI
 
-- **Status:** implemented in Determinant 0.3.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged.
+- **Status:** implemented in Determinant 0.3.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged. `--memory` follows in 0.4.0 ([memory-size.md](memory-size.md)).
 
 ## Problem
 
@@ -30,6 +30,7 @@ determinant --demo [options]
 
 | Option | Meaning |
 |---|---|
+| `--memory SIZE` | VM memory: bytes, or with a `KiB`, `MiB` or `GiB` suffix (`1MiB`, `64 KiB`). A positive multiple of 4, below 4 GiB. Default: 64 KiB |
 | `--max-cycles N` | Stop after N cycles (retired instructions). Default: no limit |
 | `--input FILE` | The bytes the program's `read` returns; `-` reads all of stdin before the run. Default: none |
 | `--load-addr ADDR` | Where a flat binary is loaded and starts. Default: 0. An error with an ELF file or `--demo` |
@@ -40,12 +41,12 @@ determinant --demo [options]
 | `--disassemble` | List the program's instructions instead of running it: a flat binary from its load address, an ELF file's executable segments |
 | `-q`, `--quiet` | See Streams |
 | `--demo` | Run the built-in demo program instead of a file |
-| `-h`, `--help`, `--version` | Show the help, or the version and build configuration |
+| `-h`, `--help`, `--version` | Show the help, or the version and build mode |
 | `--` | End of options: the next argument is the program even if it starts with `-` |
 
 - **Values.** A value follows its option as the next argument or after `=` (`--max-cycles=1000`). `--dump-memory` takes its format only after `=`, so `--dump-memory raw` means a program file named `raw`.
 - **Numbers** are decimal, or hexadecimal, octal or binary with a `0x`, `0o` or `0b` prefix, with optional `_` separators.
-- **Errors.** An unknown option, a missing or invalid value, a second program argument, or an option that does not apply (`--load-addr` with an ELF file or `--demo`, a program with `--demo`, a dump range outside memory) is a usage error: exit status 1, a message and a pointer to `--help`.
+- **Errors.** An unknown option, a missing or invalid value, a second program argument, or an option that does not apply (`--load-addr` with an ELF file or `--demo`, a program with `--demo`, a load address or dump range outside memory) is a usage error: exit status 1, a message and a pointer to `--help`. The checks against the memory size come after all the options, so `--memory` may follow them. Memory that cannot be allocated is an error too.
 - **Repeated options.** The last one wins.
 - **No arguments** print the usage on stderr and exit with status 1.
 - **Program arguments** (argv) are not supported: they need an ABI for the initial stack. Rejecting extra arguments keeps that open.
@@ -67,7 +68,7 @@ Registers:
 ```
 
 - **Stops.** `Stopped at EBREAK (0x...) after N cycles`; `Stopped at ECALL (0x...) after N cycles: a7 = 0 is not a host call`; `Cycle limit reached after N cycles`; `Program exited with status N after M cycles`.
-- **Faults** give the error in words and by name, the instruction (address, bits, disassembly) and the faulting address. An address outside memory names the memory size and `-Dmemory_size`.
+- **Faults** give the error in words and by name, the instruction (address, bits, disassembly) and the faulting address. An address outside memory names the memory size and `--memory`.
 - **Disassembly** uses ABI register names (`ra`, `sp`, `a0`), CSR names (`cycle`, `mscratch`), and absolute targets for branches and jumps when the instruction's address is known (`BEQ a0, a1, 0x00000050`). Without an address, the offset has an explicit sign (`+16`).
 
 ## Exit status
@@ -77,5 +78,5 @@ Unchanged from 0.2.0: 0 when the program stopped at ECALL or EBREAK, 1 for a usa
 ## Alternatives considered
 
 - **Keep the report on stdout and add only `-q`.** Without `-q` the program's output would still be mixed with the report, so the default would stay wrong for pipelines. Debuggers and profilers (`time`, valgrind, Spike's log) report on stderr for the same reason.
-- **A runtime `--memory` option.** The memory size is a comptime parameter of `CpuType`. Instantiating several sizes in the CLI would multiply its code for a build-time setting; the fault message points to `-Dmemory_size` instead.
+- **The memory size as a build option only** (`-Dmemory_size`, as in 0.3.0). A program that needs more memory than the build has faulted until the user rebuilt. 0.4.0 replaces it with `--memory` ([memory-size.md](memory-size.md)).
 - **Snapshots from the CLI** (`--save-snapshot`, `--resume`). The library supports them, but the host-call input position is not VM state, so resuming a program that reads input needs more design. Left for later.

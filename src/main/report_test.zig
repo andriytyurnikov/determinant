@@ -11,13 +11,13 @@ const h = @import("test_helpers.zig");
 
 /// A whole run: the program (written to a file, whose path is the first argument;
 /// null for none), the other arguments, and what must come out. In `stderr`,
-/// {path} is the program's path, {mem} this build's memory size, and
-/// {[sp]X:0>8} and {sp_dec} the initial sp.
+/// {path} is the program's path, {mem} the memory size, and {sp} and {sp_dec} the
+/// initial sp (see h.expandAt()).
 const Run = struct {
     name: []const u8,
     program: ?[]const u8,
     args: []const [:0]const u8 = &.{},
-    /// Smallest memory the run needs; others skip it.
+    /// Smallest memory the run needs; it is not checked with less.
     min_memory: u32,
     /// Largest memory with which the run does what is expected.
     max_memory: u32 = std.math.maxInt(u32),
@@ -158,7 +158,7 @@ const runs = [_]Run{
         \\
         \\Fault after 1 cycle: memory access out of bounds (AddressOutOfBounds)
         \\  instruction at 0x00000004: 0040A103  LW sp, 4(ra)
-        \\  data address 0x80000004, not inside the {mem} of VM memory (build option -Dmemory_size)
+        \\  data address 0x80000004, not inside the {mem} of VM memory (see --memory)
         \\
         \\Registers:
         \\  pc        0x00000004
@@ -177,7 +177,7 @@ const runs = [_]Run{
         \\Running {path} (8 bytes at 0x00000000) in {mem} of VM memory, no cycle limit
         \\
         \\Fault after 2 cycles: pc out of bounds (PCOutOfBounds)
-        \\  instruction at 0x80000000, not inside the {mem} of VM memory (build option -Dmemory_size)
+        \\  instruction at 0x80000000, not inside the {mem} of VM memory (see --memory)
         \\
         \\Registers:
         \\  pc        0x80000000
@@ -391,9 +391,17 @@ const runs = [_]Run{
     },
 };
 
-test "report: whole runs, exactly" {
-    for (runs) |r| {
-        if (det.Cpu.mem_size >= r.min_memory and det.Cpu.mem_size <= r.max_memory) {
+/// The memory sizes every run is checked with (null: no --memory, the default 64 KiB).
+/// 4100 is not a multiple of 16, so sp starts below the top.
+const run_memory = [_]?u32{ null, 64, 4100, 1 << 20, 256 << 20 };
+
+test "report: whole runs, exactly, with several memory sizes" {
+    for (run_memory) |memory| {
+        const size = memory orelse det.default_memory_size;
+        const size_arg = try h.alloc.printSentinel("{d}", .{size}, 0);
+        defer h.alloc.free(size_arg);
+        for (runs) |r| {
+            if (size < r.min_memory or size > r.max_memory) continue;
             var fx: h.Fixture = .init();
             defer fx.deinit();
             fx.stdin = .fixed(r.stdin);
@@ -402,10 +410,11 @@ test "report: whole runs, exactly" {
             const path: []const u8 = if (r.program) |p| try fx.file("prog.bin", p) else "";
             if (r.program != null) try argv.append(h.alloc, try fx.path("prog.bin"));
             try argv.appendSlice(h.alloc, r.args);
+            if (memory != null) try argv.appendSlice(h.alloc, &.{ "--memory", size_arg });
 
             const got = try fx.run(argv.items);
-            errdefer std.debug.print("\nrun: {s}\n", .{r.name});
-            const want_stderr = try h.expand(r.stderr, path);
+            errdefer std.debug.print("\nrun: {s}, {d} bytes of memory\n", .{ r.name, size });
+            const want_stderr = try h.expandAt(r.stderr, path, size);
             defer h.alloc.free(want_stderr);
             try std.testing.expectEqualStrings(want_stderr, fx.stderr());
             try std.testing.expectEqualStrings(r.stdout, fx.stdout());
@@ -415,18 +424,18 @@ test "report: whole runs, exactly" {
 }
 
 test "--digest: the SHA-256 of the final state, as stateDigest() gives it" {
-    try h.needMemory(h.hello.len);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("hello.bin", &h.hello);
     try std.testing.expectEqual(@as(u8, 7), try fx.run(&.{ prog, "-q", "--digest" }));
 
-    // The same run through the library: load at 0, sp at the top, host calls.
+    // The same run through the library, on a CpuType with the default memory inside it:
+    // load at 0, sp at the top, host calls.
     const vm = try h.alloc.create(det.Cpu);
     defer h.alloc.destroy(vm);
     vm.reset();
     try vm.loadProgram(&h.hello, 0);
-    vm.writeReg(2, main_mod.initial_sp);
+    vm.writeReg(2, main_mod.initialSp(det.Cpu.mem_size));
     var sink: Io.Writer.Discarding = .init(&.{});
     var env: det.hostcall.Env = .{ .stdout = &sink.writer, .stderr = &sink.writer };
     while (try vm.run(null) == .ecall) {
@@ -441,16 +450,15 @@ test "--trace changes nothing the program computes" {
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const input = try fx.file("input.txt", "some input\n");
-    const programs = [_]struct { []const u8, u32 }{
-        .{ &h.echo, 0x240 },
-        .{ &h.hello, h.hello.len },
-        .{ &trace_program, 0x101 },
-        .{ &misaligned, 8 }, // a fault
-        .{ &h.loop, 4 }, // the cycle limit
+    const programs = [_][]const u8{
+        &h.echo,
+        &h.hello,
+        &trace_program,
+        &misaligned, // a fault
+        &h.loop, // the cycle limit
     };
     for (programs) |p| {
-        if (det.Cpu.mem_size < p[1]) continue;
-        const prog = try fx.file("prog.bin", p[0]);
+        const prog = try fx.file("prog.bin", p);
         const plain_status = try fx.run(&.{ prog, "-q", "--digest", "--input", input, "--max-cycles", "1000" });
         const plain_stdout = try h.alloc.dupe(u8, fx.stdout());
         defer h.alloc.free(plain_stdout);
@@ -475,7 +483,6 @@ test "stdout carries only the program's output, and the streams keep their order
     // The program writes "A" to stdout, "B" to stderr and "C" to stdout. With both
     // streams buffered into one file, as with `> log 2>&1`, the log must show the
     // report and the three writes in the order they happened.
-    try h.needMemory(66);
     const streams = h.le(&.{
         0x00000597, // AUIPC a1, 0
         0x03C58593, // ADDI a1, a1, 60 (the text)
@@ -596,6 +603,9 @@ test "MemSize and Count" {
     var buf: [32]u8 = undefined;
     try std.testing.expectEqualStrings("64 KiB", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 64 * 1024 }}));
     try std.testing.expectEqualStrings("256 MiB", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 256 * 1024 * 1024 }}));
+    try std.testing.expectEqualStrings("3 GiB", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 3 << 30 }}));
+    try std.testing.expectEqualStrings("4194300 KiB", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 0xFFFF_F000 }}));
+    try std.testing.expectEqualStrings("4294967292 bytes", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 0xFFFF_FFFC }}));
     try std.testing.expectEqualStrings("1025 KiB", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 1024 * 1024 + 1024 }}));
     try std.testing.expectEqualStrings("100 bytes", try std.mem.print(&buf, "{f}", .{units.MemSize{ .bytes = 100 }}));
     try std.testing.expectEqualStrings("0 cycles", try std.mem.print(&buf, "{f}", .{units.cycles(0)}));

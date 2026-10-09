@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0 — unreleased
+
+The memory size can be chosen at run time, by the library and by the CLI's `--memory`. The VM's behavior is unchanged: SEMANTICS.md (semantics version 1, state encoding version 1) and every digest in `tests/digests.txt` are the same. [docs/design/memory-size.md](docs/design/memory-size.md) describes the design.
+
+### Library API (additions)
+
+- **`RuntimeCpuType(options)`** and **`RuntimeCpu`**: a VM whose memory is a buffer the host passes to `init(memory)` or `initInPlace(memory)`, of any size from 4 bytes to 4 GiB − 4 (a multiple of 4). The VM still never allocates. It behaves exactly like a `CpuType` of the same size: same results, same snapshots, same digests. Copying the struct shares the memory.
+- **`memSize()`** and **`snapshotSize()`** on both kinds. `CpuType` keeps `mem_size` and `snapshot_size`, and its code is unchanged.
+- **`validMemorySize()`**, **`snapshotMemorySize()`** (the size in a snapshot's header, to size a `RuntimeCpu` before restoring) and **`InitError`**.
+
+### CLI
+
+- **`--memory SIZE`**: bytes, or with a `KiB`, `MiB` or `GiB` suffix (`--memory 1MiB`). Default: 64 KiB. One binary now runs programs of every size; the C corpus ELF runs with `--memory 256KiB`. Memory that cannot be allocated is an error.
+- **Messages.** A fault or load error outside memory points to `--memory` instead of `-Dmemory_size`. An odd `--load-addr` and one outside memory have their own messages, and both checks come after all the options, so `--memory` may follow `--load-addr` or `--dump-range`.
+- **`--version`** no longer names a memory size (`determinant 0.4.0 (fast build)`), and `--help` no longer prints the initial `sp`, which depends on `--memory`.
+
+### Build, tests and tooling
+
+- **`-Dmemory_size` is removed** (breaking). It set the CLI's memory size and the `Cpu` alias. Use `--memory` for the CLI, and `CpuType(N, options)` or `RuntimeCpuType` in code; `Cpu` is now always 64 KiB.
+- **Both kinds checked against each other.** The compliance suite runs every binary on both kinds of memory and requires the same result and final state. `test-digests` adds a third run, on a `RuntimeCpuType` (`corpus_digests --runtime-memory`). `cpu/memory_kinds_test.zig` checks every bound on both kinds with sizes from 4 bytes to 64 KiB, and `init`'s size checks.
+- **CLI tests at several sizes in one build.** The whole-run goldens run with the default memory and with 64 B, 4100 B, 1 MiB and 256 MiB. No test skips for lack of memory. CI's three `-Dmemory_size` jobs are replaced by smoke runs with `--memory`.
+- **Speed.** `zig build bench` reports both kinds. On an Apple M2, `CpuType` is unchanged (about 275–290 MIPS), and `RuntimeCpuType` is about 4% slower.
+- **Mutation catalogue.** 24 mutants are re-anchored to `memSize()`, and 24 new ones cover the two kinds, `init`'s checks, the snapshot size helpers and `--memory`. The harness knows the third digest run (`digests_runtime`).
+
 ## 0.3.0 — 2026-10-09
 
 The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encoding version 1) is the same, and so is every compliance digest in `tests/digests.txt` (the C corpus lines changed only because its binaries were rebuilt): 0.2.0 and 0.3.0 compute identical results for the same program. The CLI's output and some of its arguments change; [docs/design/cli.md](docs/design/cli.md) describes the new CLI.

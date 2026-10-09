@@ -6,9 +6,6 @@ const main_mod = @import("../main.zig");
 const args = main_mod.args;
 const h = @import("test_helpers.zig");
 
-/// parse() takes the memory size, so these rows do not depend on -Dmemory_size.
-const mem_size: u32 = 64 * 1024;
-
 const Want = union(enum) {
     command: args.Command,
     /// A usage error whose message contains this.
@@ -59,6 +56,20 @@ const cases = [_]Case{
     .{ .args = &.{ "p.bin", "--load-addr=0" }, .want = run(.{ .program = file("p.bin"), .load_addr = 0 }) },
     .{ .args = &.{ "p.bin", "--load-addr", "0xFFFE" }, .want = run(.{ .program = file("p.bin"), .load_addr = 0xFFFE }) },
 
+    // Memory: bytes or KiB/MiB/GiB, and the limits it sets, wherever it is
+    .{ .args = &.{ "p.bin", "--memory", "1024" }, .want = run(.{ .program = file("p.bin"), .memory = 1024 }) },
+    .{ .args = &.{ "p.bin", "--memory=4" }, .want = run(.{ .program = file("p.bin"), .memory = 4 }) }, // the smallest
+    .{ .args = &.{ "p.bin", "--memory", "0x100" }, .want = run(.{ .program = file("p.bin"), .memory = 256 }) },
+    .{ .args = &.{ "p.bin", "--memory", "1KiB" }, .want = run(.{ .program = file("p.bin"), .memory = 1024 }) },
+    .{ .args = &.{ "p.bin", "--memory", "64 KiB" }, .want = run(.{ .program = file("p.bin"), .memory = 64 * 1024 }) }, // as the report prints it
+    .{ .args = &.{ "p.bin", "--memory", "1MiB" }, .want = run(.{ .program = file("p.bin"), .memory = 1 << 20 }) },
+    .{ .args = &.{ "p.bin", "--memory", "3GiB" }, .want = run(.{ .program = file("p.bin"), .memory = 3 << 30 }) },
+    .{ .args = &.{ "p.bin", "--memory", "4294967292" }, .want = run(.{ .program = file("p.bin"), .memory = 0xFFFF_FFFC }) }, // the largest
+    .{ .args = &.{ "p.bin", "--memory", "1MiB", "--memory", "2KiB" }, .want = run(.{ .program = file("p.bin"), .memory = 2048 }) }, // the last wins
+    .{ .args = &.{ "--load-addr", "0x20000", "--memory", "256KiB", "p.bin" }, .want = run(.{ .program = file("p.bin"), .memory = 256 * 1024, .load_addr = 0x20000 }) },
+    .{ .args = &.{ "p.bin", "--dump-range", "0x3FFF0:16", "--memory", "256KiB" }, .want = run(.{ .program = file("p.bin"), .memory = 256 * 1024, .dump = .{ .range = .{ .start = 0x3FFF0, .len = 16 } } }) },
+    .{ .args = &.{ "--disassemble", "p.bin", "--memory", "1MiB" }, .want = run(.{ .program = file("p.bin"), .disassemble = true, .memory = 1 << 20 }) },
+
     // Dumps: the format only after '=', the range in either order
     .{ .args = &.{ "p.bin", "--dump-memory" }, .want = run(.{ .program = file("p.bin"), .dump = .{} }) },
     .{ .args = &.{ "p.bin", "--dump-memory=raw" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .format = .raw } }) },
@@ -85,8 +96,9 @@ const cases = [_]Case{
     .{ .args = &.{ "p.bin", "--max-cycles", "1e6" }, .want = err("--max-cycles '1e6' is not a number") },
     .{ .args = &.{ "p.bin", "--max-cycles", "-1" }, .want = err("--max-cycles '-1' is negative") },
     .{ .args = &.{ "p.bin", "--max-cycles", "18446744073709551616" }, .want = err("is too large (at most 18446744073709551615)") },
-    .{ .args = &.{ "p.bin", "--load-addr", "0x101" }, .want = err("--load-addr '0x101' must be even and inside the 64 KiB of VM memory") },
-    .{ .args = &.{ "p.bin", "--load-addr", "65536" }, .want = err("must be even and inside the 64 KiB") },
+    .{ .args = &.{ "p.bin", "--load-addr", "0x101" }, .want = err("--load-addr '0x101' must be even") },
+    .{ .args = &.{ "p.bin", "--load-addr", "65536" }, .want = err("--load-addr '65536' is not inside the 64 KiB of VM memory") },
+    .{ .args = &.{ "p.bin", "--load-addr", "0x200", "--memory", "512" }, .want = err("--load-addr '0x200' is not inside the 512 bytes of VM memory") },
     .{ .args = &.{ "p.bin", "--load-addr", "0x100000000" }, .want = err("is too large") },
     .{ .args = &.{ "p.bin", "--load-addr", "nope" }, .want = err("--load-addr 'nope' is not a number") },
     .{ .args = &.{ "p.bin", "--input" }, .want = err("--input needs a value") },
@@ -99,6 +111,21 @@ const cases = [_]Case{
     .{ .args = &.{ "p.bin", "--dump-range", "0xFFF0:0x11" }, .want = err("--dump-range '0xFFF0:0x11' is not inside the 64 KiB of VM memory") },
     .{ .args = &.{ "p.bin", "--dump-range", "0xFFFFFFFF:0xFFFFFFFF" }, .want = err("is not inside") }, // no overflow
     .{ .args = &.{ "p.bin", "--dump-range", "0xFFFFFFF0:0x20" }, .want = err("is not inside") }, // would wrap to 0x10
+    .{ .args = &.{ "p.bin", "--memory", "512", "--dump-range", "0x1F0:0x11" }, .want = err("--dump-range '0x1F0:0x11' is not inside the 512 bytes of VM memory") },
+    .{ .args = &.{ "p.bin", "--memory" }, .want = err("--memory needs a value") },
+    .{ .args = &.{ "p.bin", "--memory", "abc" }, .want = err("--memory 'abc' is not a size (bytes, or a number with KiB, MiB or GiB)") },
+    .{ .args = &.{ "p.bin", "--memory", "" }, .want = err("--memory '' is not a size") },
+    .{ .args = &.{ "p.bin", "--memory", "KiB" }, .want = err("--memory 'KiB' is not a size") },
+    .{ .args = &.{ "p.bin", "--memory", "-4" }, .want = err("--memory '-4' is not a size") },
+    .{ .args = &.{ "p.bin", "--memory", "1.5MiB" }, .want = err("--memory '1.5MiB' is not a size") },
+    .{ .args = &.{ "p.bin", "--memory", "64KB" }, .want = err("--memory '64KB' is not a size") },
+    .{ .args = &.{ "p.bin", "--memory", "0" }, .want = err("--memory '0' must be a positive multiple of 4 bytes") },
+    .{ .args = &.{ "p.bin", "--memory", "6" }, .want = err("--memory '6' must be a positive multiple of 4 bytes") },
+    .{ .args = &.{ "p.bin", "--memory", "4294967295" }, .want = err("must be a positive multiple of 4 bytes") },
+    .{ .args = &.{ "p.bin", "--memory", "4GiB" }, .want = err("--memory '4GiB' is too large: it must be less than 4 GiB") },
+    .{ .args = &.{ "p.bin", "--memory", "4294967296" }, .want = err("is too large: it must be less than 4 GiB") },
+    .{ .args = &.{ "p.bin", "--memory", "17179869184GiB" }, .want = err("is too large") }, // the multiplication overflows
+    .{ .args = &.{ "p.bin", "--memory", "18446744073709551616" }, .want = err("is too large") },
     .{ .args = &.{ "p.bin", "--digest=yes" }, .want = err("--digest takes no value") },
     .{ .args = &.{ "p.bin", "-q=1" }, .want = err("--quiet takes no value") },
     .{ .args = &.{ "a.bin", "b.bin" }, .want = err("unexpected argument 'b.bin' after the program 'a.bin' (programs take no arguments)") },
@@ -124,7 +151,7 @@ test "parse: table" {
         var diag: Io.Writer.Allocating = .init(h.alloc);
         defer diag.deinit();
 
-        const got = args.parse(argv.items, mem_size, &diag.writer);
+        const got = args.parse(argv.items, &diag.writer);
         errdefer std.debug.print("\nargs: {any}\nmessage: {s}\n", .{ c.args, diag.written() });
         switch (c.want) {
             .command => |want| {
@@ -141,15 +168,6 @@ test "parse: table" {
     }
 }
 
-test "parse: the limits follow the memory size it is given" {
-    var diag: Io.Writer.Allocating = .init(h.alloc);
-    defer diag.deinit();
-    const ok = try args.parse(&.{ "determinant", "p.bin", "--load-addr", "0x100", "--dump-range", "0:0x200" }, 0x200, &diag.writer);
-    try std.testing.expectEqual(@as(?u32, 0x100), ok.run.load_addr);
-    try std.testing.expectError(error.Usage, args.parse(&.{ "determinant", "p.bin", "--load-addr", "0x200" }, 0x200, &diag.writer));
-    try h.expectContains(diag.written(), "inside the 512 bytes of VM memory");
-}
-
 test "--help lists every option and the exit statuses, on stdout" {
     var fx: h.Fixture = .init();
     defer fx.deinit();
@@ -163,12 +181,11 @@ test "--help lists every option and the exit statuses, on stdout" {
     try std.testing.expectEqualStrings("", fx.stderr());
 }
 
-test "--version shows the version and the build configuration, on stdout" {
+test "--version shows the version and the build mode, on stdout" {
     var fx: h.Fixture = .init();
     defer fx.deinit();
     try std.testing.expectEqual(h.status(.ok), try fx.run(&.{"--version"}));
-    try std.testing.expectStringStartsWith(fx.stdout(), "determinant " ++ @import("cli_options").version ++ " (");
-    try h.expectContains(fx.stdout(), "of VM memory, " ++ @tagName(@import("builtin").mode) ++ " build)\n");
+    try std.testing.expectEqualStrings("determinant " ++ @import("cli_options").version ++ " (" ++ @tagName(@import("builtin").mode) ++ " build)\n", fx.stdout());
 }
 
 test "no arguments: the usage on stderr, exit status 1" {

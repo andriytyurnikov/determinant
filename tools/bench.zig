@@ -1,6 +1,7 @@
-//! Benchmark: runs every C corpus program several times and reports the best time and
-//! the speed in MIPS (millions of retired instructions per second), plus the geometric
-//! mean over all programs.
+//! Benchmark: runs every C corpus program several times on each kind of VM memory
+//! (CpuType's, inside the VM, and RuntimeCpuType's, a host buffer) and reports the best
+//! time and the speed in MIPS (millions of retired instructions per second), plus the
+//! geometric mean over all programs.
 //!
 //! usage: bench [--runs N] DIR
 //!
@@ -11,8 +12,35 @@ const std = @import("std");
 const Io = std.Io;
 const det = @import("determinant");
 
-const BenchCpu = det.CpuType(256 * 1024, .{});
+const bench_memory = 256 * 1024;
+const FixedCpu = det.CpuType(bench_memory, .{});
+const RuntimeCpu = det.RuntimeCpuType(.{});
 const max_cycles: u64 = 1_000_000_000;
+
+const Best = struct { cycles: u64, ns: u64 };
+
+/// The best of `runs` runs of `program` on `vm`.
+fn best(vm: anytype, program: []const u8, runs: usize, io: Io, name: []const u8) !Best {
+    var result: Best = .{ .cycles = 0, .ns = std.math.maxInt(u64) };
+    for (0..runs) |_| {
+        vm.reset();
+        try vm.loadProgram(program, 0);
+        const start = Io.Timestamp.now(io, .awake);
+        const stop = try vm.run(max_cycles);
+        const elapsed = start.durationTo(Io.Timestamp.now(io, .awake));
+        if (stop != .ebreak) {
+            std.debug.print("{s}: did not stop at EBREAK\n", .{name});
+            std.process.exit(1);
+        }
+        result.cycles = vm.cycle_count;
+        result.ns = @min(result.ns, @as(u64, @intCast(elapsed.nanoseconds)));
+    }
+    return result;
+}
+
+fn mips(b: Best) f64 {
+    return @as(f64, @floatFromInt(b.cycles)) * 1e3 / @as(f64, @floatFromInt(@max(b.ns, 1)));
+}
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -53,42 +81,37 @@ pub fn main(init: std.process.Init) !void {
         }
     }.lessThan);
 
-    const vm = try gpa.create(BenchCpu);
-    defer gpa.destroy(vm);
+    const fixed = try gpa.create(FixedCpu);
+    defer gpa.destroy(fixed);
+    const memory = try gpa.alloc(u8, bench_memory);
+    defer gpa.free(memory);
+    const runtime = try gpa.create(RuntimeCpu);
+    defer gpa.destroy(runtime);
+    try runtime.initInPlace(memory);
 
     var buf: [4096]u8 = undefined;
     var fw: Io.File.Writer = .initStreaming(Io.File.stdout(), io, &buf);
     const out = &fw.interface;
-    try out.print("{s:<28} {s:>12} {s:>10} {s:>8}\n", .{ "program", "instructions", "best ms", "MIPS" });
+    try out.print("{s:<28} {s:>12} {s:>10} {s:>8} {s:>10} {s:>8}\n", .{ "program", "instructions", "fixed ms", "MIPS", "runtime ms", "MIPS" });
 
-    var log_sum: f64 = 0;
-    var total_cycles: u64 = 0;
-    var total_ns: u64 = 0;
+    var log_sum: [2]f64 = .{ 0, 0 };
+    var total: [2]Best = .{ .{ .cycles = 0, .ns = 0 }, .{ .cycles = 0, .ns = 0 } };
     for (paths.items) |p| {
-        const program = try dir.readFileAlloc(io, p, arena, .limited(BenchCpu.mem_size + 1));
-        var best_ns: u64 = std.math.maxInt(u64);
-        var cycles: u64 = 0;
-        for (0..runs) |_| {
-            vm.reset();
-            try vm.loadProgram(program, 0);
-            const start = Io.Timestamp.now(io, .awake);
-            const result = try vm.run(max_cycles);
-            const elapsed = start.durationTo(Io.Timestamp.now(io, .awake));
-            if (result != .ebreak) {
-                std.debug.print("{s}: did not stop at EBREAK\n", .{p});
-                std.process.exit(1);
-            }
-            cycles = vm.cycle_count;
-            best_ns = @min(best_ns, @as(u64, @intCast(elapsed.nanoseconds)));
+        const program = try dir.readFileAlloc(io, p, arena, .limited(bench_memory + 1));
+        const results = [2]Best{ try best(fixed, program, runs, io, p), try best(runtime, program, runs, io, p) };
+        if (results[0].cycles != results[1].cycles) {
+            std.debug.print("{s}: {d} cycles with fixed memory, {d} with runtime memory\n", .{ p, results[0].cycles, results[1].cycles });
+            std.process.exit(1);
         }
-        const mips = @as(f64, @floatFromInt(cycles)) * 1e3 / @as(f64, @floatFromInt(@max(best_ns, 1)));
-        log_sum += @log(mips);
-        total_cycles += cycles;
-        total_ns += best_ns;
-        try out.print("{s:<28} {d:>12} {d:>10.2} {d:>8.1}\n", .{ p, cycles, @as(f64, @floatFromInt(best_ns)) / 1e6, mips });
+        for (results, 0..) |r, k| {
+            log_sum[k] += @log(mips(r));
+            total[k].cycles += r.cycles;
+            total[k].ns += r.ns;
+        }
+        try out.print("{s:<28} {d:>12} {d:>10.2} {d:>8.1} {d:>10.2} {d:>8.1}\n", .{ p, results[0].cycles, @as(f64, @floatFromInt(results[0].ns)) / 1e6, mips(results[0]), @as(f64, @floatFromInt(results[1].ns)) / 1e6, mips(results[1]) });
     }
     const n: f64 = @floatFromInt(@max(paths.items.len, 1));
-    try out.print("{s:<28} {d:>12} {d:>10.2} {d:>8.1}  (overall)\n", .{ "total", total_cycles, @as(f64, @floatFromInt(total_ns)) / 1e6, @as(f64, @floatFromInt(total_cycles)) * 1e3 / @as(f64, @floatFromInt(@max(total_ns, 1))) });
-    try out.print("geometric mean: {d:.1} MIPS (best of {d} runs each)\n", .{ @exp(log_sum / n), runs });
+    try out.print("{s:<28} {d:>12} {d:>10.2} {d:>8.1} {d:>10.2} {d:>8.1}  (overall)\n", .{ "total", total[0].cycles, @as(f64, @floatFromInt(total[0].ns)) / 1e6, mips(total[0]), @as(f64, @floatFromInt(total[1].ns)) / 1e6, mips(total[1]) });
+    try out.print("geometric mean: {d:.1} MIPS with fixed memory, {d:.1} with runtime memory (best of {d} runs each)\n", .{ @exp(log_sum[0] / n), @exp(log_sum[1] / n), runs });
     try out.flush();
 }

@@ -12,9 +12,14 @@ pub const loader = @import("loader.zig");
 
 // Convenience aliases
 pub const CpuType = cpu.CpuType;
+pub const RuntimeCpuType = cpu.RuntimeCpuType;
 pub const CpuOptions = cpu.Options;
 pub const Cpu = cpu.Cpu;
+pub const RuntimeCpu = cpu.RuntimeCpu;
 pub const default_memory_size = cpu.default_memory_size;
+pub const InitError = cpu.InitError;
+pub const validMemorySize = cpu.validMemorySize;
+pub const snapshotMemorySize = cpu.snapshotMemorySize;
 pub const DecodeFn = cpu.DecodeFn;
 pub const StepResult = cpu.StepResult;
 pub const StepError = cpu.StepError;

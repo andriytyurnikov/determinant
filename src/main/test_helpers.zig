@@ -199,15 +199,22 @@ pub const Writes = struct {
     }
 };
 
-/// `template` with this build's values: {path} is `path`, {mem} the memory size, {sp}
-/// the initial sp in 8 hex digits and {sp_dec} in signed decimal. The caller frees it.
+/// `template` for a run with the default memory: see expandAt().
 pub fn expand(template: []const u8, path: []const u8) ![]u8 {
+    return expandAt(template, path, det.default_memory_size);
+}
+
+/// `template` for a run with `memory` bytes of VM memory: {path} is `path`, {mem} the
+/// memory size, {sp} the initial sp in 8 hex digits and {sp_dec} in signed decimal. The
+/// caller frees it.
+pub fn expandAt(template: []const u8, path: []const u8, memory: u32) ![]u8 {
     var buf: [3][32]u8 = undefined;
+    const sp = main_mod.initialSp(memory);
     const vars = [_][2][]const u8{
         .{ "{path}", path },
-        .{ "{mem}", try std.mem.print(&buf[0], "{f}", .{main_mod.units.MemSize{ .bytes = det.Cpu.mem_size }}) },
-        .{ "{sp}", try std.mem.print(&buf[1], "{X:0>8}", .{main_mod.initial_sp}) },
-        .{ "{sp_dec}", try std.mem.print(&buf[2], "{d}", .{@as(i32, @bitCast(main_mod.initial_sp))}) },
+        .{ "{mem}", try std.mem.print(&buf[0], "{f}", .{main_mod.units.MemSize{ .bytes = memory }}) },
+        .{ "{sp}", try std.mem.print(&buf[1], "{X:0>8}", .{sp}) },
+        .{ "{sp_dec}", try std.mem.print(&buf[2], "{d}", .{@as(i32, @bitCast(sp))}) },
     };
     var text = try alloc.dupe(u8, template);
     for (vars) |v| {
@@ -216,9 +223,4 @@ pub fn expand(template: []const u8, path: []const u8) ![]u8 {
         text = next;
     }
     return text;
-}
-
-/// Skip a test whose program needs more VM memory than the build has.
-pub fn needMemory(bytes: u32) !void {
-    if (det.Cpu.mem_size < bytes) return error.SkipZigTest;
 }

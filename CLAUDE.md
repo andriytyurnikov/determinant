@@ -9,7 +9,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as 
 ## Build Commands
 
 - `zig build` — compile the project (output in `zig-out/`)
-- `zig build run -- <args>` — build and run the CLI executable (`-- --demo` for the built-in demo; with no arguments it prints its usage and fails)
+- `zig build run -- <args>` — build and run the CLI executable (`-- --demo` for the built-in demo; with no arguments it prints its usage and fails). `--memory SIZE` sets the VM memory (default 64 KiB), e.g. `zig build run -- prog.elf --memory 1MiB`
 - `zig build test` — run the unit tests (library) and CLI tests (executable)
 - `zig build test-compliance` — run the riscv-tests compliance suite
 - `zig build test-all` — run unit, CLI, compliance and digest tests (what CI runs)
@@ -19,7 +19,6 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as 
 - `zig build test-compliance-rebuild -Drebuilt_compliance=DIR` — check that compliance binaries rebuilt from source (`make -C tests/riscv-tests BIN_DIR=DIR`) all pass
 - `zig build verify-decoder` — check the decoder against the opcode registry on all 2^30 32-bit encodings (always `-Doptimize=fast`, ~10 s); run it after any decoder or registry change
 - Opt-in oracles, not in CI (need local tools; see their READMEs): `zig build llvm-oracle -Dllvm_lib=/opt/homebrew/opt/llvm/lib/libLLVM.dylib -- c32 4` (decoder vs LLVM's disassembler), `python3 -I tools/spike_diff/{directed,fuzz,encsweep}.py --work DIR` (execution vs Spike). Run both before a release, with the mutation harness in `tools/mutation`
-- `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
 - `zig fmt src build.zig tools` — format all Zig sources (run after editing; CI runs `zig fmt --check` on the same paths)
 
 ## Determinism Invariants
@@ -28,7 +27,7 @@ These are load-bearing constraints — violating any one breaks deterministic ex
 
 - **Wrapping arithmetic everywhere** — all VM arithmetic uses `+%`, `-%`, `*%` (wrapping operators). Zig's default `+`, `-`, `*` panic on overflow in debug mode and are undefined in release. Every ADD, SUB, address calculation, and PC update must wrap.
 - **Explicit little-endian** — every `std.mem.readInt`/`writeInt` call uses `.little`. Never `.native` or `.big`. Never use `std.mem.sliceAsBytes` on typed arrays — it reinterprets in native byte order. See "Endianness" in Traps to Avoid.
-- **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct, decode cache). Zero allocation failure modes inside the VM. (Hosts — the CLI, the tools, tests — allocate the whole VM struct on the heap when its memory is large; the VM itself never allocates.)
+- **No allocators in core VM** — all state is fixed-size (registers, memory array, CSR struct, decode cache). Zero allocation failure modes inside the VM. A `RuntimeCpuType` borrows its memory from the host. (Hosts — the CLI, the tools, tests — allocate the VM struct on the heap when it is large; the VM itself never allocates.)
 - **No floating-point** — intentional; FP non-determinism (rounding modes, NaN payloads) is avoided entirely.
 - **Single-hart** — no threading, FENCE/FENCE.I are no-ops.
 
@@ -78,7 +77,8 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 
 - One decoder: `decoders/branch.zig`, exported as `decode()` from `decoders.zig` and `root.zig`. It switches on opcode[6:0], then asks each extension's `decodeR()`/`decodeIAlu()`/... by funct3/funct7 (and rs2 where an instruction fixes it)
 - `CpuType(comptime memory_size: u32, comptime options: Options)` — `Options.decode` is the decoder (default `decoders.decode`), a comptime parameter with no runtime dispatch. `DecodeFn = *const fn (u32) DecodeError!Instruction`
-- **Decode cache**: `step()` decodes through `decode_cache`, `Options.decode_cache_entries` slots (default 4096, power of two, 0 disables) indexed by `pc >> 1` and validated by the fetched raw bits. Decode is a pure function of those bits, so the cache can never change a result and needs no invalidation: self-modifying code and host writes just miss. It is not architectural state and is excluded from `stateDigest()`. `test-digests` runs the corpus with the cache on and off
+- **Two kinds of memory, one implementation** (`VmType` in cpu.zig, [docs/design/memory-size.md](docs/design/memory-size.md)): `CpuType(N, options)` has `memory: [N]u8` inside the struct, `RuntimeCpuType(options)` a host buffer `memory: []u8` given to `init(memory)`/`initInPlace(memory)`. Every bounds check goes through `memSize()`, a constant for `CpuType` (so its code is unchanged) and `memory.len` for `RuntimeCpuType`. Never use `mem_size` in code that takes either kind (`anytype`): it does not exist on `RuntimeCpuType`. `validMemorySize()` is load-bearing: the checks compute `memSize() - 4`, which must not wrap
+- **Decode cache**: `step()` decodes through `decode_cache`, `Options.decode_cache_entries` slots (default 4096, power of two, 0 disables) indexed by `pc >> 1` and validated by the fetched raw bits. Decode is a pure function of those bits, so the cache can never change a result and needs no invalidation: self-modifying code and host writes just miss. It is not architectural state and is excluded from `stateDigest()`. `test-digests` runs the corpus with the cache on and off, and on a `RuntimeCpuType`
 - Sub-decoders use semantic names matching their rv32i counterparts: `decodeStore`, `decodeBranch`, `decodeLoad`, `decodeAtomic`, `decodeSystem`
 - The order in which extensions are tried (M → RV32I → Zba → Zbb → Zbs for R-type) does not affect results: the registry test proves no two encodings overlap
 - **I-type ALU shift special case**: for opcode 0b0010011 with funct3=001 or 101, the immediate comes from the rs2 field [24:20], NOT the 12-bit I-immediate. This covers SLLI/SRLI/SRAI, RORI, the Zbs immediate forms, and the Zbb unary ops (whose `imm` is the rs2 selector). `decodeIAlu()` handles this with a conditional extraction
@@ -111,7 +111,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 
 - `src/main.zig` runs a `Cli` (io, allocator, stdin, stdout, stderr), so tests drive it with fixed input and captured output (`main/test_helpers.zig` `Fixture`). `main/args.zig` `parse()` is a pure function of the arguments; `main/load.zig` loads; `main/report.zig`, `disasm.zig` and `dump.zig` print. [docs/design/cli.md](docs/design/cli.md) is the contract
 - **stdout carries only the program's fd 1**; everything the CLI says when it runs a program (the report, `--trace`, dumps, `--digest`) goes to stderr. Keep the order: flush the other stream before a guest write switches streams (`execute()`), and stdout before each report section (`Report.section`). stderr is flushed after the preamble, so it shows while the program runs. `main/test_helpers.zig` `Writes` records each write that reaches a stream, for tests that depend on when output is flushed
-- The report's exact text is fixed by the whole-run goldens in `main/report_test.zig` (templates with `{path}`, `{mem}` and `{sp}` for build-dependent values): a change to the report changes a golden there, and docs/design/cli.md if the format changes
+- The report's exact text is fixed by the whole-run goldens in `main/report_test.zig` (templates with `{path}`, `{mem}` and `{sp}` for size-dependent values, checked at several `--memory` sizes): a change to the report changes a golden there, and docs/design/cli.md if the format changes. The CLI runs a `RuntimeCpu`
 - A new option gets a row in `args.specs`, rows in `args_test.zig`, and a line in `printHelp` (a test checks every spec is in the help)
 
 ### CSR Implementation
@@ -126,7 +126,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 - One-instruction execute tests are rows in `h.expectSteps(&.{ ... })` tables (`StepCase` in `instructions/test_helpers.zig`): add a row, not a new test, for a new case; write a separate test only for multi-step scenarios
 - Test files are grouped semantically (by topic, not by size), e.g. `exec_branch_test.zig`, `atomic_test.zig`, `csr_test.zig`
 - A module with several test files pulls them in through a `tests.zig` hub in its companion directory (`cpu/tests.zig`, `instructions/zbb/tests.zig`, ...); a module with a single test file imports it directly from a `test {}` block (`bitfields_test.zig`, `registry_test.zig`)
-- Unit tests use `cpu.TestCpu` (fixed 64 KiB), never the `-Dmemory_size` `Cpu`; CLI tests use `det.Cpu` on the heap and skip explicitly when a program does not fit
+- Unit tests use `cpu.TestCpu` (fixed 64 KiB); `cpu/memory_kinds_test.zig` checks the bounds on both kinds at several sizes. The compliance suite and `test-digests` run every binary on both kinds, which must give identical results. CLI tests pass `--memory` when a program needs more than the default
 - Every behavior change gets a test that fails before the change and passes after it; guest-visible changes also update SEMANTICS.md and `tests/digests.txt`
 - **Zig cache hazard**: never share a `--cache-dir` between two copies of the tree, or copy a tree including `.zig-cache`. Zig trusts file metadata in its cache manifests, so a copied tree can report a stale "cached" pass for a changed source (this bit the mutation-testing harness). Use a fresh cache per tree copy
 

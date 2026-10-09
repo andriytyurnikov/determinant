@@ -1,6 +1,7 @@
 comptime {
     _ = @import("init_test.zig");
     _ = @import("memory_test.zig");
+    _ = @import("memory_kinds_test.zig");
     _ = @import("pipeline_test.zig");
     _ = @import("run_test.zig");
     _ = @import("determinism_test.zig");

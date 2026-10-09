@@ -31,17 +31,21 @@ The snapshot is the canonical state encoding that `stateDigest()` hashes. The di
 ## API
 
 ```zig
-pub const snapshot_size = state.header_len + mem_size;
+pub fn snapshotSize(self: *const Self) usize;            // state.header_len + memSize()
+pub const snapshot_size: usize;                           // the same, for a CpuType
 pub fn writeSnapshot(self: *const Self, w: *std.Io.Writer) std.Io.Writer.Error!void;
 pub fn restoreSnapshot(self: *Self, r: *std.Io.Reader) RestoreError!void;
+pub fn snapshotMemorySize(snapshot_start: []const u8) error{InvalidSnapshot}!u32; // in root.zig
 ```
 
 The calls take Zig's `Io` reader and writer interfaces. A snapshot can go to a file, a socket or a fixed buffer (`std.Io.Writer.fixed`) without the VM allocating, which keeps the no-allocator invariant.
 
+Both kinds of memory (`CpuType` and `RuntimeCpuType`, [memory-size.md](memory-size.md)) write the same bytes for the same state, and a snapshot of one restores into the other. `snapshotMemorySize` reads the size from a snapshot's first 12 bytes (for example with `Io.Reader.peek`), so that a host can allocate a `RuntimeCpuType`'s memory before restoring.
+
 ## Validation on restore
 
 `restoreSnapshot` returns `error.InvalidSnapshot` in these cases:
-- the magic, the version or the memory size differs from this `CpuType`;
+- the magic, the version or the memory size differs from this VM's;
 - `regs[0]` ≠ 0;
 - the reservation flag is not 0 or 1;
 - a flag of 0 comes with a non-zero address;

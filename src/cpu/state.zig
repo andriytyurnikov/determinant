@@ -48,7 +48,7 @@ pub fn encodeHeader(cpu: anytype) [header_len]u8 {
     var buf: [header_len]u8 = undefined;
     buf[0..4].* = magic;
     std.mem.writeInt(u32, buf[4..8], version, .little);
-    std.mem.writeInt(u32, buf[8..12], Cpu.mem_size, .little);
+    std.mem.writeInt(u32, buf[8..12], cpu.memSize(), .little);
     std.mem.writeInt(u32, buf[12..16], cpu.pc, .little);
     for (cpu.regs, 0..) |r, i| std.mem.writeInt(u32, buf[16 + 4 * i ..][0..4], r, .little);
     std.mem.writeInt(u64, buf[144..152], cpu.cycle_count, .little);
@@ -62,7 +62,7 @@ pub fn encodeHeader(cpu: anytype) [header_len]u8 {
 /// digest hashes). See docs/design/snapshots.md.
 pub fn writeSnapshot(cpu: anytype, w: *std.Io.Writer) std.Io.Writer.Error!void {
     try w.writeAll(&encodeHeader(cpu));
-    try w.writeAll(&cpu.memory);
+    try w.writeAll(cpu.memory[0..]);
 }
 
 pub const RestoreError = error{InvalidSnapshot} || std.Io.Reader.Error;
@@ -77,13 +77,13 @@ pub fn restoreSnapshot(cpu: anytype, r: *std.Io.Reader) RestoreError!void {
     try r.readSliceAll(&hdr);
     if (!std.mem.eql(u8, hdr[0..4], &magic)) return error.InvalidSnapshot;
     if (readU32(&hdr, 4) != version) return error.InvalidSnapshot;
-    if (readU32(&hdr, 8) != Cpu.mem_size) return error.InvalidSnapshot;
+    if (readU32(&hdr, 8) != cpu.memSize()) return error.InvalidSnapshot;
     if (readU32(&hdr, 16) != 0) return error.InvalidSnapshot; // regs[0]
     const res_valid = readU32(&hdr, 152);
     const res_addr = readU32(&hdr, 156);
     switch (res_valid) {
         0 => if (res_addr != 0) return error.InvalidSnapshot,
-        1 => if (res_addr % 4 != 0 or res_addr > Cpu.mem_size - 4) return error.InvalidSnapshot,
+        1 => if (res_addr % 4 != 0 or res_addr > cpu.memSize() - 4) return error.InvalidSnapshot,
         else => return error.InvalidSnapshot,
     }
 
@@ -92,7 +92,18 @@ pub fn restoreSnapshot(cpu: anytype, r: *std.Io.Reader) RestoreError!void {
     cpu.cycle_count = std.mem.readInt(u64, hdr[144..152], .little);
     cpu.reservation = if (res_valid == 1) res_addr else null;
     cpu.csrs = .{ .mscratch = readU32(&hdr, 160) };
-    try r.readSliceAll(&cpu.memory);
+    try r.readSliceAll(cpu.memory[0..]);
+}
+
+/// The memory size in a snapshot's header, from its first 12 or more bytes: the magic,
+/// the version and the size. error.InvalidSnapshot if they are not a valid header's.
+pub fn memorySize(snapshot_start: []const u8) error{InvalidSnapshot}!u32 {
+    if (snapshot_start.len < 12) return error.InvalidSnapshot;
+    if (!std.mem.eql(u8, snapshot_start[0..4], &magic)) return error.InvalidSnapshot;
+    if (std.mem.readInt(u32, snapshot_start[4..8], .little) != version) return error.InvalidSnapshot;
+    const size = std.mem.readInt(u32, snapshot_start[8..12], .little);
+    if (size < 4 or size % 4 != 0) return error.InvalidSnapshot;
+    return size;
 }
 
 fn readU32(hdr: *const [header_len]u8, offset: usize) u32 {
@@ -103,6 +114,6 @@ fn readU32(hdr: *const [header_len]u8, offset: usize) u32 {
 pub fn digest(cpu: anytype) [32]u8 {
     var hasher = std.crypto.hash.sha2.Sha256.init(.{});
     hasher.update(&encodeHeader(cpu));
-    hasher.update(&cpu.memory);
+    hasher.update(cpu.memory[0..]);
     return hasher.finalResult();
 }

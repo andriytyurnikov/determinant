@@ -91,7 +91,6 @@ test "printListing: 16- and 32-bit instructions, what does not decode, and a cut
 }
 
 test "--disassemble: a flat binary from its load address, on stdout" {
-    try h.needMemory(0x110);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("prog.bin", &(h.le(&.{0x00000463}) ++ h.ebreak)); // BEQ zero, zero, +8
@@ -105,7 +104,6 @@ test "--disassemble: a flat binary from its load address, on stdout" {
 }
 
 test "--disassemble: an ELF file's executable segments only" {
-    try h.needMemory(0x50);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const code = comptime h.le(&.{ 0x02A00093, 0x00100073 }); // ADDI ra, zero, 42; EBREAK
@@ -123,7 +121,6 @@ test "--disassemble: an ELF file's executable segments only" {
 }
 
 test "--disassemble --demo: the demo program" {
-    try h.needMemory(main_mod.load.demo_program.len);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     try std.testing.expectEqual(h.status(.ok), try fx.run(&.{ "--demo", "--disassemble" }));
