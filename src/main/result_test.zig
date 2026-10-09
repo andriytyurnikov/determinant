@@ -12,6 +12,13 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
     }
 }
 
+/// The CLI's Cpu follows `-Dmemory_size` and can be far too large for the stack.
+fn createVm() !*det.Cpu {
+    const vm = try alloc.create(det.Cpu);
+    vm.reset();
+    return vm;
+}
+
 fn expectNotContains(haystack: []const u8, needle: []const u8) !void {
     if (std.mem.indexOf(u8, haystack, needle) != null) {
         std.debug.print("\nExpected output NOT to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
@@ -20,68 +27,74 @@ fn expectNotContains(haystack: []const u8, needle: []const u8) !void {
 }
 
 test "printResult: ecall" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.cycle_count = 42;
     vm.pc = 0x00001000;
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ecall);
+    try main_mod.printResult(&aw.writer, vm, .ecall);
 
     try expectContains(aw.written(), "ecall after 42 cycles");
     try expectContains(aw.written(), "PC = 0x00001000");
 }
 
 test "printResult: ebreak" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.cycle_count = 7;
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ebreak);
+    try main_mod.printResult(&aw.writer, vm, .ebreak);
 
     try expectContains(aw.written(), "ebreak after 7 cycles");
 }
 
 test "printResult: continue (cycle limit)" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.cycle_count = 1000;
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .@"continue");
+    try main_mod.printResult(&aw.writer, vm, .@"continue");
 
     try expectContains(aw.written(), "Cycle limit reached after 1000 cycles");
 }
 
 test "printResult: non-zero registers displayed" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.writeReg(1, 42);
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ecall);
+    try main_mod.printResult(&aw.writer, vm, .ecall);
 
     try expectContains(aw.written(), "x1 = 42 (0x0000002A)");
 }
 
 test "printResult: negative register display" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.writeReg(1, 0xFFFFFFFF);
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ecall);
+    try main_mod.printResult(&aw.writer, vm, .ecall);
 
     try expectContains(aw.written(), "x1 = -1 (0xFFFFFFFF)");
 }
 
 test "printResult: zero registers omitted" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ecall);
+    try main_mod.printResult(&aw.writer, vm, .ecall);
 
     try expectContains(aw.written(), "Registers:");
     try expectNotContains(aw.written(), "x0 =");
@@ -89,12 +102,13 @@ test "printResult: zero registers omitted" {
 }
 
 test "printResult: PC format" {
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer alloc.destroy(vm);
     vm.pc = 0x00000014;
 
     var aw: Io.Writer.Allocating = .init(alloc);
     defer aw.deinit();
-    try main_mod.printResult(&aw.writer, &vm, .ecall);
+    try main_mod.printResult(&aw.writer, vm, .ecall);
 
     try expectContains(aw.written(), "PC = 0x00000014");
 }

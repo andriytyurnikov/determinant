@@ -4,7 +4,7 @@ const Opcode = instructions.Opcode;
 const decoder = @import("../../decoders/branch.zig");
 const decode = decoder.decode;
 const cpu_mod = @import("../../cpu.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 const h = @import("../test_helpers.zig");
 
 const loadInst = h.loadInst;

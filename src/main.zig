@@ -94,26 +94,50 @@ pub fn mainInner(
     }
 }
 
+/// Built-in 5-instruction RV32I demo program:
+///   ADDI x1, x0, 100    — x1 = 100
+///   ADDI x2, x0, 10     — x2 = 10
+///   ADD  x3, x1, x2     — x3 = x1 + x2 = 110
+///   SW   x3, 0(x1)      — mem[100] = 110
+///   ECALL                — system call
+pub const demo_program = [_]u8{
+    0x93, 0x00, 0x40, 0x06, // ADDI x1, x0, 100
+    0x13, 0x01, 0xA0, 0x00, // ADDI x2, x0, 10
+    0xB3, 0x81, 0x20, 0x00, // ADD  x3, x1, x2
+    0x23, 0xA0, 0x30, 0x00, // SW   x3, 0(x1)
+    0x73, 0x00, 0x00, 0x00, // ECALL
+};
+
+/// Address the demo program stores its result to.
+pub const demo_store_addr: u32 = 100;
+
+/// Smallest VM memory in which the demo runs to completion (its store must fit).
+pub const demo_min_memory: u32 = demo_store_addr + 4;
+
+/// Allocate a zeroed VM on the heap. The VM embeds its whole memory, so it must not
+/// live on the stack: a few MiB of memory would overflow it.
+fn createVm() !*det.Cpu {
+    const vm = try std.heap.page_allocator.create(det.Cpu);
+    vm.reset();
+    return vm;
+}
+
+fn destroyVm(vm: *det.Cpu) void {
+    std.heap.page_allocator.destroy(vm);
+}
+
 pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat) !void {
     try stdout.print("Determinant — RV32I Executor Demo ({d} KB memory)\n\n", .{det.Cpu.mem_size / 1024});
 
-    // Hardcoded 5-instruction RV32I program:
-    //   ADDI x1, x0, 100    — x1 = 100
-    //   ADDI x2, x0, 10     — x2 = 10
-    //   ADD  x3, x1, x2     — x3 = x1 + x2 = 110
-    //   SW   x3, 0(x1)      — mem[100] = 110
-    //   ECALL                — system call
-    const program = [_]u8{
-        0x93, 0x00, 0x40, 0x06, // ADDI x1, x0, 100
-        0x13, 0x01, 0xA0, 0x00, // ADDI x2, x0, 10
-        0xB3, 0x81, 0x20, 0x00, // ADD  x3, x1, x2
-        0x23, 0xA0, 0x30, 0x00, // SW   x3, 0(x1)
-        0x73, 0x00, 0x00, 0x00, // ECALL
-    };
+    const program = demo_program;
 
     // Load program into VM
-    var vm = det.Cpu.init();
-    try vm.loadProgram(&program, 0);
+    const vm = try createVm();
+    defer destroyVm(vm);
+    vm.loadProgram(&program, 0) catch {
+        try stderr.print("Error: the demo program needs {d} bytes of VM memory, but only {d} are configured\n", .{ program.len, det.Cpu.mem_size });
+        return error.UserError;
+    };
 
     // Decode and display instructions
     try stdout.print("Program:\n", .{});
@@ -156,11 +180,12 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, dump_format: ?DumpFormat)
         return error.UserError;
     };
 
-    try printResult(stdout, &vm, result);
+    try printResult(stdout, vm, result);
 
-    // Show memory at store target
-    const mem_val = std.mem.readInt(u32, vm.memory[100..][0..4], .little);
-    try stdout.print("\nMemory[100] = {d} (0x{X:0>8})\n", .{ mem_val, mem_val });
+    // Show memory at store target (absent when memory is too small to hold it)
+    if (vm.readWord(demo_store_addr)) |mem_val| {
+        try stdout.print("\nMemory[{d}] = {d} (0x{X:0>8})\n", .{ demo_store_addr, mem_val, mem_val });
+    } else |_| {}
 
     if (dump_format) |fmt| {
         try stdout.print("\n", .{});
@@ -185,7 +210,8 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
         return error.UserError;
     }
 
-    var vm = det.Cpu.init();
+    const vm = try createVm();
+    defer destroyVm(vm);
 
     if (stat.size > vm.memory.len) {
         try stderr.print("Error: file too large ({d} bytes, max {d})\n", .{ stat.size, vm.memory.len });
@@ -227,7 +253,7 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
         return error.UserError;
     };
 
-    try printResult(stdout, &vm, result);
+    try printResult(stdout, vm, result);
 
     if (dump_format) |fmt| {
         try stdout.print("\n", .{});

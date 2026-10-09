@@ -1,6 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const main_mod = @import("../main.zig");
+const det = @import("determinant");
 
 const io = std.testing.io;
 const alloc = std.testing.allocator;
@@ -10,6 +11,11 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
         std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }
+}
+
+/// Skip tests whose program does not fit in the configured VM memory.
+fn skipUnlessFits(program_len: usize) !void {
+    if (program_len > det.Cpu.mem_size) return error.SkipZigTest;
 }
 
 /// Build a path relative to cwd pointing into the TmpDir. tmpDir() roots its dirs
@@ -45,13 +51,11 @@ test "runFile: file too large" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
+    // One byte more than the VM memory holds. setLength makes a sparse file, so this
+    // stays cheap at any -Dmemory_size.
     const f = try tmp.dir.createFile(io, "big.bin", .{});
     defer f.close(io);
-
-    const big_buf = try alloc.alloc(u8, 65537);
-    defer alloc.free(big_buf);
-    @memset(big_buf, 0x13); // NOP opcode byte
-    try f.writeStreamingAll(io, big_buf);
+    try f.setLength(io, @as(u64, det.Cpu.mem_size) + 1);
 
     const path = try makeTmpPath(tmp, "big.bin");
     defer alloc.free(path);
@@ -92,6 +96,7 @@ test "runFile: successful execution" {
         0x93, 0x00, 0xA0, 0x02, // ADDI x1, x0, 42
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
+    try skipUnlessFits(program.len);
 
     const f = try tmp.dir.createFile(io, "test.bin", .{});
     try f.writeStreamingAll(io, &program);
@@ -120,6 +125,7 @@ test "runFile: max cycles display" {
         0x93, 0x00, 0xA0, 0x02, // ADDI x1, x0, 42
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
+    try skipUnlessFits(program.len);
 
     const f = try tmp.dir.createFile(io, "test.bin", .{});
     try f.writeStreamingAll(io, &program);
@@ -146,6 +152,7 @@ test "runFile: unlimited cycles display" {
         0x93, 0x00, 0xA0, 0x02, // ADDI x1, x0, 42
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
+    try skipUnlessFits(program.len);
 
     const f = try tmp.dir.createFile(io, "test.bin", .{});
     try f.writeStreamingAll(io, &program);
@@ -175,6 +182,7 @@ test "runFile: cycle limit reached" {
         0x13, 0x00, 0x00, 0x00, // NOP
         0x73, 0x00, 0x00, 0x00, // ECALL
     };
+    try skipUnlessFits(program.len);
 
     const f = try tmp.dir.createFile(io, "test.bin", .{});
     try f.writeStreamingAll(io, &program);

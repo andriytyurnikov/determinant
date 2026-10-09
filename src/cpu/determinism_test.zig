@@ -1,7 +1,7 @@
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
 const decoders = @import("../decoders.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 const CpuType = cpu_mod.CpuType;
 const StepResult = cpu_mod.StepResult;
 
@@ -58,8 +58,13 @@ test "determinism: LUT and branch decoders produce identical CPU state" {
     const LutCpu = CpuType(1024 * 1024, &decoders.lut.decode);
     const BranchCpu = CpuType(1024 * 1024, &decoders.branch.decode);
 
-    var lut_cpu = LutCpu.init();
-    var branch_cpu = BranchCpu.init();
+    // 1 MiB VMs are too large for the test stack; place them on the heap.
+    const lut_cpu = try std.testing.allocator.create(LutCpu);
+    defer std.testing.allocator.destroy(lut_cpu);
+    lut_cpu.reset();
+    const branch_cpu = try std.testing.allocator.create(BranchCpu);
+    defer std.testing.allocator.destroy(branch_cpu);
+    branch_cpu.reset();
 
     loadTestProgram(&lut_cpu.memory);
     loadTestProgram(&branch_cpu.memory);

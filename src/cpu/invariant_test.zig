@@ -1,6 +1,6 @@
 const std = @import("std");
 const cpu_mod = @import("../cpu.zig");
-const Cpu = cpu_mod.Cpu;
+const Cpu = cpu_mod.TestCpu;
 const h = @import("../instructions/test_helpers.zig");
 
 // --- Combined invariant tests ---

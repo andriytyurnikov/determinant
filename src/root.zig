@@ -28,7 +28,7 @@ test {
 }
 
 test "integration: load, fetch, decode" {
-    var machine = cpu.Cpu.init();
+    var machine = cpu.TestCpu.init();
     // ADDI x1, x0, 42 = 0x02A00093
     const program = [_]u8{ 0x93, 0x00, 0xA0, 0x02 };
     try machine.loadProgram(&program, 0);
@@ -54,7 +54,7 @@ test "regression: demo program second instruction encodes ADDI x2, x0, 10" {
 }
 
 test "integration: load, fetch, LUT decode" {
-    var machine = cpu.Cpu.init();
+    var machine = cpu.TestCpu.init();
     // ADDI x1, x0, 42 = 0x02A00093
     const program = [_]u8{ 0x93, 0x00, 0xA0, 0x02 };
     try machine.loadProgram(&program, 0);
