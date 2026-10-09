@@ -164,3 +164,9 @@ test "writeHalfword out of bounds" {
     var cpu = Cpu.init();
     try std.testing.expectError(error.AddressOutOfBounds, cpu.writeHalfword(MEMORY_SIZE, 0));
 }
+
+test "writeWord: halfword-aligned address is misaligned" {
+    var cpu = Cpu.init();
+    try std.testing.expectError(error.MisalignedAccess, cpu.writeWord(2, 0));
+    try std.testing.expectError(error.MisalignedAccess, cpu.writeWord(258, 0));
+}

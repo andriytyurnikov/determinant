@@ -228,3 +228,37 @@ test "step: x0 writes ignored" {
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
 }
+
+test "step: SLTI is a signed compare" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0xFFFFFFFF); // -1
+    loadInst(&cpu, h.encodeI(0b0010011, 0b010, 2, 1, 1)); // SLTI x2, x1, 1
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(2));
+}
+
+test "step: SRL by 31" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x80000000);
+    cpu.writeReg(2, 31);
+    loadInst(&cpu, h.encodeR(0b0110011, 0b101, 0b0000000, 3, 1, 2)); // SRL x3, x1, x2
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(3));
+}
+
+test "step: ANDI sign-extends its immediate" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 0x12345678);
+    loadInst(&cpu, h.encodeI(0b0010011, 0b111, 2, 1, 0xF0F)); // ANDI x2, x1, -241
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0x12345608), cpu.readReg(2));
+}
+
+test "step: SLTU with equal operands yields 0" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 7);
+    cpu.writeReg(2, 7);
+    loadInst(&cpu, h.encodeR(0b0110011, 0b011, 0b0000000, 3, 1, 2)); // SLTU x3, x1, x2
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(3));
+}

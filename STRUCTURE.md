@@ -94,6 +94,7 @@ src/
     bitfields_test.zig    — standalone bit-field extraction tests (register fields, immediate extractors)
     expand.zig            — shared expandCompressed(): wraps rv32c.Expanded → Instruction (used by both decoders)
     registry.zig          — opcode registry: Entry struct, 95-entry registry array, Strategy enum, strategyFor()
+    registry_test.zig     — every registry entry decodes to its own opcode with both decoders
     conformance_test.zig  — conformance suite (field-by-field match vs branch decoder)
     rv32c_cross_test.zig  — cross-validation hub: Q2 + max-range tests; imports rv32c_cross_q01_test.zig for Q0+Q1
     rv32c_cross_q01_test.zig — Q0+Q1 cross-validation tests
