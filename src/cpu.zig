@@ -110,8 +110,7 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         }
 
         pub fn readWord(self: *const Self, addr: u32) !u32 {
-            if (addr % 4 != 0) return error.MisalignedAccess;
-            if (addr > mem_size - 4) return error.AddressOutOfBounds;
+            try checkWordAccess(addr);
             return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
         }
 
@@ -129,10 +128,15 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         }
 
         pub fn writeWord(self: *Self, addr: u32, value: u32) !void {
-            if (addr % 4 != 0) return error.MisalignedAccess;
-            if (addr > mem_size - 4) return error.AddressOutOfBounds;
+            try checkWordAccess(addr);
             std.mem.writeInt(u32, self.memory[addr..][0..4], value, .little);
             self.invalidateReservation(addr);
+        }
+
+        /// Alignment, then bounds: the checks every word access makes before touching memory.
+        fn checkWordAccess(addr: u32) error{ MisalignedAccess, AddressOutOfBounds }!void {
+            if (addr % 4 != 0) return error.MisalignedAccess;
+            if (addr > mem_size - 4) return error.AddressOutOfBounds;
         }
 
         /// Invalidate reservation if write overlaps reserved word.
@@ -215,6 +219,11 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
                     self.reservation = addr;
                 },
                 .SC_W => {
+                    // Memory checks come first: SC.W faults on a misaligned or
+                    // out-of-bounds address whether or not it would succeed, and the
+                    // fault leaves the reservation unchanged. (Spec: no SC.W retires
+                    // unless it passes memory permission checks.)
+                    try checkWordAccess(addr);
                     // reservation is guaranteed word-aligned (LR.W's readWord rejects
                     // misalignment), so direct equality suffices — no mask needed here.
                     if (self.reservation == addr) {
