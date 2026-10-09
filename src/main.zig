@@ -215,8 +215,12 @@ fn execute(vm: *det.Cpu, opts: RunOptions, env: *det.hostcall.Env) (det.StepErro
     }
 }
 
-/// Run the program and report how it ended; returns the exit status.
-fn executeAndReport(vm: *det.Cpu, stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !ExitStatus {
+/// How a reported run ended. `faulted` is kept apart from the status because a program
+/// may exit with any status, including the value of .vm_fault.
+const Report = struct { status: ExitStatus, faulted: bool = false };
+
+/// Run the program and report how it ended.
+fn executeAndReport(vm: *det.Cpu, stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !Report {
     var env: det.hostcall.Env = .{ .input = opts.input, .stdout = stdout, .stderr = stderr };
     const stop = execute(vm, opts, &env) catch |err| switch (err) {
         error.WriteFailed => return error.WriteFailed,
@@ -225,20 +229,20 @@ fn executeAndReport(vm: *det.Cpu, stdout: *Io.Writer, stderr: *Io.Writer, opts: 
             try printFault(stderr, vm, fault);
             try stderr.print("\nRegisters:\n", .{});
             try printRegisters(stderr, vm);
-            return .vm_fault;
+            return .{ .status = .vm_fault, .faulted = true };
         },
     };
     switch (stop) {
         .result => |result| {
             try printResult(stdout, vm, result);
-            return stopStatus(result);
+            return .{ .status = stopStatus(result) };
         },
         .exit => |status| {
             try stdout.print("\nProgram exited with status {d} after {d} cycles\n", .{ status, vm.cycle_count });
             try stdout.print("PC = 0x{X:0>8}\n", .{vm.pc});
             try stdout.print("\nRegisters:\n", .{});
             try printRegisters(stdout, vm);
-            return @enumFromInt(@as(u8, @truncate(status)));
+            return .{ .status = @enumFromInt(@as(u8, @truncate(status))) };
         },
     }
 }
@@ -333,8 +337,8 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !ExitSt
     // Execute (the demo stops at its ECALL unless --max-cycles stops it first)
     try stdout.print("\nExecuting...\n", .{});
     vm.writeReg(2, initial_sp);
-    const status = try executeAndReport(vm, stdout, stderr, opts);
-    if (status == .vm_fault) return status;
+    const report = try executeAndReport(vm, stdout, stderr, opts);
+    if (report.faulted) return report.status;
 
     // Show memory at store target (absent when memory is too small to hold it)
     if (vm.readWord(demo_store_addr)) |mem_val| {
@@ -345,7 +349,7 @@ pub fn runDemo(stdout: *Io.Writer, stderr: *Io.Writer, opts: RunOptions) !ExitSt
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
-    return status;
+    return report.status;
 }
 
 pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8, opts: RunOptions) !ExitStatus {
@@ -417,14 +421,14 @@ pub fn runFile(io: Io, stdout: *Io.Writer, stderr: *Io.Writer, path: []const u8,
 
     vm.pc = entry;
     vm.writeReg(2, initial_sp);
-    const status = try executeAndReport(vm, stdout, stderr, opts);
-    if (status == .vm_fault) return status;
+    const report = try executeAndReport(vm, stdout, stderr, opts);
+    if (report.faulted) return report.status;
 
     if (opts.dump_format) |fmt| {
         try stdout.print("\n", .{});
         try dumpMemory(stdout, &vm.memory, fmt);
     }
-    return status;
+    return report.status;
 }
 
 /// Read exactly buf.len bytes at `offset`, or report the problem as a user error.
