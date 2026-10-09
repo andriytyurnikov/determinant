@@ -15,8 +15,8 @@ concurrency:
 # setup-zig installs the version in build.zig.zon's minimum_zig_version, so CI and
 # the declared requirement cannot drift apart.
 #
-# Every test-all run checks tests/digests.txt (zig build test-digests) with both
-# decoders, so all jobs below must reach bit-identical final VM states.
+# Every test-all run checks tests/digests.txt (zig build test-digests), so all
+# jobs below must reach bit-identical final VM states.
 
 jobs:
   test:
@@ -73,15 +73,15 @@ jobs:
             grep -q "x1 = 42" out.txt
           done
 
-  decoders:
-    name: decoder equivalence (all 2^32 inputs)
+  decoder:
+    name: decoder vs registry (all 2^30 32-bit encodings)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          cache-key: decoders
-      - run: zig build verify-decoders
+          cache-key: decoder
+      - run: zig build verify-decoder
 
   fmt:
     name: zig fmt

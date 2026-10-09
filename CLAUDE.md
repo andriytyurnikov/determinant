@@ -10,15 +10,14 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as 
 
 - `zig build` — compile the project (output in `zig-out/`)
 - `zig build run` — build and run the CLI executable
-- `zig build test` — run the unit tests (library) and CLI tests (executable) with the selected decoder
-- `zig build test-compliance` — run the riscv-tests compliance suite with the selected decoder
-- `zig build test-all` — run unit, CLI, compliance and digest tests once per decoder (what CI runs)
+- `zig build test` — run the unit tests (library) and CLI tests (executable)
+- `zig build test-compliance` — run the riscv-tests compliance suite
+- `zig build test-all` — run unit, CLI, compliance and digest tests (what CI runs)
 - `zig build test-digests` — run the corpus (compliance binaries and the C programs in `tests/programs`), check each C program's result against a native run, and check every final-state digest against `tests/digests.txt`; `zig build digests > tests/digests.txt` regenerates it after an intended change in guest-visible behavior (review the diff)
 - `zig build bench` — benchmark the VM on the C corpus (always ReleaseFast; `-- --runs N`); measure before and after any change to the step loop or decoder
 - `zig build programs` — rebuild the C corpus binaries and their expected results with Zig's C compiler (see `tests/programs/README.md`)
-- `zig build verify-decoders` — compare the LUT and branch decoders on all 2^32 inputs (always ReleaseFast, ~20 s); run it after any decoder change
+- `zig build verify-decoder` — check the decoder against the opcode registry on all 2^30 32-bit encodings (always ReleaseFast, ~10 s); run it after any decoder or registry change
 - `zig build run -- <args>` — pass arguments to the executable
-- `-Ddecoder=lut|branch` — select decoder backend (default: `lut`). Applies to CLI, tests, and `Cpu` alias. Example: `zig build test -Ddecoder=branch`
 - `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
 - `zig fmt src/` — format all source files (run after editing)
 
@@ -72,41 +71,24 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Immediate extraction helpers live in `rv32c/imm.zig` — pure stateless functions with no dependencies
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
-- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoders/branch.zig, decoders/lut.zig, cpu.zig, and main.zig
+- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoders/branch.zig, cpu.zig, and main.zig
 
-### Configurable Decoder
+### Decoder
 
-- `CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)` — the decoder is a comptime parameter, no runtime dispatch
-- `DecodeFn = *const fn (u32) DecodeError!Instruction` — function pointer type, re-exported from `root.zig`
-- `Cpu` alias follows the `-Ddecoder` build option (default: LUT). Library consumers can instantiate `CpuType` with either decoder directly
-- `cpu/determinism_test.zig` validates both decoders produce identical CPU state
-
-### Comptime LUT Decoder (Primary)
-
-- `decoders/lut.zig` is the **default decoder** used by `cpu.zig` — replaces branch-based dispatch with 2-3 array lookups
-- **Two-level design**: Level 1 `[128]Strategy` maps opcode[6:0] → decode strategy (1 byte each). Level 2 tables are strategy-specific: `r_table[8][128]`, `shift_table[2][128]`, `load/store/branch/system[8]`, `atomic[32]`, `i_alu_base[8]`
-- **Zbb rs2 refinement**: 1 of 1024 R-type table coordinates (ZEXT_H) and 3 shift coordinates need the rs2 field to disambiguate. `refineRs2R()` and `refineRs2Shift()` are called via `orelse` only when the primary table returns null — common-case decode paths remain branchless
-- **Bit-field extraction**: shared `decoders/bitfields.zig` module used by both `lut.zig` and `branch.zig`
-- **RV32C**: 16-bit compressed instructions delegate to `rv32c.expand()` — fundamentally not table-based
-- **Special I-format cases**: ECALL/EBREAK/FENCE/FENCE.I use I-format encoding but carry no operand fields — `buildInstruction()` short-circuits these to match `branch.zig` behavior
-- **I-ALU shift shamt**: only I-ALU (opcode=0b0010011) with funct3=001/101 uses rs2 field as shamt — other I-format instructions (loads, CSRs) always use full immI
-- Total: ~5.5 KB read-only data, 95 opcodes covered
-
-### Reference Decoder (decoders/branch.zig)
-
-- `decoders/branch.zig` is the **reference decoder** — kept for conformance testing and as documentation of the branch-based dispatch logic
+- One decoder: `decoders/branch.zig`, exported as `decode()` from `decoders.zig` and `root.zig`. It switches on opcode[6:0], then asks each extension's `decodeR()`/`decodeIAlu()`/... by funct3/funct7 (and rs2 where an instruction fixes it)
+- `CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn)` — the decoder is a comptime parameter (default `decoders.decode`), no runtime dispatch. `DecodeFn = *const fn (u32) DecodeError!Instruction`
 - Sub-decoders use semantic names matching their rv32i counterparts: `decodeStore`, `decodeBranch`, `decodeLoad`, `decodeAtomic`, `decodeSystem`
-- **R-type dispatch order matters**: M-extension (funct7=0b0000001) must be checked BEFORE RV32I — both share opcode 0b0110011 and RV32I would false-match on funct3 alone. Order is: M → RV32I → Zba → Zbb → Zbs
-- **I-type ALU shift special case**: for shifts (funct3=001 or 101), the immediate comes from the rs2 field [24:20] (5-bit shamt), NOT the full 12-bit I-immediate. `decodeIAlu()` handles this with a conditional extraction.
+- The order in which extensions are tried (M → RV32I → Zba → Zbb → Zbs for R-type) does not affect results: the registry test proves no two encodings overlap
+- **I-type ALU shift special case**: for opcode 0b0010011 with funct3=001 or 101, the immediate comes from the rs2 field [24:20], NOT the 12-bit I-immediate. This covers SLLI/SRLI/SRAI, RORI, the Zbs immediate forms, and the Zbb unary ops (whose `imm` is the rs2 selector). `decodeIAlu()` handles this with a conditional extraction
+- ECALL/EBREAK/FENCE/FENCE.I carry no operand fields
+- **Reserved encodings trap** (IllegalInstruction): ECALL/EBREAK with rd or rs1 ≠ 0, LR.W with rs2 ≠ 0, JALR with funct3 ≠ 0. FENCE and FENCE.I ignore their other fields, as the spec requires
 - Decode return types: `rv32m.decodeR()` returns non-optional `Opcode` (all funct3 values valid); other decoders return `?Opcode` (some inputs invalid)
 
-### Dual Decoder Public API
+### Opcode Registry (decoders/registry.zig)
 
-- **`decode()`** (`root.zig`) — primary LUT decoder (`decoders.lut.decode`), used by `cpu.zig` for execution — fast, branchless
-- **`decodeBranch()`** (`root.zig`) — reference branch-based decoder (`decoders.branch.decode`), kept for conformance testing and documentation
-- **`decoders`** (`root.zig`) — full access to both decoder modules
-- Library consumers should prefer `decode()` for performance; `decodeBranch()` for readability or reference comparison
-- `DecodeError` is re-exported from `decoders.zig` (canonical) — guaranteed identical between both decoders via comptime check
+- The registry is the **specification** of the 32-bit encodings the decoder accepts: one `Entry` per opcode with its identifying fields (opcode7, f3, f7, f5, f12, and fixed rs2/rd/rs1 values). `Entry.mask()`/`match()` give the constrained bits; `lookup(raw)` finds the matching entry; `instruction(entry, raw)` is the exact `Instruction` (operands included) the decoder must return
+- `registry_test.zig` checks: no two entries overlap, every `Opcode` variant has exactly one entry, every entry decodes correctly with random operand bits, and a sweep over all identifying-field values. `zig build verify-decoder` checks all 2^30 32-bit encodings
+- A decoder change must keep both green; a new instruction needs a registry entry. 16-bit RV32C encodings are outside the registry (covered by rv32c tests and compliance)
 
 ### Atomic Operations & Reservation
 
@@ -207,10 +189,9 @@ const result = try vm.run(0);
 2. Create `src/instructions/newext/tests.zig` with decode + execute tests. Split into semantic files by topic (e.g., `decode_test.zig`, `exec_test.zig`) and use the hub pattern with `comptime { _ = @import("split.zig"); }` blocks
 3. Add `test { _ = @import("newext/tests.zig"); }` in the companion file
 4. Add variant to `instructions.zig` `Opcode` tagged union
-5. Add decode dispatch in `decoders/branch.zig` — respect priority order in `decodeR()`/`decodeIAlu()`
-6. Add opcode entries to `decoders/registry.zig` — one `Entry` per opcode with correct opcode7, f3, f7, and optional rs2_eq/f5/f12 fields. This is the single source of truth for the LUT decoder
-7. If adding many opcodes, check that `@setEvalBranchQuota` in `decoders/lut.zig` is sufficient — increase if comptime eval exceeds the budget
-8. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
-9. Add disassembly case in `main.zig` `printInstruction()`
-10. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
-11. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved
+5. Add decode dispatch in `decoders/branch.zig` (`decodeR()`/`decodeIAlu()`/...)
+6. Add opcode entries to `decoders/registry.zig` — one `Entry` per opcode with its identifying fields (opcode7, f3, f7, and optional rs2_eq/f5/f12/rd_eq/rs1_eq). The registry is the decoder's specification: `zig build test` and `zig build verify-decoder` must pass
+7. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
+8. Add disassembly case in `main.zig` `printInstruction()`
+9. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
+10. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved

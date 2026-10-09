@@ -301,23 +301,20 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
     };
 }
 
-const default_decode: DecodeFn = if (build_options.use_branch_decoder)
-    &decoders.branch.decode
-else
-    &decoders.lut.decode;
+const default_decode: DecodeFn = &decoders.decode;
 
 /// Default memory size — follows the `-Dmemory_size` build option (default: 64 KB).
 pub const default_memory_size: u32 = build_options.memory_size;
 
-/// Default Cpu — memory size follows `-Dmemory_size`, decoder follows `-Ddecoder`.
+/// Default Cpu — memory size follows `-Dmemory_size`.
 pub const Cpu = CpuType(default_memory_size, default_decode);
 
 /// CPU for the unit tests: always 64 KiB of memory, so the tests behave the same
-/// at every `-Dmemory_size`. The decoder still follows `-Ddecoder`.
+/// at every `-Dmemory_size`.
 pub const TestCpu = CpuType(64 * 1024, default_decode);
 
 test "CpuType: custom memory size" {
-    const SmallCpu = CpuType(4096, &decoders.lut.decode);
+    const SmallCpu = CpuType(4096, &decoders.decode);
     var c = SmallCpu.init();
     try std.testing.expectEqual(@as(u32, 4096), SmallCpu.mem_size);
     c.writeReg(1, 42);
@@ -326,7 +323,7 @@ test "CpuType: custom memory size" {
 }
 
 test "CpuType: minimum memory size" {
-    const TinyCpu = CpuType(4, &decoders.lut.decode);
+    const TinyCpu = CpuType(4, &decoders.decode);
     var c = TinyCpu.init();
     try c.writeByte(0, 0xFF);
     try std.testing.expectEqual(@as(u8, 0xFF), try c.readByte(0));

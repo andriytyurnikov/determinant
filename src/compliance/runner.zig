@@ -7,8 +7,7 @@ const det = @import("determinant");
 /// 256KB memory — larger than default 64KB to accommodate test data sections.
 const compliance_memory_size: u32 = 256 * 1024;
 
-/// CPU type used for compliance tests — fixed 256KB memory; the decoder follows
-/// `-Ddecoder` (test-all runs the suite once per decoder).
+/// CPU type used for compliance tests — fixed 256KB memory, default decoder.
 pub const ComplianceCpu = det.CpuType(compliance_memory_size, det.Cpu.decode);
 
 pub const TestResult = union(enum) {

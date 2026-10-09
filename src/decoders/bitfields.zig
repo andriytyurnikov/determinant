@@ -1,7 +1,7 @@
-//! Shared bit-field extraction functions for RISC-V instruction words.
-//! Used by both branch_decoder.zig and lut_decoder.zig.
+//! Bit-field extraction functions for RISC-V instruction words.
+//! Used by the decoder (branch.zig) and the registry's operand specification.
 
-/// Canonical decode error — imported by both decoders so the error set is defined once.
+/// Canonical decode error.
 pub const DecodeError = error{IllegalInstruction};
 
 // --- Register / function fields ---
