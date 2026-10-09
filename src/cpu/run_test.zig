@@ -187,3 +187,69 @@ test "run: unlimited with non-zero initial cycle_count" {
     try std.testing.expectEqual(@as(u64, 102), cpu.cycle_count);
     try std.testing.expectEqual(@as(u32, 8), cpu.pc);
 }
+
+// --- Resuming after a stop ---
+
+const h = @import("../instructions/test_helpers.zig");
+
+test "resume: run to ECALL, host edits registers, run continues after the ECALL" {
+    var cpu = Cpu.init();
+    // A guest "syscall": ECALL with the request in a0, then use the reply in a0.
+    h.storeWordAt(&cpu, 0, h.encodeI(0b0010011, 0b000, 10, 0, 7)); // ADDI a0, x0, 7
+    h.storeWordAt(&cpu, 4, 0x00000073); // ECALL
+    h.storeWordAt(&cpu, 8, h.encodeI(0b0010011, 0b000, 11, 10, 1)); // ADDI a1, a0, 1
+    h.storeWordAt(&cpu, 12, 0x00100073); // EBREAK
+
+    try std.testing.expectEqual(StepResult.ecall, try cpu.run(100));
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc); // past the ECALL
+    try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count); // the ECALL retired
+    try std.testing.expectEqual(@as(u32, 7), cpu.readReg(10));
+
+    cpu.writeReg(10, 41); // the host's reply
+
+    try std.testing.expectEqual(StepResult.ebreak, try cpu.run(100));
+    try std.testing.expectEqual(@as(u32, 42), cpu.readReg(11));
+    try std.testing.expectEqual(@as(u32, 16), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 4), cpu.cycle_count);
+}
+
+test "resume: the cycle limit is absolute across calls" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 0, h.encodeJ(0, 0)); // JAL x0, 0 — loops forever
+    try std.testing.expectEqual(StepResult.@"continue", try cpu.run(10));
+    try std.testing.expectEqual(@as(u64, 10), cpu.cycle_count);
+    // The same limit again executes nothing: it is not a per-call budget.
+    try std.testing.expectEqual(StepResult.@"continue", try cpu.run(10));
+    try std.testing.expectEqual(@as(u64, 10), cpu.cycle_count);
+    // A budget of n more steps is run(cycle_count + n).
+    try std.testing.expectEqual(StepResult.@"continue", try cpu.run(cpu.cycle_count + 5));
+    try std.testing.expectEqual(@as(u64, 15), cpu.cycle_count);
+}
+
+test "resume: EBREAK stops with pc past it (+4) and C.EBREAK with pc + 2" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 0, 0x00100073); // EBREAK at 0
+    h.storeHalfAt(&cpu, 4, 0x9002); // C.EBREAK at 4
+    h.storeHalfAt(&cpu, 6, 0x9002); // C.EBREAK at 6
+
+    try std.testing.expectEqual(StepResult.ebreak, try cpu.run(null));
+    try std.testing.expectEqual(@as(u32, 4), cpu.pc);
+    try std.testing.expectEqual(StepResult.ebreak, try cpu.run(null));
+    try std.testing.expectEqual(@as(u32, 6), cpu.pc);
+    try std.testing.expectEqual(StepResult.ebreak, try cpu.run(null));
+    try std.testing.expectEqual(@as(u32, 8), cpu.pc);
+    try std.testing.expectEqual(@as(u64, 3), cpu.cycle_count);
+}
+
+test "resume: after a fault, the host can skip the instruction and continue" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 0, 0xFFFFFFFF); // illegal
+    h.storeWordAt(&cpu, 4, h.encodeI(0b0010011, 0b000, 1, 0, 5)); // ADDI x1, x0, 5
+    h.storeWordAt(&cpu, 8, 0x00100073); // EBREAK
+    try std.testing.expectError(error.IllegalInstruction, cpu.run(100));
+    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
+    cpu.pc += 4; // the host skips it
+    try std.testing.expectEqual(StepResult.ebreak, try cpu.run(100));
+    try std.testing.expectEqual(@as(u32, 5), cpu.readReg(1));
+    try std.testing.expectEqual(@as(u64, 2), cpu.cycle_count); // the illegal one never retired
+}
