@@ -25,6 +25,11 @@ test "Atomic round-trip: all RV32A opcodes" {
             for (test_regs) |rs1_v| {
                 for (test_regs) |rs2_v| {
                     const raw = h.encodeAtomic(c[0], rd_v, rs1_v, rs2_v);
+                    if (c[0] == 0b00010 and rs2_v != 0) {
+                        // LR.W with rs2 ≠ 0 is a reserved encoding
+                        try std.testing.expectError(error.IllegalInstruction, decode(raw));
+                        continue;
+                    }
                     const inst = try decode(raw);
                     try std.testing.expectEqual(c[1], inst.op);
                     try std.testing.expectEqual(rd_v, inst.rd);
