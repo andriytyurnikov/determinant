@@ -31,12 +31,14 @@ const Image = struct {
         put32(b, 60, 0x1000);
         put32(b, 68, 16);
         put32(b, 72, 16);
+        put32(b, 76, 5); // PF_R | PF_X
         // PT_LOAD: data, file offset 132 -> 0x2000, 4 bytes in the file, 16 in memory
         put32(b, 84, 1);
         put32(b, 88, 132);
         put32(b, 92, 0x2000);
         put32(b, 100, 4);
         put32(b, 104, 16);
+        put32(b, 108, 6); // PF_R | PF_W
         @memcpy(b[116..132], text);
         b[132..136].* = .{ 0xAA, 0xBB, 0xCC, 0xDD };
         return img;
@@ -130,6 +132,22 @@ test "loadElf: zero-filling .bss drops an LR reservation" {
     const img = Image.build(&code, 0x1000);
     _ = try loader.loadElf(&cpu, &img.bytes);
     try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}
+
+test "segments: the PT_LOAD segments, with their flags, of a valid image" {
+    const img = Image.build(&code, 0x1000);
+    var it = try loader.segments(&img.bytes);
+    try std.testing.expectEqual(loader.Segment{ .offset = 116, .vaddr = 0x1000, .filesz = 16, .memsz = 16, .flags = 5 }, it.next().?);
+    try std.testing.expectEqual(loader.Segment{ .offset = 132, .vaddr = 0x2000, .filesz = 4, .memsz = 16, .flags = 6 }, it.next().?);
+    try std.testing.expectEqual(@as(?loader.Segment, null), it.next());
+
+    var bad = img;
+    bad.bytes[56] = 0xFF; // code segment's file offset beyond the image
+    try std.testing.expectError(error.InvalidElf, loader.segments(&bad.bytes));
+    // Where the segments go is loadElf's check, not this one.
+    var high = img;
+    Image.put32(&high.bytes, 92, 0xFFFF_0000);
+    _ = try loader.segments(&high.bytes);
 }
 
 test "isElf" {

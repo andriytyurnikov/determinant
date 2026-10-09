@@ -35,6 +35,10 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    const cli_options = b.addOptions();
+    cli_options.addOption([]const u8, "version", @import("build.zig.zon").version);
+    exe.root_module.addOptions("cli_options", cli_options);
+
     b.installArtifact(exe);
 
     // Run step

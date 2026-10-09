@@ -1,121 +1,67 @@
+//! Memory dumps: the hexdump and raw formats, exactly.
+
 const std = @import("std");
 const Io = std.Io;
 const main_mod = @import("../main.zig");
+const dump = main_mod.dump;
+const h = @import("test_helpers.zig");
 
-const alloc = std.testing.allocator;
-
-fn dumpToString(memory: []const u8, format: main_mod.DumpFormat) ![]u8 {
-    var aw: Io.Writer.Allocating = .init(alloc);
-    errdefer aw.deinit();
-    try main_mod.dumpMemory(&aw.writer, memory, format);
-    var list = aw.toArrayList();
-    return list.toOwnedSlice(alloc);
+fn expectDump(memory: []const u8, base: u32, format: dump.Format, want: []const u8) !void {
+    var aw: Io.Writer.Allocating = .init(h.alloc);
+    defer aw.deinit();
+    try dump.dumpMemory(&aw.writer, memory, base, format);
+    try std.testing.expectEqualStrings(want, aw.written());
 }
 
-fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.find(u8, haystack, needle) == null) {
-        std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
-        return error.TestExpectedEqual;
-    }
+test "hexdump: one line, with its ASCII column and the end address" {
+    try expectDump("Hello World!\x00\x01\x02\x03", 0, .hexdump,
+        \\00000000  48 65 6C 6C 6F 20 57 6F  72 6C 64 21 00 01 02 03  |Hello World!....|
+        \\00000010
+        \\
+    );
 }
 
-test "hexdump: single line" {
-    const data = [_]u8{ 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x21, 0x00, 0x01, 0x02, 0x03 };
-    const result = try dumpToString(&data, .hexdump);
-    defer alloc.free(result);
-
-    try expectContains(result, "00000000");
-    try expectContains(result, "48 65 6C 6C 6F 20 57 6F");
-    try expectContains(result, "72 6C 64 21 00 01 02 03");
-    try expectContains(result, "|Hello World!....|");
-    try expectContains(result, "00000010\n");
+test "hexdump: addresses start at the base address" {
+    try expectDump("ABC", 0x100, .hexdump,
+        \\00000100  41 42 43                                          |ABC|
+        \\00000103
+        \\
+    );
 }
 
-test "hexdump: zero-run collapsing" {
-    var data: [64]u8 = @splat(0);
-    _ = &data;
-    const result = try dumpToString(&data, .hexdump);
-    defer alloc.free(result);
-
-    try expectContains(result, "00000000");
-    try expectContains(result, "*\n");
-    try expectContains(result, "00000040\n");
-
-    if (std.mem.find(u8, result, "00000010")) |_| {
-        return error.TestExpectedEqual;
-    }
+test "hexdump: repeated lines collapse to one '*', and the dump resumes after them" {
+    const memory = @as([48]u8, @splat(0)) ++ @as([16]u8, @splat(0xFF));
+    try expectDump(&memory, 0, .hexdump,
+        \\00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+        \\*
+        \\00000030  FF FF FF FF FF FF FF FF  FF FF FF FF FF FF FF FF  |................|
+        \\00000040
+        \\
+    );
 }
 
-test "hexdump: collapsing then resumption" {
-    var data = @as([32]u8, @splat(0)) ++ @as([16]u8, @splat(0xFF));
-    _ = &data;
-    const result = try dumpToString(&data, .hexdump);
-    defer alloc.free(result);
-
-    try expectContains(result, "00000000");
-    try expectContains(result, "*\n");
-    try expectContains(result, "00000020");
-    try expectContains(result, "FF FF FF FF");
-    try expectContains(result, "00000030\n");
+test "hexdump: a partial last line is never collapsed" {
+    const memory = @as([16]u8, @splat(0)) ++ @as([4]u8, @splat(0));
+    try expectDump(&memory, 0, .hexdump,
+        \\00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+        \\00000010  00 00 00 00                                       |....|
+        \\00000014
+        \\
+    );
 }
 
-test "hexdump: partial last line" {
-    const data = [_]u8{ 0x41, 0x42, 0x43 };
-    const result = try dumpToString(&data, .hexdump);
-    defer alloc.free(result);
-
-    try expectContains(result, "41 42 43");
-    try expectContains(result, "|ABC|");
-    try expectContains(result, "00000003\n");
+test "hexdump: only 0x20..0x7E print as themselves" {
+    try expectDump("\x1F\x20\x7E\x7F", 0, .hexdump,
+        \\00000000  1F 20 7E 7F                                       |. ~.|
+        \\00000004
+        \\
+    );
 }
 
-test "hexdump: ASCII printable range" {
-    var data: [16]u8 = @splat(0);
-    data[0] = 0x1F;
-    data[1] = 0x20;
-    data[2] = 0x7E;
-    data[3] = 0x7F;
-    const result = try dumpToString(&data, .hexdump);
-    defer alloc.free(result);
-
-    try expectContains(result, "|. ~.");
-}
-
-test "raw: hex encoding" {
-    const data = [_]u8{ 0x00, 0x0A, 0xFF, 0x42 };
-    const result = try dumpToString(&data, .raw);
-    defer alloc.free(result);
-
-    try expectContains(result, "000AFF42");
-}
-
-test "raw: line breaks at 32 bytes" {
-    var data: [64]u8 = @splat(0xAB);
-    _ = &data;
-    const result = try dumpToString(&data, .raw);
-    defer alloc.free(result);
-
-    var lines = std.mem.splitScalar(u8, result, '\n');
-    const line1 = lines.next().?;
-    try std.testing.expectEqual(@as(usize, 64), line1.len);
-    const line2 = lines.next().?;
-    try std.testing.expectEqual(@as(usize, 64), line2.len);
-}
-
-test "raw: no collapsing" {
-    var data: [64]u8 = @splat(0);
-    _ = &data;
-    const result = try dumpToString(&data, .raw);
-    defer alloc.free(result);
-
-    if (std.mem.find(u8, result, "*")) |_| {
-        return error.TestExpectedEqual;
-    }
-
-    var line_count: usize = 0;
-    var lines = std.mem.splitScalar(u8, result, '\n');
-    while (lines.next()) |line| {
-        if (line.len > 0) line_count += 1;
-    }
-    try std.testing.expectEqual(@as(usize, 2), line_count);
+test "raw: two hex digits per byte, 32 bytes per line, nothing collapsed" {
+    const memory = @as([32]u8, @splat(0xAB)) ++ [_]u8{ 0x00, 0x0A, 0xFF, 0x42 };
+    const ab_line = std.fmt.bytesToHex(@as([32]u8, @splat(0xAB)), .upper);
+    try expectDump(&memory, 0x100, .raw, ab_line ++ "\n000AFF42\n");
+    const zero_line = std.fmt.bytesToHex(@as([32]u8, @splat(0)), .upper);
+    try expectDump(&@as([64]u8, @splat(0)), 0, .raw, zero_line ++ "\n" ++ zero_line ++ "\n");
 }

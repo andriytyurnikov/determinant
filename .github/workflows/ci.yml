@@ -36,8 +36,9 @@ jobs:
       - name: CLI smoke run
         shell: bash
         run: |
-          zig build run -Doptimize=${{ matrix.optimize }} -- src/compliance/bin/rv32ui/simple.bin | tee out.txt
-          grep -q "x3 = 1 " out.txt
+          # The report goes to stderr; the program's output alone to stdout.
+          zig build run -Doptimize=${{ matrix.optimize }} -- src/compliance/bin/rv32ui/simple.bin 2>&1 | tee out.txt
+          grep -q "x3   gp   0x00000001  1$" out.txt
 
   big-endian:
     name: test (s390x big-endian, qemu)
@@ -69,8 +70,8 @@ jobs:
           # ADDI x1, x0, 42; EBREAK — small enough for every memory size
           printf '\223\000\240\002\163\000\020\000' > tiny.bin
           for opt in debug fast; do
-            zig build run -Doptimize=$opt -Dmemory_size=${{ matrix.memory_size }} -- tiny.bin | tee out.txt
-            grep -q "x1 = 42" out.txt
+            zig build run -Doptimize=$opt -Dmemory_size=${{ matrix.memory_size }} -- tiny.bin 2>&1 | tee out.txt
+            grep -q "x1   ra   0x0000002A  42$" out.txt
           done
 
   decoder:

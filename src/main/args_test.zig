@@ -1,211 +1,188 @@
+//! Argument parsing (args.parse): one row per case.
+
 const std = @import("std");
 const Io = std.Io;
 const main_mod = @import("../main.zig");
-const det = @import("determinant");
+const args = main_mod.args;
+const h = @import("test_helpers.zig");
 
-const io = std.testing.io;
-const alloc = std.testing.allocator;
+/// parse() takes the memory size, so these rows do not depend on -Dmemory_size.
+const mem_size: u32 = 64 * 1024;
 
-fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.find(u8, haystack, needle) == null) {
-        std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
-        return error.TestExpectedEqual;
+const Want = union(enum) {
+    command: args.Command,
+    /// A usage error whose message contains this.
+    err: []const u8,
+};
+
+const Case = struct { args: []const [:0]const u8, want: Want };
+
+fn run(config: args.Config) Want {
+    return .{ .command = .{ .run = config } };
+}
+
+fn file(path: []const u8) args.Program {
+    return .{ .file = path };
+}
+
+fn err(msg: []const u8) Want {
+    return .{ .err = msg };
+}
+
+const cases = [_]Case{
+    // Commands
+    .{ .args = &.{}, .want = .{ .command = .usage } },
+    .{ .args = &.{"--help"}, .want = .{ .command = .help } },
+    .{ .args = &.{"-h"}, .want = .{ .command = .help } },
+    .{ .args = &.{"--version"}, .want = .{ .command = .version } },
+    .{ .args = &.{ "--bogus", "--help" }, .want = .{ .command = .help } }, // --help wins anywhere
+    .{ .args = &.{ "p.bin", "--max-cycles", "--version" }, .want = .{ .command = .version } },
+    .{ .args = &.{ "--", "--help" }, .want = run(.{ .program = file("--help") }) },
+    .{ .args = &.{"p.bin"}, .want = run(.{ .program = file("p.bin") }) },
+    .{ .args = &.{"--demo"}, .want = run(.{ .program = .demo }) },
+    .{ .args = &.{"-"}, .want = run(.{ .program = file("-") }) }, // an argument, not an option
+    .{ .args = &.{ "--", "-weird.bin" }, .want = run(.{ .program = file("-weird.bin") }) },
+
+    // Values: the next argument or after '=', and the number syntax
+    .{ .args = &.{ "p.bin", "--max-cycles", "1000" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 1000 }) },
+    .{ .args = &.{ "--max-cycles=1000", "p.bin" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 1000 }) },
+    .{ .args = &.{ "p.bin", "--max-cycles", "0x10" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 16 }) },
+    .{ .args = &.{ "p.bin", "--max-cycles", "1_000_000" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 1_000_000 }) },
+    .{ .args = &.{ "p.bin", "--max-cycles", "0" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 0 }) },
+    .{ .args = &.{ "p.bin", "--max-cycles", "18446744073709551615" }, .want = run(.{ .program = file("p.bin"), .max_cycles = std.math.maxInt(u64) }) },
+    .{ .args = &.{ "p.bin", "--max-cycles", "1", "--max-cycles", "2" }, .want = run(.{ .program = file("p.bin"), .max_cycles = 2 }) }, // the last wins
+    .{ .args = &.{ "p.bin", "--input", "in.txt" }, .want = run(.{ .program = file("p.bin"), .input = .{ .file = "in.txt" } }) },
+    .{ .args = &.{ "p.bin", "--input", "-" }, .want = run(.{ .program = file("p.bin"), .input = .stdin }) },
+    .{ .args = &.{ "p.bin", "--input=-" }, .want = run(.{ .program = file("p.bin"), .input = .stdin }) },
+    .{ .args = &.{ "p.bin", "--input", "--digest" }, .want = run(.{ .program = file("p.bin"), .input = .{ .file = "--digest" } }) }, // a value, even if it looks like an option
+    .{ .args = &.{ "p.bin", "--load-addr", "0x100" }, .want = run(.{ .program = file("p.bin"), .load_addr = 0x100 }) },
+    .{ .args = &.{ "p.bin", "--load-addr=0" }, .want = run(.{ .program = file("p.bin"), .load_addr = 0 }) },
+    .{ .args = &.{ "p.bin", "--load-addr", "0xFFFE" }, .want = run(.{ .program = file("p.bin"), .load_addr = 0xFFFE }) },
+
+    // Dumps: the format only after '=', the range in either order
+    .{ .args = &.{ "p.bin", "--dump-memory" }, .want = run(.{ .program = file("p.bin"), .dump = .{} }) },
+    .{ .args = &.{ "p.bin", "--dump-memory=raw" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .format = .raw } }) },
+    .{ .args = &.{ "p.bin", "--dump-memory=hexdump" }, .want = run(.{ .program = file("p.bin"), .dump = .{} }) },
+    .{ .args = &.{ "--dump-memory", "raw" }, .want = run(.{ .program = file("raw"), .dump = .{} }) },
+    .{ .args = &.{ "p.bin", "--dump-range", "0x10:16" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .range = .{ .start = 16, .len = 16 } } }) },
+    .{ .args = &.{ "p.bin", "--dump-range=0xFFF0:0x10" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .range = .{ .start = 0xFFF0, .len = 16 } } }) }, // up to the top
+    .{ .args = &.{ "p.bin", "--dump-memory=raw", "--dump-range", "0:4" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .format = .raw, .range = .{ .start = 0, .len = 4 } } }) },
+    .{ .args = &.{ "p.bin", "--dump-range", "0:4", "--dump-memory=raw" }, .want = run(.{ .program = file("p.bin"), .dump = .{ .format = .raw, .range = .{ .start = 0, .len = 4 } } }) },
+
+    // Flags
+    .{ .args = &.{ "p.bin", "--digest", "--trace", "-q" }, .want = run(.{ .program = file("p.bin"), .digest = true, .trace = true, .quiet = true }) },
+    .{ .args = &.{ "--quiet", "--demo" }, .want = run(.{ .program = .demo, .quiet = true }) },
+    .{ .args = &.{ "--disassemble", "p.bin", "--load-addr", "8" }, .want = run(.{ .program = file("p.bin"), .disassemble = true, .load_addr = 8 }) },
+    .{ .args = &.{ "--disassemble", "--demo" }, .want = run(.{ .program = .demo, .disassemble = true }) },
+
+    // Usage errors
+    .{ .args = &.{"--bogus"}, .want = err("unknown option '--bogus'") },
+    .{ .args = &.{ "p.bin", "-x" }, .want = err("unknown option '-x'") },
+    .{ .args = &.{ "p.bin", "--max-cycles" }, .want = err("--max-cycles needs a value") },
+    .{ .args = &.{ "p.bin", "--max-cycles", "abc" }, .want = err("--max-cycles 'abc' is not a number") },
+    .{ .args = &.{ "p.bin", "--max-cycles", "" }, .want = err("is not a number") },
+    .{ .args = &.{ "p.bin", "--max-cycles=" }, .want = err("is not a number") },
+    .{ .args = &.{ "p.bin", "--max-cycles", "1e6" }, .want = err("--max-cycles '1e6' is not a number") },
+    .{ .args = &.{ "p.bin", "--max-cycles", "-1" }, .want = err("--max-cycles '-1' is negative") },
+    .{ .args = &.{ "p.bin", "--max-cycles", "18446744073709551616" }, .want = err("is too large (at most 18446744073709551615)") },
+    .{ .args = &.{ "p.bin", "--load-addr", "0x101" }, .want = err("--load-addr '0x101' must be even and inside the 64 KiB of VM memory") },
+    .{ .args = &.{ "p.bin", "--load-addr", "65536" }, .want = err("must be even and inside the 64 KiB") },
+    .{ .args = &.{ "p.bin", "--load-addr", "0x100000000" }, .want = err("is too large") },
+    .{ .args = &.{ "p.bin", "--load-addr", "nope" }, .want = err("--load-addr 'nope' is not a number") },
+    .{ .args = &.{ "p.bin", "--input" }, .want = err("--input needs a value") },
+    .{ .args = &.{ "p.bin", "--dump-memory=bin" }, .want = err("unknown --dump-memory format 'bin' (hexdump or raw)") },
+    .{ .args = &.{ "p.bin", "--dump-memory=" }, .want = err("unknown --dump-memory format ''") },
+    .{ .args = &.{ "p.bin", "--dump-range", "16" }, .want = err("--dump-range '16' is not ADDR:LEN") },
+    .{ .args = &.{ "p.bin", "--dump-range", "x:1" }, .want = err("--dump-range address 'x' is not a number") },
+    .{ .args = &.{ "p.bin", "--dump-range", "0:" }, .want = err("--dump-range length '' is not a number") },
+    .{ .args = &.{ "p.bin", "--dump-range", "0:0" }, .want = err("--dump-range '0:0' is empty") },
+    .{ .args = &.{ "p.bin", "--dump-range", "0xFFF0:0x11" }, .want = err("--dump-range '0xFFF0:0x11' is not inside the 64 KiB of VM memory") },
+    .{ .args = &.{ "p.bin", "--dump-range", "0xFFFFFFFF:0xFFFFFFFF" }, .want = err("is not inside") }, // no overflow
+    .{ .args = &.{ "p.bin", "--dump-range", "0xFFFFFFF0:0x20" }, .want = err("is not inside") }, // would wrap to 0x10
+    .{ .args = &.{ "p.bin", "--digest=yes" }, .want = err("--digest takes no value") },
+    .{ .args = &.{ "p.bin", "-q=1" }, .want = err("--quiet takes no value") },
+    .{ .args = &.{ "a.bin", "b.bin" }, .want = err("unexpected argument 'b.bin' after the program 'a.bin' (programs take no arguments)") },
+    .{ .args = &.{ "a.bin", "--", "b.bin" }, .want = err("unexpected argument 'b.bin'") },
+    .{ .args = &.{ "--demo", "a.bin" }, .want = err("--demo runs the built-in program, so it takes no program file ('a.bin')") },
+    .{ .args = &.{ "--demo", "--load-addr", "0" }, .want = err("--load-addr does not apply to --demo") },
+    .{ .args = &.{"-q"}, .want = err("no program to run (a file, or --demo)") },
+    .{ .args = &.{"--"}, .want = err("no program to run") },
+    .{ .args = &.{ "--disassemble", "p.bin", "--max-cycles", "1" }, .want = err("--max-cycles does not apply to --disassemble") },
+    .{ .args = &.{ "--disassemble", "p.bin", "--input", "x" }, .want = err("--input does not apply to --disassemble") },
+    .{ .args = &.{ "--disassemble", "p.bin", "--dump-range", "0:4" }, .want = err("--dump-memory or --dump-range does not apply to --disassemble") },
+    .{ .args = &.{ "--disassemble", "p.bin", "--digest" }, .want = err("--digest does not apply to --disassemble") },
+    .{ .args = &.{ "--disassemble", "p.bin", "--trace" }, .want = err("--trace does not apply to --disassemble, which lists the program without running it") },
+    .{ .args = &.{ "--disassemble", "p.bin", "-q" }, .want = err("--quiet does not apply to --disassemble") },
+};
+
+test "parse: table" {
+    for (cases) |c| {
+        var argv: std.ArrayList([:0]const u8) = .empty;
+        defer argv.deinit(h.alloc);
+        try argv.append(h.alloc, "determinant");
+        try argv.appendSlice(h.alloc, c.args);
+        var diag: Io.Writer.Allocating = .init(h.alloc);
+        defer diag.deinit();
+
+        const got = args.parse(argv.items, mem_size, &diag.writer);
+        errdefer std.debug.print("\nargs: {any}\nmessage: {s}\n", .{ c.args, diag.written() });
+        switch (c.want) {
+            .command => |want| {
+                try std.testing.expectEqualDeep(want, try got);
+                try std.testing.expectEqualStrings("", diag.written());
+            },
+            .err => |msg| {
+                try std.testing.expectError(error.Usage, got);
+                try std.testing.expectStringStartsWith(diag.written(), "Error: ");
+                try h.expectContains(diag.written(), msg);
+                try std.testing.expect(std.mem.endsWith(u8, diag.written(), "\n"));
+            },
+        }
     }
 }
 
-const Args = []const [:0]const u8;
-
-fn runArgs(args: Args, stdout: *Io.Writer, stderr: *Io.Writer) !main_mod.ExitStatus {
-    return main_mod.mainInner(io, stdout, stderr, args);
+test "parse: the limits follow the memory size it is given" {
+    var diag: Io.Writer.Allocating = .init(h.alloc);
+    defer diag.deinit();
+    const ok = try args.parse(&.{ "determinant", "p.bin", "--load-addr", "0x100", "--dump-range", "0:0x200" }, 0x200, &diag.writer);
+    try std.testing.expectEqual(@as(?u32, 0x100), ok.run.load_addr);
+    try std.testing.expectError(error.Usage, args.parse(&.{ "determinant", "p.bin", "--load-addr", "0x200" }, 0x200, &diag.writer));
+    try h.expectContains(diag.written(), "inside the 512 bytes of VM memory");
 }
 
-test "mainInner: no args runs demo" {
-    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{"determinant"};
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Demo");
+test "--help lists every option and the exit statuses, on stdout" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{"--help"}));
+    try std.testing.expectStringStartsWith(fx.stdout(), args.usage_text);
+    for (args.specs) |spec| {
+        try h.expectContains(fx.stdout(), spec.name);
+        if (spec.short) |short| try h.expectContains(fx.stdout(), short);
+    }
+    try h.expectContains(fx.stdout(), "Exit status:");
+    try std.testing.expectEqualStrings("", fx.stderr());
 }
 
-test "mainInner: --help" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "--help" };
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Usage:");
-    try expectContains(stdout_aw.written(), "--max-cycles");
+test "--version shows the version and the build configuration, on stdout" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{"--version"}));
+    try std.testing.expectStringStartsWith(fx.stdout(), "determinant " ++ @import("cli_options").version ++ " (");
+    try h.expectContains(fx.stdout(), "of VM memory, " ++ @tagName(@import("builtin").mode) ++ " build)\n");
 }
 
-test "mainInner: -h" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "-h" };
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Usage:");
+test "no arguments: the usage on stderr, exit status 1" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    try std.testing.expectEqual(h.status(.usage_or_io), try fx.run(&.{}));
+    try std.testing.expectEqualStrings("", fx.stdout());
+    try std.testing.expectEqualStrings(args.usage_text ++ "Run 'determinant --help' for the options, or 'determinant --demo' for a demo.\n", fx.stderr());
 }
 
-test "mainInner: --max-cycles without file limits the demo" {
-    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    // The demo needs 5 cycles; stop it after 2.
-    const args: Args = &.{ "determinant", "--max-cycles", "2" };
-    try std.testing.expectEqual(main_mod.ExitStatus.cycle_limit, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Demo");
-    try expectContains(stdout_aw.written(), "Cycle limit reached after 2 cycles");
-}
-
-test "mainInner: unknown flag after path" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--unknown" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "unknown option");
-}
-
-test "mainInner: missing --max-cycles value" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "requires a value");
-}
-
-test "mainInner: invalid --max-cycles value" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "abc" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "invalid");
-}
-
-test "mainInner: negative --max-cycles value" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "-1" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "invalid");
-}
-
-test "mainInner: overflow --max-cycles value" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "99999999999999999999" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "invalid");
-}
-
-test "mainInner: --max-cycles empty string" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "invalid");
-}
-
-test "mainInner: extra arguments produce warning" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "test.bin", "--max-cycles", "10", "extra" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "ignoring extra argument");
-}
-
-test "mainInner: --dump-memory runs demo with hexdump" {
-    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "--dump-memory" };
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Demo");
-    try expectContains(stdout_aw.written(), "|");
-}
-
-test "mainInner: --dump-memory raw runs demo with raw format" {
-    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
-    // A raw dump prints two hex digits per byte; skip it for very large memories.
-    if (det.Cpu.mem_size > 1024 * 1024) return error.SkipZigTest;
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "--dump-memory", "raw" };
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "Demo");
-    try expectContains(stdout_aw.written(), "00000000");
-}
-
-test "mainInner: --help shows --dump-memory" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "--help" };
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stdout_aw.written(), "--dump-memory");
-}
-
-test "mainInner: valid --max-cycles proceeds to file loading" {
-    var stdout_aw: Io.Writer.Allocating = .init(alloc);
-    defer stdout_aw.deinit();
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-
-    const args: Args = &.{ "determinant", "nonexistent.bin", "--max-cycles", "100" };
-    try std.testing.expectError(error.UserError, runArgs(args, &stdout_aw.writer, &stderr_aw.writer));
-
-    try expectContains(stderr_aw.written(), "cannot open");
+test "a usage error: the message and a pointer to --help on stderr, exit status 1" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    try std.testing.expectEqual(h.status(.usage_or_io), try fx.run(&.{"--bogus"}));
+    try std.testing.expectEqualStrings("", fx.stdout());
+    try std.testing.expectEqualStrings("Error: unknown option '--bogus'\nRun 'determinant --help' for usage.\n", fx.stderr());
 }
