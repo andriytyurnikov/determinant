@@ -111,7 +111,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("corpus digests: {d} programs match {s}{s}\n", .{ n_programs, golden_path, if (decode_cache) "" else " (decode cache off)" });
     } else {
         var buf: [4096]u8 = undefined;
-        var fw: Io.File.Writer = .init(Io.File.stdout(), io, &buf);
+        var fw: Io.File.Writer = .initStreaming(Io.File.stdout(), io, &buf);
         try fw.interface.writeAll(out.written());
         try fw.interface.flush();
     }

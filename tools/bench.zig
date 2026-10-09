@@ -57,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     defer gpa.destroy(vm);
 
     var buf: [4096]u8 = undefined;
-    var fw: Io.File.Writer = .init(Io.File.stdout(), io, &buf);
+    var fw: Io.File.Writer = .initStreaming(Io.File.stdout(), io, &buf);
     const out = &fw.interface;
     try out.print("{s:<28} {s:>12} {s:>10} {s:>8}\n", .{ "program", "instructions", "best ms", "MIPS" });
 

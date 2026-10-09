@@ -141,6 +141,11 @@ src/
       rv32uzbs/             — Zbs test binaries (bclr.bin, bext.bin, ...)
 tools/
   verify_decoder.zig      — decoder vs. opcode registry on all 2^30 32-bit encodings (`zig build verify-decoder`)
+  llvm_oracle/            — decoder vs. LLVM's RISC-V disassembler, all 16-bit and 32-bit encodings (`zig build llvm-oracle -Dllvm_lib=...`; needs libLLVM; see its README)
+    oracle.zig            — driver: dlopens libLLVM, compares on N threads, classifies divergences, self-test with planted bugs
+    render.zig            — prints a decoded Instruction in LLVM's -riscv-no-aliases syntax
+  spike_diff/             — differential tests against Spike: random programs, directed edge cases, encoding sweep (Python; needs Spike and RISC-V binutils; see its README)
+    runner.zig            — the VM side (`zig build spike-runner`): runs each program with the decode cache on and off, prints final state
   bench.zig               — benchmark: best-of-N time and MIPS per C corpus program, geometric mean (`zig build bench`)
   corpus_digests.zig      — runs every corpus program (compliance binaries and C programs) and prints/checks final-state digests and C program results (`zig build digests` / `test-digests`)
 tests/
@@ -159,7 +164,7 @@ docs/
       link.ld               — custom linker script (origin at 0x0)
     Makefile                — builds flat binaries from riscv-tests sources
     README.md               — rebuild instructions and toolchain setup
-build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoder, bench and programs steps)
+build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoder, bench, programs, test-compliance-rebuild, and the opt-in llvm-oracle and spike-runner steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
 README.md                 — overview, CLI, program contract, public API
 SEMANTICS.md              — execution semantics: the contract (ISA subset, decoding, faults, LR/SC, CSRs, determinism)

@@ -84,6 +84,11 @@ zig build verify-decoder    # check the decoder against its spec on all 2^30 32-
 zig build bench             # MIPS on the C program corpus (ReleaseFast)
 ```
 
+Before a release, three more checks run against independent references. They need software CI does not install:
+- [tools/llvm_oracle](tools/llvm_oracle/README.md) compares the decoder with LLVM's RISC-V disassembler on every encoding;
+- [tools/spike_diff](tools/spike_diff/README.md) compares execution with Spike, the reference simulator, on random programs and edge cases;
+- [tools/mutation](tools/mutation/README.md) runs the test suite against planted bugs.
+
 ### Performance
 
 `zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.16.0 (ReleaseFast) the VM executes about 280–290 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.75× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 150. Compare numbers only from the same machine.
