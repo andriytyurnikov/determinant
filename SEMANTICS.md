@@ -2,7 +2,7 @@
 
 This is the contract a deployment that needs reproducible execution, such as consensus, can rely on. It states what the VM does wherever the RISC-V specifications leave a choice, wherever Determinant deliberately differs from a hardware hart, and what "deterministic" covers. Where it says nothing, the ratified RISC-V unprivileged specification applies.
 
-- **Semantics version:** 1, for Determinant 0.2.0.
+- **Semantics version:** 1, for Determinant 0.2.0 and 0.3.0.
 - **State encoding version:** 1 (see [State and digests](#state-and-digests)).
 
 Any change to guest-visible behavior described here is a breaking change. It is listed in the changelog and changes `tests/digests.txt`.
