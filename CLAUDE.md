@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as both a library and CLI executable. See `README.md` for public API, [SEMANTICS.md](SEMANTICS.md) for the execution contract (keep it in sync with any guest-visible change), [STRUCTURE.md](STRUCTURE.md) for file tree and module conventions.
+Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as both a library and CLI executable. See `README.md` for public API, [SEMANTICS.md](SEMANTICS.md) for the execution contract (keep it in sync with any guest-visible change), [STRUCTURE.md](STRUCTURE.md) for the layout, module dependencies and conventions.
 
 ## Build Commands
 
@@ -48,7 +48,7 @@ Reordering any of these breaks correctness. CSR cycle reads would be off-by-one;
 
 ## Key Patterns
 
-See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and naming conventions.
+See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and naming conventions.
 
 ### ISA Extension Architecture
 
@@ -208,4 +208,4 @@ const result = try vm.run(0);
 7. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
 8. Add disassembly case in `main.zig` `printInstruction()`
 9. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
-10. Update [STRUCTURE.md](STRUCTURE.md) file tree and conventions if files were added, renamed, or moved
+10. Update [STRUCTURE.md](STRUCTURE.md) if a module or directory was added, renamed or moved, or a dependency rule or convention changed (it does not list individual files)

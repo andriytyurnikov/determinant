@@ -103,7 +103,7 @@ The VM passes 89 tests from the official [riscv-tests](https://github.com/riscv-
 
 ## Architecture
 
-Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the full annotated file tree and module conventions, and [docs/design](docs/design) for the design notes. Changes are listed in [CHANGELOG.md](CHANGELOG.md), and third-party material in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.md) for the layout, module dependencies and conventions, and [docs/design](docs/design) for the design notes. Changes are listed in [CHANGELOG.md](CHANGELOG.md), and third-party material in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Public API
 
