@@ -385,3 +385,71 @@ test "step: LR.W, SW to another word, SC.W still succeeds" {
     try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
     try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
 }
+
+// --- Host writes and the reservation ---
+
+test "loadProgram over the reserved word makes SC.W fail" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0x99);
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0)); // LR.W x3, (x1)
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+
+    try cpu.loadProgram(&.{ 0x11, 0x22, 0x33, 0x44 }, 256);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
+    try std.testing.expectEqual(@as(u32, 0x44332211), try cpu.readWord(256)); // host bytes kept
+}
+
+test "loadProgram elsewhere keeps the reservation; SC.W succeeds" {
+    var cpu = Cpu.init();
+    cpu.writeReg(1, 256);
+    cpu.writeReg(2, 0x99);
+    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0)); // LR.W x3, (x1)
+    _ = try cpu.step();
+
+    try cpu.loadProgram(&.{ 0x11, 0x22, 0x33, 0x44 }, 512);
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+
+    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
+    _ = try cpu.step();
+    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
+    try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
+}
+
+test "loadProgram: overlap with the reserved word is byte-exact" {
+    var cpu = Cpu.init();
+    // Ends just before the reserved word (252..255): kept
+    cpu.reservation = 256;
+    try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 252);
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    // Starts just after it (260..263): kept
+    try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 260);
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    // Empty program at the reserved address writes nothing: kept
+    try cpu.loadProgram(&.{}, 256);
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+    // Covers only the first byte (253..256): cleared
+    try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 253);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+    // Covers only the last byte (259..262): cleared
+    cpu.reservation = 256;
+    try cpu.loadProgram(&.{ 1, 2, 3, 4 }, 259);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+    // A failed (out-of-bounds) load writes nothing: kept
+    cpu.reservation = 256;
+    try std.testing.expectError(error.AddressOutOfBounds, cpu.loadProgram(&.{ 1, 2 }, MEMORY_SIZE - 1));
+    try std.testing.expectEqual(@as(?u32, 256), cpu.reservation);
+}
+
+test "clearReservation drops the reservation" {
+    var cpu = Cpu.init();
+    cpu.reservation = 256;
+    cpu.memory[256] = 0xFF; // a direct host write...
+    cpu.clearReservation(); // ...must be followed by this
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
+}

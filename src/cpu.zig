@@ -88,11 +88,20 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
         }
 
-        /// Load program bytes into memory at the given offset.
+        /// Load program bytes into memory at the given offset. Like a guest store, this
+        /// drops an LR reservation on any word it overwrites.
         pub fn loadProgram(self: *Self, program: []const u8, offset: u32) !void {
             const off: usize = offset;
             if (program.len > mem_size or off > mem_size - program.len) return error.AddressOutOfBounds;
             @memcpy(self.memory[off..][0..program.len], program);
+            self.invalidateReservationRange(off, program.len);
+        }
+
+        /// Drop the LR reservation, if any. A host that writes `memory` directly
+        /// (instead of through loadProgram or the write* methods) must call this, or a
+        /// later SC.W could succeed although its reserved word changed.
+        pub fn clearReservation(self: *Self) void {
+            self.reservation = null;
         }
 
         // --- Memory helpers ---
@@ -140,10 +149,22 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
         }
 
         /// Invalidate reservation if write overlaps reserved word.
-        /// INVARIANT: every write method (writeByte/writeHalfword/writeWord) MUST call this.
+        /// INVARIANT: every write method (writeByte/writeHalfword/writeWord) MUST call this,
+        /// and every other write to memory must call invalidateReservationRange or
+        /// clearReservation.
         fn invalidateReservation(self: *Self, addr: u32) void {
             if (self.reservation) |res_addr| {
                 if ((addr & 0xFFFFFFFC) == res_addr) { // word-aligned address comparison (clear lower 2 bits)
+                    self.reservation = null;
+                }
+            }
+        }
+
+        /// Invalidate reservation if the bytes [start, start + len) overlap the reserved word.
+        fn invalidateReservationRange(self: *Self, start: usize, len: usize) void {
+            if (self.reservation) |res_addr| {
+                const res: usize = res_addr;
+                if (len != 0 and start < res + 4 and res < start + len) {
                     self.reservation = null;
                 }
             }
