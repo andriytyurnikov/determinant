@@ -58,6 +58,10 @@ zig build verify-decoder    # check the decoder against its spec on all 2^30 32-
 zig build bench             # MIPS on the C program corpus (ReleaseFast)
 ```
 
+### Performance
+
+`zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.16.0 (ReleaseFast) the VM executes about 280–290 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.75× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 150. Compare numbers only from the same machine.
+
 ### Cross-platform determinism
 
 `zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, and on a big-endian target, so every configuration must reach bit-identical final states.
