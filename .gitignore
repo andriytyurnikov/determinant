@@ -1,5 +1,6 @@
-# Claude Code — project settings tracked, personal settings local-only
+# Claude Code — project settings tracked, personal settings and agent worktrees local-only
 .claude/settings.local.json
+.claude/worktrees/
 
 # Zig build artifacts
 .zig-cache/
