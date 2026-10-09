@@ -151,6 +151,10 @@ tests/
     README.md               — rebuild instructions and toolchain setup
 build.zig                 — build system configuration (library module, executable, test, test-compliance, test-digests, test-all, verify-decoder, bench and programs steps)
 build.zig.zon             — package metadata (name, version, dependencies, fingerprint)
+README.md                 — overview, CLI, program contract, public API
+SEMANTICS.md              — execution semantics: the contract (ISA subset, decoding, faults, LR/SC, CSRs, determinism)
+STRUCTURE.md              — this file
+CLAUDE.md                 — guidance for working on the code (invariants, patterns, traps)
 ```
 
 ## Module Dependencies
@@ -159,13 +163,14 @@ All edges point downward — no cycles exist and none should be introduced.
 
 ```
 main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
-                       ↘ decoders.zig ─→ branch
-                                      ↘ bitfields.zig, expand.zig, registry.zig
+                │          ↓
+                └──→ decoders.zig ─→ branch.zig ─→ bitfields.zig, expand.zig
+                                  ↘ registry.zig ─→ bitfields.zig
 ```
 
-- `cpu.zig` is the companion file; `cpu/exec_i.zig` handles RV32I execute logic (no upward dependency)
-- `compliance.zig` imports the `determinant` library module (not relative paths) — it's a separate test module, not part of the library
-- Extensions (rv32i, rv32m, rv32a, zicsr, zba, zbb, zbs) import only `format.zig` — never cpu, decoders, or instructions
+- `cpu.zig` imports `decoders.zig` (the default decoder for `Options.decode`, and `DecodeError`); `cpu/exec_i.zig` handles RV32I execute logic and `cpu/state.zig` the state encoding (no upward dependency)
+- `compliance.zig` and the programs in `tools/` import the `determinant` library module (not relative paths) — they are separate modules, not part of the library
+- Extensions (rv32i, rv32m, rv32a, zicsr, zba, zbb, zbs) import only `format.zig` — never cpu, decoders, or instructions. This holds for their non-test files; their tests may import cpu.zig, the decoder and `instructions/test_helpers.zig`
 - RV32C imports only `rv32i.zig` and `format.zig` (decode-time frontend, no upward dependency)
 - `rv32c/expand.zig` imports `rv32c.zig`, `rv32i.zig`, and `imm.zig` — no upward dependency
 - `rv32c/imm.zig` has zero dependencies (pure stateless helpers)
@@ -179,6 +184,6 @@ main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensio
 - Each ISA extension has a companion file (`instructions/ext.zig` + `instructions/ext/tests.zig`); tests are pulled in via `test { _ = @import("ext/tests.zig"); }` blocks
 - **Test hub pattern**: inside each module directory, the test hub is always named `tests.zig`. Semantic test files drop the directory prefix (e.g., `cpu/boundary_test.zig` not `cpu/cpu_boundary_test.zig`)
 - Submodules are resolved via `@import("file.zig")` relative to the importing file — no `build.zig` changes needed
-- Shared test utilities live in `instructions/test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt, encode helpers for all formats)
+- Shared test utilities live in `instructions/test_helpers.zig` (loadInst, storeWordAt, readWordAt, storeHalfAt for `TestCpu`, and encode helpers for all formats); `decoders/branch/test_helpers.zig` has the decoder round-trip helpers
 - Build artifacts go to `.zig-cache/` and `zig-out/` (gitignored)
 - RV32C lives under `rv32i/rv32c.zig` + `rv32i/rv32c/` (accessed as `rv32i.rv32c`) because it's a decode-time front-end to rv32i, not an independent peer extension. Compressed instructions expand to `rv32c.Expanded` (using `rv32i.Opcode` directly); the decoder wraps this into a full `Instruction` — `rv32c.Opcode` is for decode/display only (not in the `instructions.Opcode` tagged union)
