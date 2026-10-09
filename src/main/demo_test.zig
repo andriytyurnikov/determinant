@@ -18,7 +18,7 @@ test "runDemo: shows the program, its result and the stored word" {
     defer out_aw.deinit();
     var err_aw: Io.Writer.Allocating = .init(alloc);
     defer err_aw.deinit();
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out_aw.writer, &err_aw.writer, null, null));
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out_aw.writer, &err_aw.writer, .{}));
 
     const output = out_aw.written();
 
@@ -40,13 +40,13 @@ test "runDemo: reproducible output" {
     defer out1.deinit();
     var err1: Io.Writer.Allocating = .init(alloc);
     defer err1.deinit();
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out1.writer, &err1.writer, null, null));
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out1.writer, &err1.writer, .{}));
 
     var out2: Io.Writer.Allocating = .init(alloc);
     defer out2.deinit();
     var err2: Io.Writer.Allocating = .init(alloc);
     defer err2.deinit();
-    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out2.writer, &err2.writer, null, null));
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runDemo(&out2.writer, &err2.writer, .{}));
 
     try std.testing.expectEqualStrings(out1.written(), out2.written());
 }
@@ -57,7 +57,7 @@ test "runDemo: memory too small for the demo fails cleanly" {
     defer out_aw.deinit();
     var err_aw: Io.Writer.Allocating = .init(alloc);
     defer err_aw.deinit();
-    const result = main_mod.runDemo(&out_aw.writer, &err_aw.writer, null, null);
+    const result = main_mod.runDemo(&out_aw.writer, &err_aw.writer, .{});
     if (det.Cpu.mem_size < main_mod.demo_program.len) {
         // The program itself does not fit: a configuration (usage) error
         try std.testing.expectError(error.UserError, result);

@@ -208,6 +208,10 @@ fn addProgramsStep(b: *std.Build) void {
             exe.entry = .{ .symbol_name = "_start" };
             const bin = b.addObjCopy(exe.getEmittedBin(), .{ .format = .bin });
             update.addCopyFileToSource(bin.getOutput(), b.fmt("tests/programs/bin/{s}/{s}.bin", .{ cfg.name, name }));
+            // One ELF, for the CLI's ELF-loading test.
+            if (std.mem.eql(u8, name, "crc32") and std.mem.eql(u8, cfg.name, "imac_zb-O2")) {
+                update.addCopyFileToSource(exe.getEmittedBin(), "tests/programs/elf/crc32.elf");
+            }
         }
 
         // Expected results: the same program built for the host and run natively

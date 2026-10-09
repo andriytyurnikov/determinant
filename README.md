@@ -10,7 +10,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 - Fixed, flat memory layout
 - Instruction counting instead of wall-clock time
-- No ambient inputs: no clock, no randomness and no host I/O inside the guest. The guest stops at ECALL or EBREAK, and the host decides what happens next
+- No ambient inputs: no clock, no randomness and no access to the host. I/O goes through a small host-call ABI (read, write, exit) whose input is fixed before the run
 - No undefined behavior and no platform-specific quirks: every configuration CI tests (Linux, macOS, Debug, ReleaseFast, big-endian) must reach the same final-state digests
 
 ## Use Cases
@@ -38,22 +38,38 @@ zig build -Dmemory_size=1048576  # use 1 MiB VM memory instead of default 64 KiB
 # Run built-in demo program
 zig build run
 
-# Load and execute a flat binary
-zig build run -- program.bin
+# Load and execute an ELF executable or a flat binary
+zig build run -- program.elf
+zig build run -- program.bin --load-addr 0x1000
 
-# Load with custom cycle limit
-zig build run -- program.bin --max-cycles 1000
+# With a cycle limit, and bytes for the program's read() calls
+zig build run -- program.elf --max-cycles 1000000 --input data.txt
 ```
 
 ### Program contract
 
-The CLI runs a flat binary:
-- **Loading.** The file is loaded at address 0, and execution starts at `pc` = 0 with every register zero. That includes `sp`: the program sets up its own stack (see `tests/programs/src/crt0.S`).
+The CLI runs a RISC-V program:
+- **Loading.** The program is either an ELF32 executable (detected by its magic) or a flat binary.
+  - An ELF is loaded by its `PT_LOAD` segments and starts at its entry point.
+  - A flat binary is loaded at `--load-addr` (default 0) and starts there.
+
+  Every register is zero except `sp`, which starts at the top of memory, 16-byte aligned.
 - **Memory.** One flat region of `-Dmemory_size` bytes (default 64 KiB), zero-filled.
-- **Stopping.** The program stops at ECALL or EBREAK, or when `--max-cycles` is reached. The CLI then prints the stop reason, `pc` and the non-zero registers. Add `--dump-memory` (hexdump) or `--dump-memory raw` (hex digits) to also print the memory.
+- **Host calls.** The program does I/O with ECALL, using the Linux RISC-V numbers in `a7`:
+  - `read(0, buf, len)` (63) returns the bytes of `--input`;
+  - `write(1 or 2, buf, len)` (64) prints to the CLI's stdout or stderr;
+  - `exit(status)` (93, or 94 for `exit_group`) ends the program.
+
+  See [docs/design/host-calls.md](docs/design/host-calls.md).
+- **Stopping.** The program stops when it calls `exit`, at EBREAK, at an ECALL that is not a host call, or when `--max-cycles` is reached. The CLI then prints the stop reason, `pc` and the non-zero registers. Add `--dump-memory` (hexdump) or `--dump-memory raw` (hex digits) to also print the memory.
 - **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), it prints to stderr the error, `pc`, the instruction (with its disassembly), the faulting address and the registers.
 
-The CLI's exit status tells how the run ended: `0` the program stopped at ECALL or EBREAK, `1` usage or I/O error (including output that could not be written), `2` the `--max-cycles` limit was reached, `3` the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
+The CLI's exit status tells how the run ended:
+- If the program called `exit(status)`, the CLI exits with `status & 0xFF` and prints `Program exited with status N`.
+- `0`: the program stopped at ECALL or EBREAK.
+- `1`: a usage or I/O error, including output that could not be written.
+- `2`: the `--max-cycles` limit was reached.
+- `3`: the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
 
 ## Test
 
@@ -109,6 +125,8 @@ The library is available via `@import("determinant")`. Execution semantics are s
 - **`Format`** — instruction format enum (R/I/S/B/U/J)
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
 - **`decode(u32)`** — decode a 32-bit word or a zero-extended 16-bit RV32C halfword, returns `Instruction` or `DecodeError`
+- **`hostcall`** — the host-call ABI: `hostcall.handle(vm, &env)` performs the read/write/exit call that stopped `run()` with `.ecall` and returns `.resumed`, `.exit` or `.unknown` ([docs/design/host-calls.md](docs/design/host-calls.md))
+- **`loader`** — `loader.loadElf(vm, image)` loads a RISC-V ELF32 executable and returns its entry point; `loader.isElf()` ([docs/design/program-loading.md](docs/design/program-loading.md))
 - **`decoders`** — the decoder's parts: `branch` (the decoder), `expand` (RV32C expansion), `registry` (the specification of every 32-bit encoding, with `lookup()`), `bitfields`
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"` (still running, or stopped at the cycle limit), `ecall`, `ebreak`
