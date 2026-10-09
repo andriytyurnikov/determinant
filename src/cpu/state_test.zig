@@ -64,7 +64,7 @@ test "state: every part of the state changes the digest" {
 }
 
 test "state: digest depends on memory size" {
-    const Small = cpu_mod.CpuType(4096, Cpu.decode);
+    const Small = cpu_mod.CpuType(4096, .{});
     const a = Small.init();
     const b = Cpu.init();
     try std.testing.expect(!std.mem.eql(u8, &a.stateDigest(), &b.stateDigest()));

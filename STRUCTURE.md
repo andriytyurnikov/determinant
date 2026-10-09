@@ -13,11 +13,11 @@ src/
       file_test.zig             — runFile: empty/large/nonexistent files, successful execution, cycle limits
       dump_test.zig             — dumpMemory: hexdump and raw format output
       exit_test.zig             — run(): every exit status (0/1/2/3), unwritable stdout
-  cpu.zig                 — CpuType(comptime memory_size, comptime decodeFn) generic, Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
+  cpu.zig                 — CpuType(comptime memory_size, comptime options) generic (Options: decoder, decode cache size), Cpu default (follows -Dmemory_size), TestCpu (fixed 64 KiB, for unit tests), init/reset, step/run executor, memory helpers (companion file for cpu/)
   cpu/
     exec_i.zig            — RV32I execute logic (free function using anytype for CPU); Result enum (ecall/ebreak/continue)
     state.zig             — canonical little-endian state encoding (versioned header + memory) and its SHA-256 digest
-    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery, state
+    tests.zig             — hub → init, memory, pipeline, run, determinism, dispatch, boundary, store_upper, atomic, csr, invariant, integration, recovery, state, decode_cache
       init_test.zig             — init and register tests
       memory_test.zig           — memory read/write tests
       pipeline_test.zig         — pipeline infrastructure, branch/error path tests
@@ -32,6 +32,7 @@ src/
       integration_test.zig      — multi-instruction programs, realistic execution sequences
       recovery_test.zig         — error recovery: continued execution after decode/load/store errors, reservation preservation
       state_test.zig            — state encoding layout, fixed power-on digest, every field affects the digest
+      decode_cache_test.zig     — decode cache: self-modifying code, host writes, slot sharing, hit counts, size never changes results
   instructions.zig        — imports all extensions; tagged union Opcode (i | m | a | csr | zba | zbb | zbs), isCompressed(), Format re-export, Instruction (companion file for instructions/)
   instructions/
     format.zig            — Format enum (R/I/S/B/U/J), shared by all extensions
