@@ -71,7 +71,7 @@ test "step: CSRRW with rd=x0 skips read" {
     loadInst(&cpu, encodeCsr(0b001, 0, 1, 0x340));
     _ = try cpu.step();
     try std.testing.expectEqual(@as(u32, 42), cpu.csrs.mscratch);
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0)); // x0 still 0
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]); // x0 still 0
 }
 
 // --- CSRRS execution tests ---

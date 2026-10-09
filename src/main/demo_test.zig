@@ -12,7 +12,7 @@ fn expectContains(haystack: []const u8, needle: []const u8) !void {
     }
 }
 
-test "runDemo: deterministic output" {
+test "runDemo: shows the program, its result and the stored word" {
     if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
     var out_aw: Io.Writer.Allocating = .init(alloc);
     defer out_aw.deinit();
@@ -66,4 +66,27 @@ test "runDemo: memory too small for the demo fails cleanly" {
         try std.testing.expectEqual(main_mod.ExitStatus.vm_fault, try result);
     }
     try std.testing.expect(err_aw.written().len > 0);
+}
+
+test "demo_program: every instruction decodes as its comment says" {
+    // Checks the real bytes. The second word once had 0x0A/0xA0 transposed,
+    // which encodes ADDI x2, x20, 0 instead of ADDI x2, x0, 10.
+    const Expect = struct { op: det.Opcode, rd: u5 = 0, rs1: u5 = 0, rs2: u5 = 0, imm: i32 = 0 };
+    const want = [_]Expect{
+        .{ .op = .{ .i = .ADDI }, .rd = 1, .rs1 = 0, .imm = 100 },
+        .{ .op = .{ .i = .ADDI }, .rd = 2, .rs1 = 0, .imm = 10 },
+        .{ .op = .{ .i = .ADD }, .rd = 3, .rs1 = 1, .rs2 = 2 },
+        .{ .op = .{ .i = .SW }, .rs1 = 1, .rs2 = 3, .imm = 0 },
+        .{ .op = .{ .i = .ECALL } },
+    };
+    try std.testing.expectEqual(want.len * 4, main_mod.demo_program.len);
+    for (want, 0..) |w, i| {
+        const raw = std.mem.readInt(u32, main_mod.demo_program[4 * i ..][0..4], .little);
+        const inst = try det.decode(raw);
+        try std.testing.expectEqual(w.op, inst.op);
+        try std.testing.expectEqual(w.rd, inst.rd);
+        try std.testing.expectEqual(w.rs1, inst.rs1);
+        try std.testing.expectEqual(w.rs2, inst.rs2);
+        try std.testing.expectEqual(w.imm, inst.imm);
+    }
 }

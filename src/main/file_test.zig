@@ -175,7 +175,7 @@ test "runFile: cycle limit reached" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // 4 NOPs + ECALL; with max_cycles=2, only NOPs execute
+    // 3 NOPs + ECALL; with max_cycles=2, only two NOPs execute
     const program = [_]u8{
         0x13, 0x00, 0x00, 0x00, // NOP
         0x13, 0x00, 0x00, 0x00, // NOP

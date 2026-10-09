@@ -24,7 +24,7 @@ fn expectSameSemantics(compressed: rv32c.Expanded, full: Instruction) !void {
 // ============================================================
 
 test "cross: C.ADDI4SPN matches ADDI" {
-    // C.ADDI4SPN x10, x2, 8 → ADDI x10, x2, 8
+    // C.ADDI4SPN x8, x2, 8 → ADDI x8, x2, 8 (rd' = 0 is x8)
     const expanded = try rv32c.expand(0x0020);
     const equiv = try decoder.decode(h.encodeI(0b0010011, 0b000, 8, 2, 8));
     try expectSameSemantics(expanded, equiv);

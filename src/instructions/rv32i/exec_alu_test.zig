@@ -226,7 +226,7 @@ test "step: x0 writes ignored" {
     // ADDI x0, x0, 42 — should not change x0
     loadInst(&cpu, 0x02A00013);
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(0));
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]);
 }
 
 test "step: SLTI is a signed compare" {
