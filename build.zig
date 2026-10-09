@@ -66,6 +66,28 @@ pub fn build(b: *std.Build) void {
         test_all_step.dependOn(suites.cli);
         test_all_step.dependOn(suites.compliance);
     }
+
+    // Exhaustive decoder equivalence over all 2^32 inputs. Always ReleaseFast:
+    // in Debug it would take hours.
+    const release_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    release_mod.addOptions("build_options", buildOptions(b, decoder_choice, memory_size));
+    const verify_exe = b.addExecutable(.{
+        .name = "verify-decoders",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/verify_decoders.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "determinant", .module = release_mod },
+            },
+        }),
+    });
+    const verify_step = b.step("verify-decoders", "Compare the LUT and branch decoders on all 2^32 inputs (ReleaseFast)");
+    verify_step.dependOn(&b.addRunArtifact(verify_exe).step);
 }
 
 fn buildOptions(b: *std.Build, decoder: Decoder, memory_size: u32) *std.Build.Step.Options {
