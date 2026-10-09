@@ -15,13 +15,13 @@ test "step: LR.W + SC.W success" {
     // LR.W x3, (x1): funct5=00010, rd=3, rs1=1, rs2=0
     h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x42), cpu.readReg(3));
+    try std.testing.expectEqual(0x42, cpu.readReg(3));
 
     // SC.W x4, x2, (x1): funct5=00011, rd=4, rs1=1, rs2=2
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success = 0
-    try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
+    try std.testing.expectEqual(0, cpu.readReg(4)); // success = 0
+    try std.testing.expectEqual(0x99, try cpu.readWord(256));
 }
 
 test "step: LR.W + SC.W failure (different address)" {
@@ -39,8 +39,8 @@ test "step: LR.W + SC.W failure (different address)" {
     // SC.W x4, x2, (x5) — different address → failure
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 5, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure = 1
-    try std.testing.expectEqual(@as(u32, 0x00), try cpu.readWord(260)); // memory unchanged
+    try std.testing.expectEqual(1, cpu.readReg(4)); // failure = 1
+    try std.testing.expectEqual(0x00, try cpu.readWord(260)); // memory unchanged
 }
 
 test "step: LR.W + SW invalidates + SC.W fails" {
@@ -61,8 +61,8 @@ test "step: LR.W + SW invalidates + SC.W fails" {
     // SC.W x4, x2, (x1) — should fail (reservation invalidated)
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
-    try std.testing.expectEqual(@as(u32, 0xBB), try cpu.readWord(256)); // SW value
+    try std.testing.expectEqual(1, cpu.readReg(4)); // failure
+    try std.testing.expectEqual(0xBB, try cpu.readWord(256)); // SW value
 }
 
 test "step: SC.W without prior LR.W fails" {
@@ -74,8 +74,8 @@ test "step: SC.W without prior LR.W fails" {
     // SC.W x4, x2, (x1) — no prior LR.W
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
-    try std.testing.expectEqual(@as(u32, 0x42), try cpu.readWord(256)); // unchanged
+    try std.testing.expectEqual(1, cpu.readReg(4)); // failure
+    try std.testing.expectEqual(0x42, try cpu.readWord(256)); // unchanged
 }
 
 test "step: AMOSWAP.W swaps memory and register" {
@@ -87,8 +87,8 @@ test "step: AMOSWAP.W swaps memory and register" {
     // AMOSWAP.W x3, x2, (x1): funct5=00001
     h.loadInst(&cpu, h.encodeAtomic(0b00001, 3, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xAAAA), cpu.readReg(3)); // old value
-    try std.testing.expectEqual(@as(u32, 0xBBBB), try cpu.readWord(256)); // new value
+    try std.testing.expectEqual(0xAAAA, cpu.readReg(3)); // old value
+    try std.testing.expectEqual(0xBBBB, try cpu.readWord(256)); // new value
 }
 
 test "step: AMOADD.W atomic add" {
@@ -100,8 +100,8 @@ test "step: AMOADD.W atomic add" {
     // AMOADD.W x3, x2, (x1): funct5=00000
     h.loadInst(&cpu, h.encodeAtomic(0b00000, 3, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 100), cpu.readReg(3)); // old value
-    try std.testing.expectEqual(@as(u32, 150), try cpu.readWord(256)); // 100 + 50
+    try std.testing.expectEqual(100, cpu.readReg(3)); // old value
+    try std.testing.expectEqual(150, try cpu.readWord(256)); // 100 + 50
 }
 
 test "step: AMOMIN.W picks signed minimum" {
@@ -114,9 +114,9 @@ test "step: AMOMIN.W picks signed minimum" {
     // AMOMIN.W x3, x2, (x1): funct5=10000
     h.loadInst(&cpu, h.encodeAtomic(0b10000, 3, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(0xFFFFFFFF, cpu.readReg(3)); // old value
     // signed min(-1, 1) = -1, so memory unchanged
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), try cpu.readWord(256));
+    try std.testing.expectEqual(0xFFFFFFFF, try cpu.readWord(256));
 }
 
 test "step: AMOMAXU.W picks unsigned maximum" {
@@ -129,9 +129,9 @@ test "step: AMOMAXU.W picks unsigned maximum" {
     // AMOMAXU.W x3, x2, (x1): funct5=11100
     h.loadInst(&cpu, h.encodeAtomic(0b11100, 3, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 5), cpu.readReg(3)); // old value
+    try std.testing.expectEqual(5, cpu.readReg(3)); // old value
     // unsigned max(5, 0xFFFFFFFF) = 0xFFFFFFFF
-    try std.testing.expectEqual(@as(u32, 0xFFFFFFFF), try cpu.readWord(256));
+    try std.testing.expectEqual(0xFFFFFFFF, try cpu.readWord(256));
 }
 
 test "step: LR.W + SB invalidates reservation + SC.W fails" {
@@ -144,7 +144,7 @@ test "step: LR.W + SB invalidates reservation + SC.W fails" {
     // LR.W x4, (x1)
     h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x42), cpu.readReg(4));
+    try std.testing.expectEqual(0x42, cpu.readReg(4));
 
     // SB x3, 0(x1) — sub-word store to same word-aligned address
     h.loadInst(&cpu, h.encodeS(0b000, 1, 3, 0));
@@ -153,7 +153,7 @@ test "step: LR.W + SB invalidates reservation + SC.W fails" {
     // SC.W x5, x2, (x1) — should fail (SB invalidated reservation)
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 5, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5)); // failure
+    try std.testing.expectEqual(1, cpu.readReg(5)); // failure
 }
 
 test "step: LR.W + SH invalidates reservation + SC.W fails" {
@@ -166,7 +166,7 @@ test "step: LR.W + SH invalidates reservation + SC.W fails" {
     // LR.W x4, (x1)
     h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x42), cpu.readReg(4));
+    try std.testing.expectEqual(0x42, cpu.readReg(4));
 
     // SH x3, 0(x1) — halfword store to same word-aligned address
     h.loadInst(&cpu, h.encodeS(0b001, 1, 3, 0));
@@ -175,7 +175,7 @@ test "step: LR.W + SH invalidates reservation + SC.W fails" {
     // SC.W x5, x2, (x1) — should fail
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 5, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5));
+    try std.testing.expectEqual(1, cpu.readReg(5));
 }
 
 test "step: failed SC.W clears reservation" {
@@ -193,13 +193,13 @@ test "step: failed SC.W clears reservation" {
     // SC.W x4, x2, (x5) — different address → fails
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 5, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4));
+    try std.testing.expectEqual(1, cpu.readReg(4));
 
     // SC.W x6, x2, (x1) — original address, but reservation was cleared
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 6, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(6));
-    try std.testing.expectEqual(@as(u32, 0x42), try cpu.readWord(256)); // unchanged
+    try std.testing.expectEqual(1, cpu.readReg(6));
+    try std.testing.expectEqual(0x42, try cpu.readWord(256)); // unchanged
 }
 
 test "step: AMO invalidates reservation + SC.W fails" {
@@ -212,18 +212,18 @@ test "step: AMO invalidates reservation + SC.W fails" {
     // LR.W x4, (x1)
     h.loadInst(&cpu, h.encodeAtomic(0b00010, 4, 1, 0));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 100), cpu.readReg(4));
+    try std.testing.expectEqual(100, cpu.readReg(4));
 
     // AMOADD.W x5, x3, (x1) — atomic add, also writes to same word
     h.loadInst(&cpu, h.encodeAtomic(0b00000, 5, 1, 3));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 150), try cpu.readWord(256));
+    try std.testing.expectEqual(150, try cpu.readWord(256));
 
     // SC.W x6, x2, (x1) — should fail (AMO invalidated reservation)
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 6, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(6));
-    try std.testing.expectEqual(@as(u32, 150), try cpu.readWord(256)); // AMO value preserved
+    try std.testing.expectEqual(1, cpu.readReg(6));
+    try std.testing.expectEqual(150, try cpu.readWord(256)); // AMO value preserved
 }
 
 test "step: SB to byte within reserved word invalidates reservation" {
@@ -245,51 +245,26 @@ test "step: SB to byte within reserved word invalidates reservation" {
     // SC.W x5, x2, (x1) — should fail
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 5, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(5));
+    try std.testing.expectEqual(1, cpu.readReg(5));
 }
 
 // --- Atomic bad-address tests ---
 
 const MEMORY_SIZE = Cpu.mem_size;
 
-test "step: LR.W out of bounds" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, MEMORY_SIZE); // address = MEMORY_SIZE (one past end)
-
-    // LR.W x3, (x1): funct5=00010
-    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
-    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
-}
-
-test "step: LR.W misaligned leaves reservation unchanged" {
-    var cpu = Cpu.init();
-    cpu.reservation = 0x200; // a live reservation the fault must not disturb
-    cpu.writeReg(1, 0x101); // misaligned for word access
-
-    // LR.W x3, (x1)
-    h.loadInst(&cpu, h.encodeAtomic(0b00010, 3, 1, 0));
-    try std.testing.expectError(error.MisalignedAccess, cpu.step());
-    try std.testing.expectEqual(@as(?u32, 0x200), cpu.reservation);
-}
-
-test "step: AMOADD.W misaligned address" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 0x103); // misaligned
-    cpu.writeReg(2, 50);
-
-    // AMOADD.W x3, x2, (x1): funct5=00000
-    h.loadInst(&cpu, h.encodeAtomic(0b00000, 3, 1, 2));
-    try std.testing.expectError(error.MisalignedAccess, cpu.step());
-}
-
-test "step: AMOSWAP.W out of bounds" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, MEMORY_SIZE); // out of bounds
-    cpu.writeReg(2, 0xBBBB);
-
-    // AMOSWAP.W x3, x2, (x1): funct5=00001
-    h.loadInst(&cpu, h.encodeAtomic(0b00001, 3, 1, 2));
-    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
+test "step: table (atomic)" {
+    try h.expectSteps(&.{
+        // LR.W x3, (x1): funct5=00010
+        .{ .name = "LR.W out of bounds", .inst = h.encodeAtomic(0b00010, 3, 1, 0), .regs = &.{.{ 1, MEMORY_SIZE }}, .err = error.AddressOutOfBounds },
+        // LR.W x3, (x1)
+        .{ .name = "LR.W misaligned leaves reservation unchanged", .inst = h.encodeAtomic(0b00010, 3, 1, 0), .regs = &.{.{ 1, 0x101 }}, .reservation = 0x200, .err = error.MisalignedAccess, .check_reservation = true, .want_reservation = 0x200 },
+        // AMOADD.W x3, x2, (x1): funct5=00000
+        .{ .name = "AMOADD.W misaligned address", .inst = h.encodeAtomic(0b00000, 3, 1, 2), .regs = &.{ .{ 1, 0x103 }, .{ 2, 50 } }, .err = error.MisalignedAccess },
+        // AMOSWAP.W x3, x2, (x1): funct5=00001
+        .{ .name = "AMOSWAP.W out of bounds", .inst = h.encodeAtomic(0b00001, 3, 1, 2), .regs = &.{ .{ 1, MEMORY_SIZE }, .{ 2, 0xBBBB } }, .err = error.AddressOutOfBounds },
+        // SC.W x4, x2, (x1)
+        .{ .name = "out-of-bounds SC.W faults without a reservation", .inst = h.encodeAtomic(0b00011, 4, 1, 2), .regs = &.{ .{ 1, MEMORY_SIZE }, .{ 2, 0x99 }, .{ 4, 0x5555 } }, .err = error.AddressOutOfBounds, .want = &.{.{ 4, 0x5555 }}, .want_pc = 0, .check_reservation = true, .want_reservation = null },
+    });
 }
 
 test "step: misaligned SC.W faults and keeps an existing reservation" {
@@ -311,24 +286,10 @@ test "step: misaligned SC.W faults and keeps an existing reservation" {
     try std.testing.expectError(error.MisalignedAccess, cpu.step());
 
     try std.testing.expectEqual(@as(?u32, 0x100), cpu.reservation); // unchanged
-    try std.testing.expectEqual(@as(u32, 0x5555), cpu.readReg(4)); // rd not written
-    try std.testing.expectEqual(@as(u32, 0x42), h.readWordAt(&cpu, 0x100)); // memory untouched
+    try std.testing.expectEqual(0x5555, cpu.readReg(4)); // rd not written
+    try std.testing.expectEqual(0x42, h.readWordAt(&cpu, 0x100)); // memory untouched
     try std.testing.expectEqual(pc, cpu.pc); // did not retire
     try std.testing.expectEqual(cycles, cpu.cycle_count);
-}
-
-test "step: out-of-bounds SC.W faults without a reservation" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, MEMORY_SIZE); // out of bounds, no prior LR.W (reservation=null)
-    cpu.writeReg(2, 0x99);
-    cpu.writeReg(4, 0x5555); // rd sentinel
-
-    // SC.W x4, x2, (x1)
-    h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
-    try std.testing.expectError(error.AddressOutOfBounds, cpu.step());
-    try std.testing.expectEqual(@as(u32, 0x5555), cpu.readReg(4)); // rd not written
-    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
-    try std.testing.expectEqual(@as(u32, 0), cpu.pc);
 }
 
 test "step: out-of-bounds SC.W faults and keeps a reservation elsewhere" {
@@ -355,8 +316,8 @@ test "step: SC.W to the last word of memory succeeds" {
     _ = try cpu.step();
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2));
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
-    try std.testing.expectEqual(@as(u32, 0xCAFE), try cpu.readWord(last));
+    try std.testing.expectEqual(0, cpu.readReg(4)); // success
+    try std.testing.expectEqual(0xCAFE, try cpu.readWord(last));
 }
 
 test "reservation: only writes overlapping the reserved word invalidate it" {
@@ -382,8 +343,8 @@ test "step: LR.W, SW to another word, SC.W still succeeds" {
     _ = try cpu.step();
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
-    try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
+    try std.testing.expectEqual(0, cpu.readReg(4)); // success
+    try std.testing.expectEqual(0x99, try cpu.readWord(256));
 }
 
 // --- Host writes and the reservation ---
@@ -401,8 +362,8 @@ test "loadProgram over the reserved word makes SC.W fail" {
 
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 1), cpu.readReg(4)); // failure
-    try std.testing.expectEqual(@as(u32, 0x44332211), try cpu.readWord(256)); // host bytes kept
+    try std.testing.expectEqual(1, cpu.readReg(4)); // failure
+    try std.testing.expectEqual(0x44332211, try cpu.readWord(256)); // host bytes kept
 }
 
 test "loadProgram elsewhere keeps the reservation; SC.W succeeds" {
@@ -417,8 +378,8 @@ test "loadProgram elsewhere keeps the reservation; SC.W succeeds" {
 
     h.loadInst(&cpu, h.encodeAtomic(0b00011, 4, 1, 2)); // SC.W x4, x2, (x1)
     _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0), cpu.readReg(4)); // success
-    try std.testing.expectEqual(@as(u32, 0x99), try cpu.readWord(256));
+    try std.testing.expectEqual(0, cpu.readReg(4)); // success
+    try std.testing.expectEqual(0x99, try cpu.readWord(256));
 }
 
 test "loadProgram: overlap with the reserved word is byte-exact" {

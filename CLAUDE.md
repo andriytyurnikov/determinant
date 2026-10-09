@@ -108,6 +108,7 @@ See [STRUCTURE.md](STRUCTURE.md) for file locations, module hierarchy, and namin
 ### Testing Patterns
 
 - Each extension has comprehensive execute tests with edge cases (overflow, sign-extension boundaries, spec-mandated special cases like DIV-by-zero → -1)
+- One-instruction execute tests are rows in `h.expectSteps(&.{ ... })` tables (`StepCase` in `instructions/test_helpers.zig`): add a row, not a new test, for a new case; write a separate test only for multi-step scenarios
 - Test files are grouped semantically (by topic, not by size), e.g. `exec_branch_test.zig`, `atomic_test.zig`, `csr_test.zig`
 - A module with several test files pulls them in through a `tests.zig` hub in its companion directory (`cpu/tests.zig`, `instructions/zbb/tests.zig`, ...); a module with a single test file imports it directly from a `test {}` block (`bitfields_test.zig`, `registry_test.zig`)
 - Unit tests use `cpu.TestCpu` (fixed 64 KiB), never the `-Dmemory_size` `Cpu`; CLI tests use `det.Cpu` on the heap and skip explicitly when a program does not fit

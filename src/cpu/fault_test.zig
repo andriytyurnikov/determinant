@@ -50,6 +50,9 @@ const cases = [_]Case{
     .{ .name = "LW misaligned (addr % 4 = 2)", .inst = lw(5, 1, 2), .regs = &.{.{ 1, 0x3000 }}, .err = error.MisalignedAccess },
     .{ .name = "LB out of bounds", .inst = load(0b000, 5, 1, 0), .regs = &.{.{ 1, mem_end }}, .err = error.AddressOutOfBounds },
     .{ .name = "LW out of bounds", .inst = lw(5, 1, 0), .regs = &.{.{ 1, mem_end }}, .err = error.AddressOutOfBounds },
+    .{ .name = "LBU out of bounds", .inst = load(0b100, 5, 1, 0), .regs = &.{.{ 1, mem_end }}, .err = error.AddressOutOfBounds },
+    .{ .name = "LH out of bounds", .inst = load(0b001, 5, 1, 0), .regs = &.{.{ 1, mem_end }}, .err = error.AddressOutOfBounds },
+    .{ .name = "LHU out of bounds", .inst = load(0b101, 5, 1, 0), .regs = &.{.{ 1, mem_end }}, .err = error.AddressOutOfBounds },
     .{ .name = "LW at a wrapped address", .inst = lw(5, 1, 0xFFC), .regs = &.{.{ 1, 0 }}, .err = error.AddressOutOfBounds },
     .{ .name = "C.LW misaligned", .inst = 0x4000, .compressed = true, .regs = &.{.{ 8, 0x3002 }}, .err = error.MisalignedAccess }, // C.LW x8, 0(x8)
     // Stores

@@ -8,18 +8,11 @@ const h = @import("../instructions/test_helpers.zig");
 
 test "step: valid step after decode error" {
     var cpu = Cpu.init();
-    // NOP at addr 0
+    // NOP at addr 0, then the all-zero halfword at addr 4 (an illegal 16-bit
+    // instruction). The fault leaves pc at 4; the test then replaces the illegal
+    // halfword with a NOP and checks that execution continues from there.
     std.mem.writeInt(u32, cpu.memory[0..][0..4], 0x00000013, .little);
-    // Illegal instruction at addr 4: all zeros → C_ADDI4SPN with nzuimm=0
     std.mem.writeInt(u32, cpu.memory[4..][0..4], 0x00000000, .little);
-    // NOP at addr 4 (overwrite lower 4 bytes won't help — we need addr 4 to be illegal)
-    // Actually, the illegal is 16-bit (0x0000), so PC will be at 4 after first NOP.
-    // After the error, PC stays at 4. Place a recovery NOP at addr 4 as 32-bit.
-    // But 0x0000 decodes as compressed illegal — we need to place the illegal and then
-    // replace it with valid code after the error. Instead, structure the test differently:
-    // Place NOP at 0, illegal at 4, recovery NOP at 6 (since 0x0000 is 16-bit compressed).
-    // Wait — the error means step() returns error, PC is NOT advanced. So PC stays at 4.
-    // We overwrite addr 4 with a valid NOP after the error.
 
     // Step 1: execute NOP at addr 0
     _ = try cpu.step();
@@ -50,8 +43,7 @@ test "step: valid step after load error" {
     try std.testing.expectEqual(@as(u32, 4), cpu.pc);
     try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
 
-    // LW x3, 0(x1) at addr 4 — x1=0 is valid, but let's use OOB address
-    // Set x1 to an out-of-bounds address
+    // LW x3, 0(x1) at addr 4 with x1 one past the end of memory
     cpu.writeReg(1, Cpu.mem_size);
     // LW x3, 0(x1) at current PC
     h.loadInst(&cpu, h.encodeI(0b0000011, 0b010, 3, 1, 0));

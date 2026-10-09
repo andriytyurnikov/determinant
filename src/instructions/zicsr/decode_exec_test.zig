@@ -53,49 +53,36 @@ test "CSR address field extraction round-trip" {
 
 // --- CSRRW execution tests ---
 
-test "step: CSRRW basic read-write to mscratch" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xAABBCCDD;
-    cpu.writeReg(1, 0x11223344); // rs1 = new value
-    // CSRRW x2, 0x340, x1
-    loadInst(&cpu, encodeCsr(0b001, 2, 1, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xAABBCCDD), cpu.readReg(2)); // old value in rd
-    try std.testing.expectEqual(@as(u32, 0x11223344), cpu.csrs.mscratch); // new value written
-}
-
-test "step: CSRRW with rd=x0 skips read" {
-    var cpu = Cpu.init();
-    cpu.writeReg(1, 42);
-    // CSRRW x0, 0x340, x1 -- write-only, no read
-    loadInst(&cpu, encodeCsr(0b001, 0, 1, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 42), cpu.csrs.mscratch);
-    try std.testing.expectEqual(@as(u32, 0), cpu.regs[0]); // x0 still 0
+test "step: table (decode_exec)" {
+    try h.expectSteps(&.{
+        // CSRRW x2, 0x340, x1
+        .{ .name = "CSRRW basic read-write to mscratch", .inst = encodeCsr(0b001, 2, 1, 0x340), .regs = &.{.{ 1, 0x11223344 }}, .mscratch = 0xAABBCCDD, .want = &.{.{ 2, 0xAABBCCDD }}, .want_mscratch = 0x11223344 },
+        // CSRRW x0, 0x340, x1 -- write-only, no read
+        .{ .name = "CSRRW with rd=x0 skips read", .inst = encodeCsr(0b001, 0, 1, 0x340), .regs = &.{.{ 1, 42 }}, .want_raw = &.{.{ 0, 0 }}, .want_mscratch = 42 },
+        // CSRRS x2, 0x340, x1
+        .{ .name = "CSRRS sets bits in mscratch", .inst = encodeCsr(0b010, 2, 1, 0x340), .regs = &.{.{ 1, 0x00FF }}, .mscratch = 0xFF00, .want = &.{.{ 2, 0xFF00 }}, .want_mscratch = 0xFFFF },
+        // CSRRS x2, 0x340, x0 -- read-only, no write
+        .{ .name = "CSRRS with rs1=x0 is read-only", .inst = encodeCsr(0b010, 2, 0, 0x340), .mscratch = 0xDEAD, .want = &.{.{ 2, 0xDEAD }}, .want_mscratch = 0xDEAD },
+        // CSRRC x2, 0x340, x1
+        .{ .name = "CSRRC clears bits in mscratch", .inst = encodeCsr(0b011, 2, 1, 0x340), .regs = &.{.{ 1, 0x0F0F }}, .mscratch = 0xFFFF, .want = &.{.{ 2, 0xFFFF }}, .want_mscratch = 0xF0F0 },
+        // CSRRC x2, 0x340, x0
+        .{ .name = "CSRRC with rs1=x0 is read-only", .inst = encodeCsr(0b011, 2, 0, 0x340), .mscratch = 0xBEEF, .want = &.{.{ 2, 0xBEEF }}, .want_mscratch = 0xBEEF },
+        // CSRRWI x2, 0x340, 17 (zimm=17)
+        .{ .name = "CSRRWI writes immediate", .inst = encodeCsr(0b101, 2, 17, 0x340), .mscratch = 0xAAAA, .want = &.{.{ 2, 0xAAAA }}, .want_mscratch = 17 },
+        // CSRRWI x0, 0x340, 7
+        .{ .name = "CSRRWI with rd=x0 skips read", .inst = encodeCsr(0b101, 0, 7, 0x340), .want_mscratch = 7 },
+        // CSRRSI x2, 0x340, 0x0F (zimm=15)
+        .{ .name = "CSRRSI sets bits with immediate", .inst = encodeCsr(0b110, 2, 15, 0x340), .mscratch = 0xF0, .want = &.{.{ 2, 0xF0 }}, .want_mscratch = 0xFF },
+        // CSRRSI x2, 0x340, 0
+        .{ .name = "CSRRSI with zimm=0 is read-only", .inst = encodeCsr(0b110, 2, 0, 0x340), .mscratch = 0x42, .want = &.{.{ 2, 0x42 }}, .want_mscratch = 0x42 },
+        // CSRRCI x2, 0x340, 0x0F (zimm=15)
+        .{ .name = "CSRRCI clears bits with immediate", .inst = encodeCsr(0b111, 2, 15, 0x340), .mscratch = 0xFF, .want = &.{.{ 2, 0xFF }}, .want_mscratch = 0xF0 },
+        // CSRRCI x2, 0x340, 0
+        .{ .name = "CSRRCI with zimm=0 is read-only", .inst = encodeCsr(0b111, 2, 0, 0x340), .mscratch = 0x99, .want = &.{.{ 2, 0x99 }}, .want_mscratch = 0x99 },
+    });
 }
 
 // --- CSRRS execution tests ---
-
-test "step: CSRRS sets bits in mscratch" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xFF00;
-    cpu.writeReg(1, 0x00FF);
-    // CSRRS x2, 0x340, x1
-    loadInst(&cpu, encodeCsr(0b010, 2, 1, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFF00), cpu.readReg(2)); // old value
-    try std.testing.expectEqual(@as(u32, 0xFFFF), cpu.csrs.mscratch); // OR'd
-}
-
-test "step: CSRRS with rs1=x0 is read-only" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xDEAD;
-    // CSRRS x2, 0x340, x0 -- read-only, no write
-    loadInst(&cpu, encodeCsr(0b010, 2, 0, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xDEAD), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0xDEAD), cpu.csrs.mscratch); // unchanged
-}
 
 test "step: CSRRS with rs1=x0 succeeds on read-only CSR (cycle)" {
     var cpu = Cpu.init();
@@ -104,92 +91,5 @@ test "step: CSRRS with rs1=x0 succeeds on read-only CSR (cycle)" {
     loadInst(&cpu, encodeCsr(0b010, 3, 0, 0xC00));
     _ = try cpu.step();
     // cycle_count was 12345 at read, then incremented to 12346 after step
-    try std.testing.expectEqual(@as(u32, 12345), cpu.readReg(3));
-}
-
-// --- CSRRC execution tests ---
-
-test "step: CSRRC clears bits in mscratch" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xFFFF;
-    cpu.writeReg(1, 0x0F0F);
-    // CSRRC x2, 0x340, x1
-    loadInst(&cpu, encodeCsr(0b011, 2, 1, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFFFF), cpu.readReg(2)); // old value
-    try std.testing.expectEqual(@as(u32, 0xF0F0), cpu.csrs.mscratch); // cleared
-}
-
-test "step: CSRRC with rs1=x0 is read-only" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xBEEF;
-    // CSRRC x2, 0x340, x0
-    loadInst(&cpu, encodeCsr(0b011, 2, 0, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xBEEF), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0xBEEF), cpu.csrs.mscratch); // unchanged
-}
-
-// --- CSRRWI execution tests ---
-
-test "step: CSRRWI writes immediate" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xAAAA;
-    // CSRRWI x2, 0x340, 17 (zimm=17)
-    loadInst(&cpu, encodeCsr(0b101, 2, 17, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xAAAA), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 17), cpu.csrs.mscratch);
-}
-
-test "step: CSRRWI with rd=x0 skips read" {
-    var cpu = Cpu.init();
-    // CSRRWI x0, 0x340, 7
-    loadInst(&cpu, encodeCsr(0b101, 0, 7, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 7), cpu.csrs.mscratch);
-}
-
-// --- CSRRSI execution tests ---
-
-test "step: CSRRSI sets bits with immediate" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xF0;
-    // CSRRSI x2, 0x340, 0x0F (zimm=15)
-    loadInst(&cpu, encodeCsr(0b110, 2, 15, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xF0), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0xFF), cpu.csrs.mscratch);
-}
-
-test "step: CSRRSI with zimm=0 is read-only" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0x42;
-    // CSRRSI x2, 0x340, 0
-    loadInst(&cpu, encodeCsr(0b110, 2, 0, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x42), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0x42), cpu.csrs.mscratch); // unchanged
-}
-
-// --- CSRRCI execution tests ---
-
-test "step: CSRRCI clears bits with immediate" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0xFF;
-    // CSRRCI x2, 0x340, 0x0F (zimm=15)
-    loadInst(&cpu, encodeCsr(0b111, 2, 15, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0xFF), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0xF0), cpu.csrs.mscratch);
-}
-
-test "step: CSRRCI with zimm=0 is read-only" {
-    var cpu = Cpu.init();
-    cpu.csrs.mscratch = 0x99;
-    // CSRRCI x2, 0x340, 0
-    loadInst(&cpu, encodeCsr(0b111, 2, 0, 0x340));
-    _ = try cpu.step();
-    try std.testing.expectEqual(@as(u32, 0x99), cpu.readReg(2));
-    try std.testing.expectEqual(@as(u32, 0x99), cpu.csrs.mscratch); // unchanged
+    try std.testing.expectEqual(12345, cpu.readReg(3));
 }
