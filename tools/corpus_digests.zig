@@ -1,10 +1,18 @@
-//! Runs every program (`*.bin`) under a corpus directory on a fresh VM and prints one
-//! line per program, sorted by path:
+//! Runs every program (`*.bin`) of the corpus on a fresh VM and prints one line per
+//! program, sorted by path:
 //!
-//!     <path> <stop> <cycles> <sha256 of the final VM state>
+//!     <root>/<path> <stop> <cycles> <sha256 of the final VM state>
 //!
-//! where <stop> is `ecall`, `ebreak`, `limit` or `error.<Name>`. With `--check FILE`,
-//! compares the lines with FILE instead and exits 1 on any difference.
+//! where <stop> is `ecall`, `ebreak`, `limit` or `error.<Name>`.
+//!
+//! usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... ROOT=DIR...
+//!
+//!   ROOT=DIR          run every *.bin under DIR, naming it ROOT/<path relative to DIR>
+//!   --check FILE      compare the lines with FILE instead of printing them; exit 1 on
+//!                     any difference
+//!   --expect ROOT=DIR programs under ROOT follow the C corpus convention (crt0 ends with
+//!                     EBREAK, a0 = result, a1 = address of 16 result words); compare them
+//!                     with DIR/<program>.txt, the output of the same C run natively
 //!
 //! CI checks every job (each OS, optimize mode, endianness and decoder) against the same
 //! golden file, tests/digests.txt, so all of them must reach bit-identical final states.
@@ -17,7 +25,19 @@ const det = @import("determinant");
 
 /// Every corpus program runs with 256 KiB of memory, like the compliance suite.
 const CorpusCpu = det.CpuType(256 * 1024, det.Cpu.decode);
-const max_cycles: u64 = 10_000_000;
+const max_cycles: u64 = 100_000_000;
+
+const Root = struct { name: []const u8, dir: []const u8, expect_dir: ?[]const u8 = null };
+
+fn usage() noreturn {
+    std.debug.print("usage: corpus_digests [--check FILE] [--expect ROOT=DIR]... ROOT=DIR...\n", .{});
+    std.process.exit(2);
+}
+
+fn splitAssignment(arg: []const u8) struct { []const u8, []const u8 } {
+    const eq = std.mem.indexOfScalar(u8, arg, '=') orelse usage();
+    return .{ arg[0..eq], arg[eq + 1 ..] };
+}
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -25,28 +45,77 @@ pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
 
-    var dir_path: ?[]const u8 = null;
+    var roots: std.ArrayList(Root) = .empty;
+    var expects: std.ArrayList(Root) = .empty;
     var check_path: ?[]const u8 = null;
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
-        if (std.mem.eql(u8, args[i], "--check") and i + 1 < args.len) {
+        if (std.mem.eql(u8, args[i], "--check")) {
             i += 1;
+            if (i == args.len) usage();
             check_path = args[i];
-        } else if (dir_path == null) {
-            dir_path = args[i];
+        } else if (std.mem.eql(u8, args[i], "--expect")) {
+            i += 1;
+            if (i == args.len) usage();
+            const name, const dir = splitAssignment(args[i]);
+            try expects.append(arena, .{ .name = name, .dir = dir });
         } else {
-            std.debug.print("usage: corpus_digests <dir> [--check <golden-file>]\n", .{});
-            std.process.exit(2);
+            const name, const dir = splitAssignment(args[i]);
+            try roots.append(arena, .{ .name = name, .dir = dir });
         }
     }
-    const root = dir_path orelse {
-        std.debug.print("usage: corpus_digests <dir> [--check <golden-file>]\n", .{});
-        std.process.exit(2);
-    };
+    if (roots.items.len == 0) usage();
+    for (expects.items) |e| {
+        for (roots.items) |*r| {
+            if (std.mem.eql(u8, r.name, e.name)) r.expect_dir = e.dir;
+        }
+    }
 
-    // Collect program paths, relative to the corpus root, with '/' separators.
-    var dir = try Io.Dir.cwd().openDir(io, root, .{ .iterate = true });
-    defer dir.close(io);
+    const vm = try gpa.create(CorpusCpu);
+    defer gpa.destroy(vm);
+
+    var out: Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    var n_programs: usize = 0;
+    var n_unexpected: usize = 0;
+    for (roots.items) |root| {
+        var dir = try Io.Dir.cwd().openDir(io, root.dir, .{ .iterate = true });
+        defer dir.close(io);
+        const paths = try collectPrograms(io, gpa, arena, dir);
+        for (paths) |p| {
+            const program = try dir.readFileAlloc(io, p, arena, .limited(CorpusCpu.mem_size + 1));
+            vm.reset();
+            const stop = try runProgram(arena, vm, program);
+            try out.writer.print("{s}/{s} {s} {d} {x}\n", .{ root.name, p, stop, vm.cycle_count, &vm.stateDigest() });
+            n_programs += 1;
+            if (root.expect_dir) |expect_dir| {
+                if (!try resultMatches(io, arena, vm, stop, expect_dir, p)) {
+                    std.debug.print("{s}/{s}: result differs from the native run\n", .{ root.name, p });
+                    n_unexpected += 1;
+                }
+            }
+        }
+    }
+
+    if (check_path) |golden_path| {
+        const golden = try Io.Dir.cwd().readFileAlloc(io, golden_path, arena, .limited(1 << 24));
+        if (!std.mem.eql(u8, golden, out.written())) {
+            reportDifferences(golden, out.written());
+            std.debug.print("corpus digests differ from {s}; if the change is intended, regenerate it with `zig build digests`\n", .{golden_path});
+            std.process.exit(1);
+        }
+        std.debug.print("corpus digests: {d} programs match {s}\n", .{ n_programs, golden_path });
+    } else {
+        var buf: [4096]u8 = undefined;
+        var fw: Io.File.Writer = .init(Io.File.stdout(), io, &buf);
+        try fw.interface.writeAll(out.written());
+        try fw.interface.flush();
+    }
+    if (n_unexpected != 0) std.process.exit(1);
+}
+
+/// Program paths under `dir`, relative to it, with '/' separators, sorted.
+fn collectPrograms(io: Io, gpa: std.mem.Allocator, arena: std.mem.Allocator, dir: Io.Dir) ![]const []const u8 {
     var paths: std.ArrayList([]const u8) = .empty;
     var walker = try dir.walk(gpa);
     defer walker.deinit();
@@ -62,47 +131,37 @@ pub fn main(init: std.process.Init) !void {
             return std.mem.lessThan(u8, a, b);
         }
     }.lessThan);
+    return paths.items;
+}
 
-    const vm = try gpa.create(CorpusCpu);
-    defer gpa.destroy(vm);
+/// Load and run one program; returns how it stopped.
+fn runProgram(arena: std.mem.Allocator, vm: *CorpusCpu, program: []const u8) ![]const u8 {
+    vm.loadProgram(program, 0) catch |err| return std.fmt.allocPrint(arena, "error.{s}", .{@errorName(err)});
+    const result = vm.run(max_cycles) catch |err| return std.fmt.allocPrint(arena, "error.{s}", .{@errorName(err)});
+    return switch (result) {
+        .ecall => "ecall",
+        .ebreak => "ebreak",
+        .@"continue" => "limit",
+    };
+}
 
-    var out: Io.Writer.Allocating = .init(gpa);
-    defer out.deinit();
-    for (paths.items) |p| {
-        const program = try dir.readFileAlloc(io, p, arena, .limited(CorpusCpu.mem_size + 1));
-        vm.reset();
-        try out.writer.print("{s} ", .{p});
-        if (vm.loadProgram(program, 0)) {
-            if (vm.run(max_cycles)) |result| {
-                try out.writer.print("{s}", .{switch (result) {
-                    .ecall => "ecall",
-                    .ebreak => "ebreak",
-                    .@"continue" => "limit",
-                }});
-            } else |err| {
-                try out.writer.print("error.{s}", .{@errorName(err)});
-            }
-        } else |err| {
-            try out.writer.print("error.{s}", .{@errorName(err)});
-        }
-        try out.writer.print(" {d} {x}\n", .{ vm.cycle_count, &vm.stateDigest() });
+/// Compare a C corpus program's result (a0, and the 16 words at a1) with the expected
+/// text in `expect_dir`/<program name>.txt, formatted like native_main.c prints it.
+fn resultMatches(io: Io, arena: std.mem.Allocator, vm: *const CorpusCpu, stop: []const u8, expect_dir: []const u8, path: []const u8) !bool {
+    if (!std.mem.eql(u8, stop, "ebreak")) return false;
+    const base = std.fs.path.basenamePosix(path);
+    const name = base[0 .. base.len - ".bin".len];
+    const expect_path = try std.fmt.allocPrint(arena, "{s}/{s}.txt", .{ expect_dir, name });
+    const expected = try Io.Dir.cwd().readFileAlloc(io, expect_path, arena, .limited(4096));
+
+    var got: Io.Writer.Allocating = .init(arena);
+    try got.writer.print("a0={x:0>8} out=", .{vm.readReg(10)});
+    const out_addr = vm.readReg(11);
+    for (0..16) |k| {
+        const word = vm.readWord(out_addr +% @as(u32, @intCast(4 * k))) catch return false;
+        try got.writer.print("{x:0>8}{s}", .{ word, if (k < 15) "," else "\n" });
     }
-
-    if (check_path) |golden_path| {
-        const golden = try Io.Dir.cwd().readFileAlloc(io, golden_path, arena, .limited(1 << 24));
-        if (std.mem.eql(u8, golden, out.written())) {
-            std.debug.print("corpus digests: {d} programs match {s}\n", .{ paths.items.len, golden_path });
-            return;
-        }
-        reportDifferences(golden, out.written());
-        std.debug.print("corpus digests differ from {s}; if the change is intended, regenerate it with `zig build digests`\n", .{golden_path});
-        std.process.exit(1);
-    } else {
-        var buf: [4096]u8 = undefined;
-        var fw: Io.File.Writer = .init(Io.File.stdout(), io, &buf);
-        try fw.interface.writeAll(out.written());
-        try fw.interface.flush();
-    }
+    return std.mem.eql(u8, std.mem.trimEnd(u8, expected, "\r\n"), std.mem.trimEnd(u8, got.written(), "\n"));
 }
 
 /// Print the lines that are only in `expected` or only in `actual`.

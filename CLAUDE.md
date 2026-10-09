@@ -13,7 +13,8 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.16.0, structured as 
 - `zig build test` — run the unit tests (library) and CLI tests (executable) with the selected decoder
 - `zig build test-compliance` — run the riscv-tests compliance suite with the selected decoder
 - `zig build test-all` — run unit, CLI, compliance and digest tests once per decoder (what CI runs)
-- `zig build test-digests` — check the final-state digest of every corpus program against `tests/digests.txt`; `zig build digests > tests/digests.txt` regenerates it after an intended change in guest-visible behavior (review the diff)
+- `zig build test-digests` — run the corpus (compliance binaries and the C programs in `tests/programs`), check each C program's result against a native run, and check every final-state digest against `tests/digests.txt`; `zig build digests > tests/digests.txt` regenerates it after an intended change in guest-visible behavior (review the diff)
+- `zig build programs` — rebuild the C corpus binaries and their expected results with Zig's C compiler (see `tests/programs/README.md`)
 - `zig build verify-decoders` — compare the LUT and branch decoders on all 2^32 inputs (always ReleaseFast, ~20 s); run it after any decoder change
 - `zig build run -- <args>` — pass arguments to the executable
 - `-Ddecoder=lut|branch` — select decoder backend (default: `lut`). Applies to CLI, tests, and `Cpu` alias. Example: `zig build test -Ddecoder=branch`
