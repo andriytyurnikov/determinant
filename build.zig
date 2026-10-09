@@ -100,6 +100,25 @@ pub fn build(b: *std.Build) void {
     const verify_step = b.step("verify-decoders", "Compare the LUT and branch decoders on all 2^32 inputs (ReleaseFast)");
     verify_step.dependOn(&b.addRunArtifact(verify_exe).step);
 
+    // Benchmark over the C program corpus. Always ReleaseFast.
+    const bench_exe = b.addExecutable(.{
+        .name = "bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "determinant", .module = release_mod },
+            },
+        }),
+    });
+    const run_bench = b.addRunArtifact(bench_exe);
+    run_bench.addDirectoryArg(b.path("tests/programs/bin"));
+    if (b.args) |args| run_bench.addArgs(args);
+    run_bench.has_side_effects = true;
+    const bench_step = b.step("bench", "Benchmark the VM on the C program corpus (ReleaseFast; pass -- --runs N)");
+    bench_step.dependOn(&run_bench.step);
+
     addProgramsStep(b);
 }
 

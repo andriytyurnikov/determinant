@@ -56,6 +56,7 @@ zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
 zig build test-all          # run unit, CLI, compliance and digest tests with both decoder backends
 zig build test-digests      # check corpus final-state digests against tests/digests.txt
 zig build verify-decoders   # compare both decoders on all 2^32 instruction words (~20 s)
+zig build bench             # MIPS on the C program corpus (ReleaseFast)
 ```
 
 ### Cross-platform determinism
