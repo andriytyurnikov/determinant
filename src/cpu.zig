@@ -12,6 +12,7 @@ const zba = instructions.zba;
 const zbb = instructions.zbb;
 const zbs = instructions.zbs;
 const cpu_exec_i = @import("cpu/exec_i.zig");
+const state = @import("cpu/state.zig");
 
 pub const DecodeFn = *const fn (u32) decoders.DecodeError!instructions.Instruction;
 
@@ -54,6 +55,13 @@ pub fn CpuType(comptime memory_size: u32, comptime decodeFn: DecodeFn) type {
             self.cycle_count = 0;
             self.reservation = null;
             self.csrs = .{};
+        }
+
+        /// SHA-256 of the canonical state encoding (see cpu/state.zig): pc, all 32
+        /// registers, cycle count, reservation, CSRs and the whole memory, serialized
+        /// little-endian. Identical on every host for identical architectural state.
+        pub fn stateDigest(self: *const Self) [32]u8 {
+            return state.digest(self);
         }
 
         /// Read register. x0 always returns 0.

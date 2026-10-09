@@ -51,9 +51,14 @@ zig build run -- program.bin --max-cycles 1000
 ```sh
 zig build test              # run unit and CLI tests with the selected decoder backend
 zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
-zig build test-all          # run unit, CLI and compliance tests with both decoder backends
+zig build test-all          # run unit, CLI, compliance and digest tests with both decoder backends
+zig build test-digests      # check corpus final-state digests against tests/digests.txt
 zig build verify-decoders   # compare both decoders on all 2^32 instruction words (~20 s)
 ```
+
+### Cross-platform determinism
+
+`zig build test-digests` runs every corpus program and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, on a big-endian target, and with both decoders, so every configuration must reach bit-identical final states.
 
 ### RISC-V Compliance
 
@@ -74,6 +79,7 @@ The library is available via `@import("determinant")`.
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset
   - `step() → StepResult` — fetch, decode, execute one instruction
+  - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
   - `run(max_cycles: ?u64) → StepResult` — execute until ECALL/EBREAK or cycle limit (null = unlimited, 0 = zero steps)
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
