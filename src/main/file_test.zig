@@ -110,7 +110,7 @@ test "runFile: successful execution" {
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
     defer stderr_aw.deinit();
 
-    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null));
 
     try expectContains(stdout_aw.written(), "Loaded 8 bytes");
     try expectContains(stdout_aw.written(), "ecall");
@@ -139,7 +139,7 @@ test "runFile: max cycles display" {
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
     defer stderr_aw.deinit();
 
-    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 1000, null);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 1000, null));
 
     try expectContains(stdout_aw.written(), "max 1000 cycles");
 }
@@ -166,7 +166,7 @@ test "runFile: unlimited cycles display" {
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
     defer stderr_aw.deinit();
 
-    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null);
+    try std.testing.expectEqual(main_mod.ExitStatus.ok, try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, null, null));
 
     try expectContains(stdout_aw.written(), "unlimited cycles");
 }
@@ -196,7 +196,7 @@ test "runFile: cycle limit reached" {
     var stderr_aw: Io.Writer.Allocating = .init(alloc);
     defer stderr_aw.deinit();
 
-    try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 2, null);
+    try std.testing.expectEqual(main_mod.ExitStatus.cycle_limit, try main_mod.runFile(io, &stdout_aw.writer, &stderr_aw.writer, path, 2, null));
 
     try expectContains(stdout_aw.written(), "Cycle limit reached");
 }

@@ -46,6 +46,8 @@ zig build run -- program.bin
 zig build run -- program.bin --max-cycles 1000
 ```
 
+The CLI's exit status tells how the run ended: `0` the program stopped at ECALL or EBREAK, `1` usage or I/O error (including output that could not be written), `2` the `--max-cycles` limit was reached, `3` the VM raised a fault (illegal instruction, misaligned or out-of-bounds access). `zig build run` reports any non-zero status as a failed step; run `zig-out/bin/determinant` directly to see the exact code.
+
 ## Test
 
 ```sh
