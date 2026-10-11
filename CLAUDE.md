@@ -110,7 +110,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 ### CLI
 
 - `src/main.zig` runs a `Cli` (io, allocator, stdin, stdout, stderr), so tests drive it with fixed input and captured output (`main/test_helpers.zig` `Fixture`). `main/args.zig` `parse()` is a pure function of the arguments; `main/load.zig` loads; `main/report.zig`, `disasm.zig` and `dump.zig` print. [docs/design/cli.md](docs/design/cli.md) is the contract
-- **stdout carries only the program's fd 1**; everything the CLI says when it runs a program (the report, `--trace`, dumps, `--digest`) goes to stderr. Keep the order: flush the other stream before a guest write switches streams (`execute()`), and stdout before each report section (`Report.section`)
+- **stdout carries only the program's fd 1**; everything the CLI says when it runs a program (the report, `--trace`, dumps, `--digest`) goes to stderr. Keep the order: flush the other stream before a guest write switches streams (`execute()`), and stdout before each report section (`Report.section`). stderr is flushed after the preamble, so it shows while the program runs. `main/test_helpers.zig` `Writes` records each write that reaches a stream, for tests that depend on when output is flushed
 - The report's exact text is fixed by the whole-run goldens in `main/report_test.zig` (templates with `{path}`, `{mem}` and `{sp}` for build-dependent values): a change to the report changes a golden there, and docs/design/cli.md if the format changes
 - A new option gets a row in `args.specs`, rows in `args_test.zig`, and a line in `printHelp` (a test checks every spec is in the help)
 

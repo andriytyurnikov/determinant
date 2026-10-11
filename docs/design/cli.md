@@ -17,6 +17,7 @@ The 0.2.0 CLI worked, but it was awkward to use beyond a demo:
 - **stdout belongs to the program** (its fd 1). The CLI writes nothing else to it when it runs a program.
 - **stderr carries the program's fd 2 and the CLI's report**: the preamble, the result, the registers, a fault, `--trace`, `--dump-memory` and `--digest`.
 - **The order is kept.** The CLI flushes the other stream before a program write switches streams, and stdout before every part of the report, so a terminal (or `> log 2>&1`) shows everything in the order it happened.
+- **The preamble shows at once.** The CLI flushes stderr after the preamble, so the "Running" line is on the terminal while a long program runs, or hangs.
 - **`-q` / `--quiet`** drops the preamble and the result report. Faults, usage and I/O errors, and the output of `--trace`, `--dump-memory` and `--digest` still print.
 - **`--help`, `--version` and `--disassemble` write to stdout**: there is no program output to keep apart.
 
