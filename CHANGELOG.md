@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-09
 
-The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encoding version 1) is the same, and so is every compliance digest in `tests/digests.txt` (the C corpus lines changed only because its binaries were rebuilt): 0.2.0 and this version compute identical results for the same program. The CLI's output and some of its arguments change; [docs/design/cli.md](docs/design/cli.md) describes the new CLI.
+The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encoding version 1) is the same, and so is every compliance digest in `tests/digests.txt` (the C corpus lines changed only because its binaries were rebuilt): 0.2.0 and 0.3.0 compute identical results for the same program. The CLI's output and some of its arguments change; [docs/design/cli.md](docs/design/cli.md) describes the new CLI.
 
 ### CLI (breaking)
 

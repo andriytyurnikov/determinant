@@ -1,6 +1,6 @@
 # The CLI
 
-- **Status:** implemented after 0.2.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged.
+- **Status:** implemented in Determinant 0.3.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged.
 
 ## Problem
 
