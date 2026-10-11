@@ -88,6 +88,31 @@ test "decode cache: a decode error is not cached" {
     try std.testing.expectEqual(@as(u32, 1), cpu.readReg(1));
 }
 
+test "decode cache: an illegal instruction faults again when the host retries it" {
+    var cpu = Cpu.init();
+    h.storeWordAt(&cpu, 0, addi_x1_1);
+    _ = try cpu.step(); // caches ADDI x1, x0, 1 in the slot of address 0
+    cpu.pc = 0;
+    h.storeWordAt(&cpu, 0, 0xFFFFFFFF); // the host overwrites it with an illegal word
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+    // The fault changed nothing, so a retry must fault again. A slot that recorded the
+    // illegal bits before the decode failed would hit and run the stale ADDI.
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+    try std.testing.expectEqual(@as(u64, 1), cpu.cycle_count);
+}
+
+test "decode cache: reset() of a VM in zero-filled memory leaves no stale hits" {
+    // A VM in freshly mapped pages or in static storage starts zeroed (Debug builds
+    // fill new allocations with 0xAA instead, so zero it here). A zeroed slot claims
+    // raw = 0, which is what fetch() returns for the illegal all-zero halfword, so
+    // reset() must empty every slot.
+    const cpu = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(cpu);
+    @memset(std.mem.asBytes(cpu), 0);
+    cpu.reset();
+    try std.testing.expectError(error.IllegalInstruction, cpu.step());
+}
+
 test "decode cache: the cache size never changes the final state" {
     // A loop that rewrites one of its own instructions on every iteration: the
     // immediate of the ADDI at address 4 goes up by one each time round.
