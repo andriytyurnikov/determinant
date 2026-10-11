@@ -82,8 +82,10 @@ test "loadElf: rejects what is not a RISC-V ELF32 LE executable, changing nothin
         .{ .offset = 16, .value = 3 }, // ET_DYN
         .{ .offset = 18, .value = 62 }, // EM_X86_64
         .{ .offset = 24, .value = 0x01 }, // odd entry point (0x1001)
+        .{ .offset = 42, .value = 16 }, // e_phentsize smaller than a program header
         .{ .offset = 56, .value = 0xFF }, // code segment's file offset beyond the image
-        .{ .offset = 100, .value = 0x20 }, // data segment p_filesz (32) > p_memsz (16)
+        .{ .offset = 100, .value = 0x20 }, // data segment p_filesz (32) runs past the end of the file
+        .{ .offset = 104, .value = 2 }, // data segment p_memsz (2) < p_filesz (4)
     };
     const good = Image.build(&code, 0x1000);
     var cpu = Cpu.init();
@@ -105,6 +107,29 @@ test "loadElf: a segment beyond memory is AddressOutOfBounds, changing nothing" 
     const before = cpu.stateDigest();
     try std.testing.expectError(error.AddressOutOfBounds, loader.loadElf(&cpu, &img.bytes));
     try std.testing.expectEqualSlices(u8, &before, &cpu.stateDigest());
+}
+
+test "loadElf: a segment may end at the top of memory, and the file right after the program headers" {
+    var img = Image.build(&code, 0x1000);
+    // Both segments become .bss only (no file bytes), so the file can end with the
+    // program header table; the second one ends exactly at the top of memory.
+    for ([_]usize{ 52, 84 }) |ph| {
+        Image.put32(&img.bytes, ph + 4, 0); // p_offset
+        Image.put32(&img.bytes, ph + 16, 0); // p_filesz
+    }
+    Image.put32(&img.bytes, 84 + 8, Cpu.mem_size - 16); // second p_vaddr; p_memsz is 16
+    var cpu = Cpu.init();
+    @memset(cpu.memory[Cpu.mem_size - 16 ..], 0xEE);
+    try std.testing.expectEqual(@as(u32, 0x1000), try loader.loadElf(&cpu, img.bytes[0..116]));
+    for (cpu.memory[Cpu.mem_size - 16 ..]) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
+}
+
+test "loadElf: zero-filling .bss drops an LR reservation" {
+    var cpu = Cpu.init();
+    cpu.reservation = 0x2008; // in the .bss part (0x2004..0x2010) of the data segment
+    const img = Image.build(&code, 0x1000);
+    _ = try loader.loadElf(&cpu, &img.bytes);
+    try std.testing.expectEqual(@as(?u32, null), cpu.reservation);
 }
 
 test "isElf" {

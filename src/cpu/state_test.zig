@@ -124,6 +124,21 @@ test "snapshot: restore reproduces the state exactly and resumes identically" {
     try std.testing.expectEqualSlices(u8, &a.stateDigest(), &b.stateDigest());
 }
 
+test "snapshot: a reservation on the last word of memory restores" {
+    const cpu = try std.testing.allocator.create(Cpu);
+    defer std.testing.allocator.destroy(cpu);
+    cpu.reset();
+    cpu.reservation = Cpu.mem_size - 4;
+    const buf = try std.testing.allocator.alloc(u8, Cpu.snapshot_size);
+    defer std.testing.allocator.free(buf);
+    var w: std.Io.Writer = .fixed(buf);
+    try cpu.writeSnapshot(&w);
+    cpu.reservation = null;
+    var r: std.Io.Reader = .fixed(buf);
+    try cpu.restoreSnapshot(&r);
+    try std.testing.expectEqual(@as(?u32, Cpu.mem_size - 4), cpu.reservation);
+}
+
 test "snapshot: malformed headers are rejected before anything changes" {
     const cpu = try std.testing.allocator.create(Cpu);
     defer std.testing.allocator.destroy(cpu);

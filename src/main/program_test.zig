@@ -130,6 +130,7 @@ test "initial sp: programs start with sp at the 16-byte-aligned top of memory" {
     defer alloc.free(want);
     try expectContains(fx.out.written(), want);
     try std.testing.expectEqual(@as(u32, 0), main_mod.initial_sp % 16);
+    try std.testing.expect(det.Cpu.mem_size - main_mod.initial_sp < 16); // the top, not below it
 }
 
 /// A minimal ELF32 RISC-V executable: `code` loaded at `vaddr`, entry at `vaddr`.
@@ -205,4 +206,14 @@ test "host calls: exit(3) is not mistaken for a VM fault (--dump-memory still ru
     try expectContains(fx.out.written(), "Program exited with status 3");
     try expectContains(fx.out.written(), "00000000  93 08 D0 05"); // the memory dump ran
     try std.testing.expectEqualStrings("", fx.err.written()); // no fault report
+}
+
+test "host calls: the exit status keeps the low 8 bits, as a POSIX process's does" {
+    if (det.Cpu.mem_size < 16) return error.SkipZigTest;
+    var fx: Fixture = .init();
+    defer fx.deinit();
+    // li a7, 93; li a0, 263; ecall
+    const prog = try fx.file("exit263.bin", &.{ 0x93, 0x08, 0xd0, 0x05, 0x13, 0x05, 0x70, 0x10, 0x73, 0x00, 0x00, 0x00 });
+    try std.testing.expectEqual(@as(u8, 7), fx.run(&.{ "determinant", prog }));
+    try expectContains(fx.out.written(), "Program exited with status 263");
 }

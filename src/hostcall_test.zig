@@ -83,7 +83,22 @@ test "read: a bad fd or an out-of-bounds buffer reads nothing" {
     try std.testing.expectEqual(hostcall.ebadf, cpu.readReg(10));
     _ = try call(&cpu, &hs, 63, 0, Cpu.mem_size - 1, 3);
     try std.testing.expectEqual(hostcall.efault, cpu.readReg(10));
+    // The whole buffer must lie in memory, even when less input is left than it holds.
+    _ = try call(&cpu, &hs, 63, 0, Cpu.mem_size - 3, 4);
+    try std.testing.expectEqual(hostcall.efault, cpu.readReg(10));
     try std.testing.expectEqual(@as(usize, 0), hs.env.input_pos); // nothing consumed
+}
+
+test "read and write: a buffer may end exactly at the top of memory" {
+    var cpu = Cpu.init();
+    var hs: Harness = undefined;
+    hs.init("wxyz");
+    defer hs.deinit();
+    _ = try call(&cpu, &hs, 63, 0, Cpu.mem_size - 4, 4);
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(10));
+    _ = try call(&cpu, &hs, 64, 1, Cpu.mem_size - 4, 4);
+    try std.testing.expectEqual(@as(u32, 4), cpu.readReg(10));
+    try std.testing.expectEqualStrings("wxyz", hs.out.written());
 }
 
 test "read: overwriting the reserved word drops the LR reservation" {
