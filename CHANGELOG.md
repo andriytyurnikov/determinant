@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Build, tests and tooling
+
+- **Zig 0.17.0.** The project now needs Zig 0.17.0 (`minimum_zig_version`, `.mise.toml`, and so CI). Zig 0.16.0 can no longer build it. The VM's behavior is unchanged: every compliance digest in `tests/digests.txt` is the same.
+- **C corpus rebuilt.** Zig 0.17.0's C compiler generates different code, so the 20 corpus binaries and `elf/crc32.elf` are rebuilt, and the 20 `programs/` lines of `tests/digests.txt` are regenerated. The programs' results (`expected/`) are unchanged. `crc32.elf` gains a read-only segment, because LLVM now turns the table-building bit loop into a constant table.
+- **Build mode names.** CI and the docs use Zig 0.17's `-Doptimize` names: `debug`, `safe`, `fast` and `small`. Zig accepts the old names (`Debug`, `ReleaseFast`, ...) until 0.18. `tools/spike_diff` builds its runner with `-Doptimize=safe`.
+- **Speed.** On an Apple M2, `zig build bench` gives about 282 MIPS, against about 293 when Zig 0.16.0 builds the VM, on the same corpus binaries. Without the decode cache it rises from about 158 to about 200 MIPS.
+
 ## 0.2.0 — 2026-10-09
 
 This release follows a review of the project on 2026-10-07. [SEMANTICS.md](SEMANTICS.md) is new and is the contract from now on.

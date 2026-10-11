@@ -21,8 +21,8 @@ Each program computes into `out[16]` and returns a checksum. `crt0.S` sets `gp` 
 
 - `src/` — the sources, plus `native_main.c`, which runs a program on the host and prints its result in the same format.
 - `bin/<config>/<program>.bin` — flat binaries that load at address 0, checked in like the compliance binaries. There are two configurations:
-  - `imac_zb-O2`: RV32IMAC with Zba/Zbb/Zbs, `ReleaseFast`
-  - `ima-Os`: RV32IMA without compressed or bit-manipulation instructions, `ReleaseSmall`
+  - `imac_zb-O2`: RV32IMAC with Zba/Zbb/Zbs, optimize mode `fast`
+  - `ima-Os`: RV32IMA without compressed or bit-manipulation instructions, optimize mode `small`
 - `expected/<program>.txt` — the result of the same C program run natively.
 - `elf/crc32.elf` — the `imac_zb-O2` crc32 executable as an ELF file, for the ELF-loading test.
 
@@ -36,4 +36,4 @@ Each program computes into `out[16]` and returns a checksum. `crt0.S` sets `gp` 
 zig build programs
 ```
 
-This compiles every program with Zig's C compiler (no RISC-V toolchain needed) and re-runs the native builds. It writes `bin/` and `expected/` in place. Run it on a little-endian host. With Zig 0.16.0 the output is byte-identical on macOS and Linux. A newer Zig may generate different code, which changes the digests of the `programs/` entries in `tests/digests.txt`; regenerate that file afterwards with `zig build digests > tests/digests.txt`.
+This compiles every program with Zig's C compiler (no RISC-V toolchain needed) and re-runs the native builds. It writes `bin/` and `expected/` in place. Run it on a little-endian host. With Zig 0.17.0 the output is byte-identical on macOS and Linux. A newer Zig may generate different code, which changes the digests of the `programs/` entries in `tests/digests.txt`; regenerate that file afterwards with `zig build digests > tests/digests.txt`.

@@ -7,7 +7,7 @@ const io = std.testing.io;
 const alloc = std.testing.allocator;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.indexOf(u8, haystack, needle) == null) {
+    if (std.mem.find(u8, haystack, needle) == null) {
         std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }
@@ -21,7 +21,7 @@ fn skipUnlessFits(program_len: usize) !void {
 /// Build a path relative to cwd pointing into the TmpDir. tmpDir() roots its dirs
 /// under `.zig-cache/tmp/<sub_path>/` and that's cwd-relative during `zig build test`.
 fn makeTmpPath(tmp: std.testing.TmpDir, sub_path: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(alloc, ".zig-cache/tmp/{s}/{s}", .{ &tmp.sub_path, sub_path });
+    return alloc.print(".zig-cache/tmp/{s}/{s}", .{ &tmp.sub_path, sub_path });
 }
 
 test "runFile: empty file" {

@@ -3,7 +3,7 @@
 //! 0b11), decode() must succeed exactly when a registry entry matches, and must then
 //! return that entry's instruction with every operand field. Exits 1 on any mismatch.
 //!
-//! Run with `zig build verify-decoder` (always ReleaseFast; about a minute on 4 cores).
+//! Run with `zig build verify-decoder` (always -Doptimize=fast; about a minute on 4 cores).
 //! 16-bit RV32C encodings are outside the registry; the rv32c unit tests and the LLVM
 //! disassembler comparison cover them.
 

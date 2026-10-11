@@ -11,7 +11,7 @@ const alloc = std.testing.allocator;
 const ExitStatus = main_mod.ExitStatus;
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.indexOf(u8, haystack, needle) == null) {
+    if (std.mem.find(u8, haystack, needle) == null) {
         std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
         return error.TestExpectedEqual;
     }
@@ -41,7 +41,7 @@ const Fixture = struct {
         const f = try self.tmp.dir.createFile(io, name, .{});
         try f.writeStreamingAll(io, bytes);
         f.close(io);
-        const p = try std.fmt.allocPrintSentinel(alloc, ".zig-cache/tmp/{s}/{s}", .{ &self.tmp.sub_path, name }, 0);
+        const p = try alloc.printSentinel(".zig-cache/tmp/{s}/{s}", .{ &self.tmp.sub_path, name }, 0);
         try self.paths.append(alloc, p);
         return p;
     }
@@ -83,7 +83,7 @@ test "host calls: an ECALL that is not a host call stops the program (status 0)"
     var fx: Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("stop.bin", &.{ 0x73, 0x00, 0x00, 0x00 }); // ECALL with a7 = 0
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
     try expectContains(fx.out.written(), "ecall after 1 cycles");
 }
 
@@ -91,7 +91,7 @@ test "--input: a missing file is a usage error" {
     var fx: Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("stop.bin", &.{ 0x73, 0x00, 0x00, 0x00 });
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--input", "/nonexistent/input" }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--input", "/nonexistent/input" }));
     try expectContains(fx.err.written(), "cannot read input");
 }
 
@@ -101,7 +101,7 @@ test "--load-addr: a flat binary is loaded and started at the address" {
     defer fx.deinit();
     // ADDI x1, x0, 42; EBREAK
     const prog = try fx.file("at100.bin", &.{ 0x93, 0x00, 0xA0, 0x02, 0x73, 0x00, 0x10, 0x00 });
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.ok), fx.run(&.{ "determinant", prog, "--load-addr", "0x100" }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.ok), fx.run(&.{ "determinant", prog, "--load-addr", "0x100" }));
     try expectContains(fx.out.written(), "Loaded 8 bytes at 0x00000100");
     try expectContains(fx.out.written(), "PC = 0x00000108");
     try expectContains(fx.out.written(), "x1 = 42");
@@ -111,12 +111,12 @@ test "--load-addr: odd, out of range or malformed values are usage errors" {
     var fx: Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("stop.bin", &.{ 0x73, 0x00, 0x00, 0x00 });
-    const too_far = try std.fmt.allocPrintSentinel(alloc, "{d}", .{det.Cpu.mem_size}, 0);
+    const too_far = try alloc.printSentinel("{d}", .{det.Cpu.mem_size}, 0);
     defer alloc.free(too_far);
     for ([_][:0]const u8{ "0x101", too_far, "nope" }) |addr| {
-        try std.testing.expectEqual(@intFromEnum(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--load-addr", addr }));
+        try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--load-addr", addr }));
     }
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--load-addr" }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog, "--load-addr" }));
 }
 
 test "initial sp: programs start with sp at the 16-byte-aligned top of memory" {
@@ -125,8 +125,8 @@ test "initial sp: programs start with sp at the 16-byte-aligned top of memory" {
     defer fx.deinit();
     // ADDI x11, x2, 0 (a1 = sp); EBREAK
     const prog = try fx.file("sp.bin", &.{ 0x93, 0x05, 0x01, 0x00, 0x73, 0x00, 0x10, 0x00 });
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
-    const want = try std.fmt.allocPrint(alloc, "x11 = {d} (0x{X:0>8})", .{ @as(i32, @bitCast(main_mod.initial_sp)), main_mod.initial_sp });
+    try std.testing.expectEqual(@backingInt(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
+    const want = try alloc.print("x11 = {d} (0x{X:0>8})", .{ @as(i32, @bitCast(main_mod.initial_sp)), main_mod.initial_sp });
     defer alloc.free(want);
     try expectContains(fx.out.written(), want);
     try std.testing.expectEqual(@as(u32, 0), main_mod.initial_sp % 16);
@@ -162,7 +162,7 @@ test "ELF: the CLI detects an ELF file, loads its segments and starts at its ent
     defer fx.deinit();
     const elf = tinyElf(&.{ 0x93, 0x00, 0xA0, 0x02, 0x73, 0x00, 0x10, 0x00 }, 0x40); // ADDI x1, x0, 42; EBREAK
     const prog = try fx.file("tiny.elf", &elf);
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.ok), fx.run(&.{ "determinant", prog }));
     try expectContains(fx.out.written(), "Loaded ELF executable, entry 0x00000040");
     try expectContains(fx.out.written(), "PC = 0x00000048");
     try expectContains(fx.out.written(), "x1 = 42");
@@ -174,7 +174,7 @@ test "ELF: a malformed ELF is a usage error" {
     var elf = tinyElf(&.{ 0x73, 0x00, 0x10, 0x00 }, 0x40);
     elf[18] = 62; // EM_X86_64
     const prog = try fx.file("x86.elf", &elf);
-    try std.testing.expectEqual(@intFromEnum(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog }));
+    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), fx.run(&.{ "determinant", prog }));
     try expectContains(fx.err.written(), "not a RISC-V ELF32");
 }
 
@@ -192,7 +192,7 @@ test "ELF: a toolchain-built executable (crc32) loads and computes the native re
     vm.pc = try det.loader.loadElf(vm, image);
     try std.testing.expectEqual(det.StepResult.ebreak, try vm.run(10_000_000));
     var a0_text: [12]u8 = undefined;
-    const a0 = try std.fmt.bufPrint(&a0_text, "a0={x:0>8}", .{vm.readReg(10)});
+    const a0 = try std.mem.print(&a0_text, "a0={x:0>8}", .{vm.readReg(10)});
     try std.testing.expectStringStartsWith(expected, a0);
 }
 

@@ -18,7 +18,7 @@
 //! Divergences are grouped into buckets, and each one is checked against the known,
 //! accepted divergences (README.md). The exit status is 1 if any is unexplained.
 //!
-//! Run with `zig build llvm-oracle -Dllvm_lib=PATH -- MODE ...` (always ReleaseFast).
+//! Run with `zig build llvm-oracle -Dllvm_lib=PATH -- MODE ...` (always -Doptimize=fast).
 
 const std = @import("std");
 const det = @import("determinant");
@@ -71,10 +71,10 @@ const Bucket = struct {
 
 /// The bugs the self-test plants: each changes one decoded field.
 const Plant = enum { branch_offset, sub_operands, load_rd, csr_number, rori_shamt };
-const n_plants = @typeInfo(Plant).@"enum".fields.len;
+const n_plants = @typeInfo(Plant).@"enum".field_names.len;
 
-const n_tags = @typeInfo(std.meta.Tag(Opcode)).@"enum".fields.len;
-const n_cops = @typeInfo(rv32c.Opcode).@"enum".fields.len;
+const n_tags = @typeInfo(std.meta.Tag(Opcode)).@"enum".field_names.len;
+const n_cops = @typeInfo(rv32c.Opcode).@"enum".field_names.len;
 
 const Stats = struct {
     total: u64 = 0,
@@ -145,7 +145,7 @@ fn explainText(raw: u32, inst: Instruction, llvm: []const u8) ?[]const u8 {
                     else => return null,
                 };
                 var buf: [48]u8 = undefined;
-                const want = std.fmt.bufPrint(&buf, "prefetch.{c} {d}({s})", .{ kind, inst.imm & ~@as(i32, 31), render.abi[inst.rs1] }) catch return null;
+                const want = std.mem.print(&buf, "prefetch.{c} {d}({s})", .{ kind, inst.imm & ~@as(i32, 31), render.abi[inst.rs1] }) catch return null;
                 return if (std.mem.eql(u8, llvm, want)) reason_prefetch else null;
             },
             .FENCE => return if (raw == 0x8330000F and std.mem.eql(u8, llvm, "fence.tso")) reason_fence_tso else null,
@@ -219,7 +219,7 @@ fn renderText(inst: Instruction, out: *Text) void {
 }
 
 fn firstToken(s: []const u8) []const u8 {
-    const i = std.mem.indexOfScalar(u8, s, ' ') orelse s.len;
+    const i = std.mem.findScalar(u8, s, ' ') orelse s.len;
     return s[0..i];
 }
 
@@ -243,7 +243,7 @@ fn addBucket(st: *Stats, key: []const u8, reason: ?[]const u8, raw: u32, dt: ?*c
 /// Records one divergence; returns whether it is unexplained.
 fn diverge(st: *Stats, key_base: []const u8, reason: ?[]const u8, raw: u32, dt: ?*const Text, lt: ?*const Text) bool {
     var kb: [224]u8 = undefined;
-    const key = if (reason == null) std.fmt.bufPrint(&kb, "{s} UNEXPLAINED", .{key_base}) catch key_base else key_base;
+    const key = if (reason == null) std.mem.print(&kb, "{s} UNEXPLAINED", .{key_base}) catch key_base else key_base;
     addBucket(st, key, reason, raw, dt, lt);
     if (reason == null) st.unexplained += 1;
     return reason == null;
@@ -257,7 +257,7 @@ fn classify(st: *Stats, ctx: DisCtx, raw: u32, len: u8) void {
     var kb: [192]u8 = undefined;
     if (l_ok and consumed != len) {
         st.llvm_len_odd += 1;
-        const key = std.fmt.bufPrint(&kb, "len|{s}", .{firstToken(lt.slice())}) catch "len";
+        const key = std.mem.print(&kb, "len|{s}", .{firstToken(lt.slice())}) catch "len";
         _ = diverge(st, key, null, raw, null, &lt);
     }
 
@@ -270,7 +270,7 @@ fn classify(st: *Stats, ctx: DisCtx, raw: u32, len: u8) void {
                 if (!std.meta.eql(bugged, orig)) {
                     plant = p;
                     inst = bugged;
-                    st.planted[@intFromEnum(p)] += 1;
+                    st.planted[@backingInt(p)] += 1;
                 }
             }
         }
@@ -284,12 +284,12 @@ fn classify(st: *Stats, ctx: DisCtx, raw: u32, len: u8) void {
             if (std.mem.eql(u8, dt.slice(), lt.slice())) {
                 st.agree_accept += 1;
                 switch (i.op) {
-                    inline else => |p, tag| st.per_op[@intFromEnum(tag)][@intFromEnum(p)] += 1,
+                    inline else => |p, tag| st.per_op[@backingInt(tag)][@backingInt(p)] += 1,
                 }
-                if (i.compressed_op) |c| st.per_cop[@intFromEnum(c)] += 1;
+                if (i.compressed_op) |c| st.per_cop[@backingInt(c)] += 1;
             } else {
                 st.cls[2] += 1;
-                const key = std.fmt.bufPrint(&kb, "iii|{s} ~ {s}", .{ firstToken(dt.slice()), firstToken(lt.slice()) }) catch "iii";
+                const key = std.mem.print(&kb, "iii|{s} ~ {s}", .{ firstToken(dt.slice()), firstToken(lt.slice()) }) catch "iii";
                 reported = diverge(st, key, explainText(raw, i, lt.slice()), raw, &dt, &lt);
             }
         } else {
@@ -297,18 +297,18 @@ fn classify(st: *Stats, ctx: DisCtx, raw: u32, len: u8) void {
             var diag_buf: [96]u8 = undefined;
             var dw: std.Io.Writer = .fixed(&diag_buf);
             render.diagnose(&dw, i) catch {};
-            const key = std.fmt.bufPrint(&kb, "i|{s}|{s}", .{ firstToken(dt.slice()), std.mem.trim(u8, dw.buffered(), " ") }) catch "i";
+            const key = std.mem.print(&kb, "i|{s}|{s}", .{ firstToken(dt.slice()), std.mem.trim(u8, dw.buffered(), " ") }) catch "i";
             reported = diverge(st, key, explainDetOnly(raw, len, i), raw, &dt, null);
         }
     } else if (l_ok) {
         st.cls[1] += 1;
-        const key = std.fmt.bufPrint(&kb, "ii|{s}", .{firstToken(lt.slice())}) catch "ii";
+        const key = std.mem.print(&kb, "ii|{s}", .{firstToken(lt.slice())}) catch "ii";
         reported = diverge(st, key, explainLlvmOnly(raw, len, lt.slice()), raw, null, &lt);
     } else {
         st.agree_reject += 1;
     }
     if (plant) |p| {
-        if (!reported) st.missed[@intFromEnum(p)] += 1;
+        if (!reported) st.missed[@backingInt(p)] += 1;
     }
 }
 
@@ -486,16 +486,19 @@ fn report(out: *std.Io.Writer, tot: *const Stats, title: []const u8, mode16: boo
     }
 
     try out.print("\n--- identical decodes per opcode ---\n", .{});
-    inline for (@typeInfo(Opcode).@"union".fields, 0..) |uf, ti| {
-        inline for (@typeInfo(uf.type).@"enum".fields) |ef| {
-            const n = tot.per_op[ti][ef.value];
-            if (n != 0) try out.print("  {s}.{s:<10} {d}\n", .{ uf.name, ef.name, n });
+    const union_info = @typeInfo(Opcode).@"union";
+    inline for (union_info.field_names, union_info.field_types, 0..) |ext_name, ExtOpcode, ti| {
+        const enum_info = @typeInfo(ExtOpcode).@"enum";
+        inline for (enum_info.field_names, enum_info.field_values) |op_name, op_value| {
+            const n = tot.per_op[ti][op_value];
+            if (n != 0) try out.print("  {s}.{s:<10} {d}\n", .{ ext_name, op_name, n });
         }
     }
     if (mode16) {
         try out.print("--- identical decodes per compressed opcode ---\n", .{});
-        inline for (@typeInfo(rv32c.Opcode).@"enum".fields) |ef| {
-            try out.print("  {s:<11} {d}\n", .{ ef.name, tot.per_cop[ef.value] });
+        const enum_info = @typeInfo(rv32c.Opcode).@"enum";
+        inline for (enum_info.field_names, enum_info.field_values) |op_name, op_value| {
+            try out.print("  {s:<11} {d}\n", .{ op_name, tot.per_cop[op_value] });
         }
     }
 }
@@ -505,13 +508,13 @@ fn reportSelfTest(out: *std.Io.Writer, tot: *const Stats) !bool {
     try out.print("\n=== self-test: planted decoder bugs ===\n", .{});
     var ok = true;
     var reported: u64 = 0;
-    inline for (@typeInfo(Plant).@"enum".fields, 0..) |f, k| {
+    inline for (@typeInfo(Plant).@"enum".field_names, 0..) |plant_name, k| {
         const planted = tot.planted[k];
         const missed = tot.missed[k];
         const pass = planted > 0 and missed == 0;
         if (!pass) ok = false;
         reported += planted - missed;
-        try out.print("  {s:<14} changed {d:>8} decodes, reported {d:>8}  {s}\n", .{ f.name, planted, planted - missed, if (pass) "ok" else "FAIL" });
+        try out.print("  {s:<14} changed {d:>8} decodes, reported {d:>8}  {s}\n", .{ plant_name, planted, planted - missed, if (pass) "ok" else "FAIL" });
     }
     // Every unexplained divergence must come from a planted bug.
     const other = tot.unexplained - reported;
@@ -615,7 +618,7 @@ pub fn main(init: std.process.Init) !void {
         const n = if (pos.items.len > 4) try std.fmt.parseInt(u64, pos.items[4], 0) else all_32bit;
         const hi = @min(lo +| n, all_32bit);
         if (lo >= hi) usage();
-        title = try std.fmt.bufPrint(&title_buf, "32-bit encodings (x << 2) | 0b11 for x in [0x{x}, 0x{x})", .{ lo, hi });
+        title = try std.mem.print(&title_buf, "32-bit encodings (x << 2) | 0b11 for x in [0x{x}, 0x{x})", .{ lo, hi });
         try comparePart(ctxs[0..n_threads], .{ .mode16 = false, .lo = lo, .hi = hi }, &tot);
     } else {
         try comparePart(ctxs[0..n_threads], .{ .mode16 = true }, &tot);

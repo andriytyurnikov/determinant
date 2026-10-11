@@ -26,17 +26,17 @@ const excluded_fields = [_][]const u8{
 
 comptime {
     // Every CSR must be encoded: update encodeHeader and bump `version` when adding one.
-    if (std.meta.fields(zicsr.Csr).len != 1) @compileError("zicsr.Csr changed: update cpu/state.zig");
+    if (@typeInfo(zicsr.Csr).@"struct".field_names.len != 1) @compileError("zicsr.Csr changed: update cpu/state.zig");
 }
 
 fn checkFields(comptime Cpu: type) void {
     comptime {
-        for (std.meta.fields(Cpu)) |f| {
+        for (@typeInfo(Cpu).@"struct".field_names) |field_name| {
             var known = false;
             for (encoded_fields ++ excluded_fields) |name| {
-                if (std.mem.eql(u8, f.name, name)) known = true;
+                if (std.mem.eql(u8, field_name, name)) known = true;
             }
-            if (!known) @compileError("CpuType field '" ++ f.name ++ "' is not covered by cpu/state.zig");
+            if (!known) @compileError("CpuType field '" ++ field_name ++ "' is not covered by cpu/state.zig");
         }
     }
 }

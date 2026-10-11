@@ -11,7 +11,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 - Fixed, flat memory layout
 - Instruction counting instead of wall-clock time
 - No ambient inputs: no clock, no randomness and no access to the host. I/O goes through a small host-call ABI (read, write, exit) whose input is fixed before the run
-- No undefined behavior and no platform-specific quirks: every configuration CI tests (Linux, macOS, Debug, ReleaseFast, big-endian) must reach the same final-state digests
+- No undefined behavior and no platform-specific quirks: every configuration CI tests (Linux, macOS, `debug` and `fast` builds, big-endian) must reach the same final-state digests
 
 ## Use Cases
 
@@ -23,7 +23,7 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ## Requirements
 
-- [Zig](https://ziglang.org/) 0.16.0+
+- [Zig](https://ziglang.org/) 0.17.0+
 
 ## Build
 
@@ -81,7 +81,7 @@ zig build test-compliance   # run RISC-V compliance tests (riscv-tests suite)
 zig build test-all          # run unit, CLI, compliance and digest tests (what CI runs)
 zig build test-digests      # check corpus final-state digests against tests/digests.txt
 zig build verify-decoder    # check the decoder against its spec on all 2^30 32-bit encodings
-zig build bench             # MIPS on the C program corpus (ReleaseFast)
+zig build bench             # MIPS on the C program corpus (always -Doptimize=fast)
 ```
 
 Before a release, three more checks run against independent references. They need software CI does not install:
@@ -91,11 +91,11 @@ Before a release, three more checks run against independent references. They nee
 
 ### Performance
 
-`zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.16.0 (ReleaseFast) the VM executes about 280–290 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.75× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 150. Compare numbers only from the same machine.
+`zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.17.0 (`-Doptimize=fast`) the VM executes about 275–285 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.4× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 200. Compare numbers only from the same machine.
 
 ### Cross-platform determinism
 
-`zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in Debug and ReleaseFast, and on a big-endian target, so every configuration must reach bit-identical final states.
+`zig build test-digests` runs every corpus program (the compliance binaries, plus ten C programs such as SHA-256, CRC-32, quicksort and a bytecode interpreter, compiled two ways; see [tests/programs](tests/programs/README.md)), checks each C program's result against the same C run natively, and compares the SHA-256 of its final VM state (`stateDigest()`: pc, registers, counters, reservation, CSRs and all of memory, encoded little-endian) with `tests/digests.txt`. CI runs it on Linux and macOS, in `debug` and `fast` builds, and on a big-endian target, so every configuration must reach bit-identical final states.
 
 ### RISC-V Compliance
 

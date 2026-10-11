@@ -17,15 +17,16 @@ test "registry: no two entries overlap" {
 }
 
 test "registry: every Opcode variant has exactly one entry" {
-    inline for (@typeInfo(Opcode).@"union".fields) |uf| {
-        inline for (@typeInfo(uf.type).@"enum".fields) |ef| {
-            const op = @unionInit(Opcode, uf.name, @enumFromInt(ef.value));
+    const union_info = @typeInfo(Opcode).@"union";
+    inline for (union_info.field_names, union_info.field_types) |ext_name, ExtOpcode| {
+        inline for (@typeInfo(ExtOpcode).@"enum".field_names) |op_name| {
+            const op = @unionInit(Opcode, ext_name, @field(ExtOpcode, op_name));
             var n: usize = 0;
             for (reg.registry) |e| {
                 if (std.meta.eql(e.op, op)) n += 1;
             }
             if (n != 1) {
-                std.debug.print("{s}.{s}: {d} registry entries\n", .{ uf.name, ef.name, n });
+                std.debug.print("{s}.{s}: {d} registry entries\n", .{ ext_name, op_name, n });
                 return error.TestUnexpectedResult;
             }
         }

@@ -27,7 +27,7 @@ test "state: digest of the power-on state is a fixed value on every host" {
     //   + pack("<32I", *[0]*32) + pack("<QIII", 0, 0, 0, 0) + bytes(65536))
     const expected = "992011129d32ce3eba88fffcd98da4d2289f139fa8df92857c474bc51bd2187e";
     var hex: [64]u8 = undefined;
-    _ = try std.fmt.bufPrint(&hex, "{x}", .{&cpu.stateDigest()});
+    _ = try std.mem.print(&hex, "{x}", .{&cpu.stateDigest()});
     try std.testing.expectEqualStrings(expected, &hex);
 }
 

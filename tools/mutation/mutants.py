@@ -374,7 +374,7 @@ NEW = [
     dict(id="CL02", file=MAIN, desc="an odd --load-addr accepted", edits=[("if (opts.load_addr % 2 != 0 or opts.load_addr >= det.Cpu.mem_size)", "if (opts.load_addr >= det.Cpu.mem_size)")]),
     dict(id="CL03", file=MAIN, desc="a flat binary starts at 0 instead of its load address", edits=[("entry = opts.load_addr;", "entry = 0;")]),
     dict(id="CL04", file=MAIN, desc="--input ignored", edits=[("opts.input = input;", "{}")]),
-    dict(id="CL05", file=MAIN, desc="exit status saturates at 255 instead of keeping the low 8 bits", edits=[("return .{ .status = @enumFromInt(@as(u8, @truncate(status))) };", "return .{ .status = @enumFromInt(@as(u8, @intCast(@min(status, 255)))) };")]),
+    dict(id="CL05", file=MAIN, desc="exit status saturates at 255 instead of keeping the low 8 bits", edits=[("return .{ .status = @fromBackingInt(@as(u8, @truncate(status))) };", "return .{ .status = @fromBackingInt(@as(u8, @intCast(@min(status, 255)))) };")]),
     dict(id="CL06", file=MAIN, desc="exit(3) taken for a VM fault in runFile (status compared, not the faulted flag)", edits=[("if (report.faulted) return report.status;\n\n    if (opts.dump_format) |fmt| {", "if (report.status == .vm_fault) return report.status;\n\n    if (opts.dump_format) |fmt| {")]),
     dict(id="CL07", file=MAIN, desc="ELF detection checks the magic one byte late, so ELF files load as flat binaries", edits=[("if (det.loader.isElf(magic[0..magic_len])) {", "if (det.loader.isElf(magic[1..magic_len])) {")]),
 ]

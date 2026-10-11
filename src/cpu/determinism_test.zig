@@ -26,7 +26,7 @@ fn loadTestProgram(memory: []u8) void {
 
 fn hex(digest: [32]u8) [64]u8 {
     var out: [64]u8 = undefined;
-    _ = std.fmt.bufPrint(&out, "{x}", .{&digest}) catch unreachable;
+    _ = std.mem.print(&out, "{x}", .{&digest}) catch unreachable;
     return out;
 }
 

@@ -4,7 +4,7 @@
 //!
 //! usage: bench [--runs N] DIR
 //!
-//! Run with `zig build bench` (always ReleaseFast). Only VM execution is timed, not
+//! Run with `zig build bench` (always -Doptimize=fast). Only VM execution is timed, not
 //! loading. Compare numbers from the same machine only.
 
 const std = @import("std");
@@ -44,7 +44,7 @@ pub fn main(init: std.process.Init) !void {
     while (try walker.next(io)) |entry| {
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".bin") or entry.basename[0] == '.') continue;
         const p = try arena.dupe(u8, entry.path);
-        std.mem.replaceScalar(u8, p, std.fs.path.sep, '/');
+        std.mem.replaceScalar(u8, p, std.Io.Dir.path.sep, '/');
         try paths.append(arena, p);
     }
     std.mem.sort([]const u8, paths.items, {}, struct {
