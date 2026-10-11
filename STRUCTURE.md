@@ -146,6 +146,9 @@ tools/
     render.zig            — prints a decoded Instruction in LLVM's -riscv-no-aliases syntax
   spike_diff/             — differential tests against Spike: random programs, directed edge cases, encoding sweep (Python; needs Spike and RISC-V binutils; see its README)
     runner.zig            — the VM side (`zig build spike-runner`): runs each program with the decode cache on and off, prints final state
+  mutation/               — mutation testing: plants one catalogued bug at a time in an exported tree and runs the suites (Python; see its README)
+    mutate.py             — the driver: validates the catalogue, runs the mutants, reports the score
+    mutants.py            — the catalogue: each mutant as anchor-based edits, plus the survivors judged equivalent and why
   bench.zig               — benchmark: best-of-N time and MIPS per C corpus program, geometric mean (`zig build bench`)
   corpus_digests.zig      — runs every corpus program (compliance binaries and C programs) and prints/checks final-state digests and C program results (`zig build digests` / `test-digests`)
 tests/
