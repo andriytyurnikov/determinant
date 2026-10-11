@@ -38,6 +38,31 @@ The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encodin
 - **CI's CLI smoke runs** read the report from stderr.
 - **Mutation catalogue.** The CLI mutants are re-anchored to the new code, with 30 new ones for the arguments, streams, report, trace and listing, and one (LD14) for `loader.segments()`.
 
+### Verification
+
+These checks were run for this release, in addition to CI. The decoder and Spike results are the same as for 0.2.0.
+
+- **Decoder vs LLVM** (`zig build llvm-oracle`). Every 16-bit encoding and all 2^30 32-bit encodings were compared with the LLVM 23 and LLVM 22 disassemblers, and nothing differs outside the documented classes. The decoder accepts 224,997,378 of the 32-bit encodings. With LLVM 23:
+  - 216,596,738 disassemble identically;
+  - 8,388,350 are FENCE or FENCE.I with nonzero fields that the spec says to ignore, which LLVM rejects;
+  - 12,290 get a different name (the Zicbop prefetch hints, FENCE.TSO, UNIMP).
+
+  The 1,028 encodings that LLVM accepts and the decoder rejects are privileged instructions. LLVM 22 does not name the prefetch hints, so it renames only 2.
+- **Decoder vs registry** (`zig build verify-decoder`). All 2^30 32-bit encodings: 0 differences.
+- **Execution vs Spike** (`tools/spike_diff`):
+  - 21,000 random programs in seven instruction mixes, ending in EBREAK, ECALL and every kind of fault: 0 differences;
+  - 114 directed edge cases: 0 unexpected;
+  - 8,000 single-instruction programs: 0 unexplained (40 use addresses outside Spike's memory, 2 read absolute counter values);
+  - all 122 implemented instructions executed.
+- **Mutation testing** (`tools/mutation`, all 291 mutants). 280 are killed. 10 are equivalent: no test can tell them from the original, and `mutants.EQUIVALENT` gives the reason for each. The last one, SO03, dropped the flush that shows the preamble before the program runs; a test added after the release (`8c59691`) kills it, so every mutant that is not equivalent is now killed.
+- **Portability.** `zig build test-all`, digest checks included, passes in CI on:
+  - macOS and Linux x86_64 (`debug` and `fast`);
+  - big-endian s390x under qemu;
+  - `-Dmemory_size` of 64 B, 1 MiB and 256 MiB.
+
+  The CLI runs a compliance program on macOS and Linux, and a small program at every memory size, in `debug` and `fast` builds.
+- **Compliance from source.** All 89 compliance binaries, rebuilt with GCC 13.2 (CI), pass.
+
 ## 0.2.0 — 2026-10-09
 
 This release follows a review of the project on 2026-10-07. [SEMANTICS.md](SEMANTICS.md) is new and is the contract from now on.
