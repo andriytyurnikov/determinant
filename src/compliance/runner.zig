@@ -18,11 +18,26 @@ pub const TestResult = union(enum) {
     /// The test stopped at an ECALL. Our riscv_test.h ends every test with EBREAK
     /// (some tests execute ECALL themselves), so this is never a pass.
     unexpected_ecall,
+    /// A RuntimeCpuType with the same memory size gave another result or final state.
+    memory_kinds_differ,
 };
 
-/// Run a compliance test binary. Returns the test result.
+/// Run a compliance test binary on a ComplianceCpu, and on a RuntimeCpuType with a
+/// host buffer of the same size, which must reach the same final state. Returns the
+/// test result.
 pub fn runTest(binary: []const u8) TestResult {
     var vm = ComplianceCpu.init();
+    const result = runOn(&vm, binary);
+
+    const memory = std.heap.page_allocator.alloc(u8, compliance_memory_size) catch return .runtime_error;
+    defer std.heap.page_allocator.free(memory);
+    var runtime = det.RuntimeCpu.init(memory) catch unreachable; // a valid size
+    if (!std.meta.eql(result, runOn(&runtime, binary)) or
+        !std.mem.eql(u8, &vm.stateDigest(), &runtime.stateDigest())) return .memory_kinds_differ;
+    return result;
+}
+
+fn runOn(vm: anytype, binary: []const u8) TestResult {
     vm.loadProgram(binary, 0) catch return .runtime_error;
 
     const result = vm.run(1_000_000) catch return .runtime_error;
@@ -58,6 +73,10 @@ pub fn expectPass(comptime name: []const u8, binary: []const u8) !void {
         .unexpected_ecall => {
             std.debug.print("COMPLIANCE FAIL: {s} — stopped at ECALL instead of the EBREAK that ends a test\n", .{name});
             return error.ComplianceTestUnexpectedEcall;
+        },
+        .memory_kinds_differ => {
+            std.debug.print("COMPLIANCE FAIL: {s} — runtime memory gave another result than fixed memory\n", .{name});
+            return error.ComplianceTestMemoryKindsDiffer;
         },
     }
 }

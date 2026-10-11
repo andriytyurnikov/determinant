@@ -1,7 +1,8 @@
-//! CpuType — parameterized RISC-V CPU core (memory size × decoder as comptime args).
+//! CpuType and RuntimeCpuType — the RISC-V CPU core. Its memory (inside the VM with a
+//! size fixed at compile time, or a host buffer of a size chosen at run time) and its
+//! decoder are comptime parameters.
 
 const std = @import("std");
-const build_options = @import("build_options");
 const decoders = @import("decoders.zig");
 const instructions = @import("instructions.zig");
 const rv32i = instructions.rv32i;
@@ -58,10 +59,52 @@ pub const Options = struct {
     decode_cache_entries: u32 = 4096,
 };
 
+/// Errors from RuntimeCpuType.init() and initInPlace().
+pub const InitError = error{
+    /// The memory is smaller than 4 bytes, not a multiple of 4, or larger than 2^32 - 4.
+    InvalidMemorySize,
+};
+
+/// Whether a VM can have `len` bytes of memory: at least 4, a multiple of 4, and a u32
+/// (so at most 2^32 - 4), so that every address is a u32. The bounds checks depend on
+/// it: they compute size - 4, which must not wrap.
+pub fn validMemorySize(len: usize) bool {
+    return len >= 4 and len % 4 == 0 and len <= std.math.maxInt(u32);
+}
+
+/// The memory size a snapshot holds, read from its first 12 or more bytes, so that a
+/// host can allocate a RuntimeCpuType's memory before restoring the snapshot.
+pub fn snapshotMemorySize(snapshot_start: []const u8) error{InvalidSnapshot}!u32 {
+    return state.memorySize(snapshot_start);
+}
+
+/// A VM whose memory, `memory_size` bytes, is inside the struct: every bounds check
+/// compares with a constant. The size must be at least 4 and a multiple of 4.
 pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
     comptime {
         if (memory_size < 4) @compileError("memory_size must be >= 4");
         if (memory_size % 4 != 0) @compileError("memory_size must be divisible by 4");
+    }
+    return VmType(.{ .fixed = memory_size }, options);
+}
+
+/// A VM whose memory is a buffer the host passes to init(), of any size that
+/// validMemorySize() accepts. The VM borrows the buffer and never allocates; the host
+/// keeps it alive. Copying the struct shares the memory: fork a VM with a snapshot.
+pub fn RuntimeCpuType(comptime options: Options) type {
+    return VmType(.runtime, options);
+}
+
+/// How a VM holds its memory.
+const MemoryKind = union(enum) {
+    /// Inside the struct, of this size.
+    fixed: u32,
+    /// A host buffer, of a size chosen at run time.
+    runtime,
+};
+
+fn VmType(comptime kind: MemoryKind, comptime options: Options) type {
+    comptime {
         if (options.decode_cache_entries != 0 and !std.math.isPowerOfTwo(options.decode_cache_entries))
             @compileError("decode_cache_entries must be a power of two, or 0");
     }
@@ -69,13 +112,21 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
     const cache_entries = options.decode_cache_entries;
     return struct {
         const Self = @This();
-        pub const mem_size: u32 = memory_size;
+        /// The memory size of a CpuType. A RuntimeCpuType's size is known only at run
+        /// time: use memSize().
+        pub const mem_size: u32 = switch (kind) {
+            .fixed => |n| n,
+            .runtime => @compileError("a RuntimeCpuType's memory size is chosen at run time: use memSize()"),
+        };
         pub const decode = decodeFn;
         pub const decode_cache_entries = cache_entries;
 
         pc: u32,
         regs: [32]u32,
-        memory: [mem_size]u8,
+        memory: switch (kind) {
+            .fixed => |n| [n]u8,
+            .runtime => []u8,
+        },
         cycle_count: u64,
         reservation: ?u32,
         csrs: zicsr.Csr,
@@ -97,23 +148,53 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
                 @compileError("empty_slot.raw must be a value fetch() cannot return");
         }
 
+        /// A CpuType's init() takes no arguments; a RuntimeCpuType's takes its memory.
+        /// INVARIANT: no allocators — all state is fixed-size (registers, memory, CSR
+        /// struct), and a RuntimeCpuType's memory belongs to the host.
+        pub const init = switch (kind) {
+            .fixed => initFixed,
+            .runtime => initRuntime,
+        };
+
+        /// Give a RuntimeCpuType `memory` and reset it, in place: for a VM on the heap
+        /// (a large decode cache would not fit on the stack). error.InvalidMemorySize,
+        /// changing nothing, unless validMemorySize(memory.len).
+        pub const initInPlace = switch (kind) {
+            .fixed => @compileError("a CpuType has its memory inside: use reset()"),
+            .runtime => initInPlaceRuntime,
+        };
+
         /// Return a zeroed VM by value. The whole memory lives inside Self, so this
         /// is for small memories only: for large ones, place Self on the heap or in
         /// static storage and call reset() on it instead.
-        /// INVARIANT: no allocators — all state is fixed-size (registers, memory, CSR struct).
-        pub fn init() Self {
+        fn initFixed() Self {
             var self: Self = undefined;
             self.reset();
             return self;
         }
 
+        /// Return a zeroed VM by value, with `memory` (zeroed too) as its memory.
+        /// error.InvalidMemorySize unless validMemorySize(memory.len).
+        fn initRuntime(memory: []u8) InitError!Self {
+            var self: Self = undefined;
+            try self.initInPlaceRuntime(memory);
+            return self;
+        }
+
+        fn initInPlaceRuntime(self: *Self, memory: []u8) InitError!void {
+            if (!validMemorySize(memory.len)) return error.InvalidMemorySize;
+            self.memory = memory;
+            self.reset();
+        }
+
         /// Reset to the power-on state in place: pc = 0, registers, memory and
-        /// counters zeroed, no reservation. Unlike init(), this never builds a Self
-        /// temporary on the stack or a memory-sized constant in the binary.
+        /// counters zeroed, no reservation. A RuntimeCpuType keeps its buffer. Unlike
+        /// init(), this never builds a Self temporary on the stack or a memory-sized
+        /// constant in the binary.
         pub fn reset(self: *Self) void {
             self.pc = 0;
             self.regs = @splat(0);
-            @memset(&self.memory, 0);
+            @memset(self.memory[0..], 0);
             self.cycle_count = 0;
             self.reservation = null;
             self.csrs = .{};
@@ -121,8 +202,21 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
             self.stop_pc = 0;
         }
 
-        /// Size of a snapshot: the state header plus the memory image.
+        /// The memory size in bytes: a constant for a CpuType.
+        pub inline fn memSize(self: *const Self) u32 {
+            return switch (kind) {
+                .fixed => |n| n,
+                .runtime => @intCast(self.memory.len),
+            };
+        }
+
+        /// Size of a CpuType's snapshot: the state header plus the memory image.
         pub const snapshot_size: usize = state.header_len + mem_size;
+
+        /// Size of a snapshot: the state header plus the memory image.
+        pub fn snapshotSize(self: *const Self) usize {
+            return state.header_len + @as(usize, self.memSize());
+        }
 
         /// Write a snapshot of the architectural state (versioned, little-endian; the
         /// bytes stateDigest() hashes). See docs/design/snapshots.md.
@@ -130,8 +224,8 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
             return state.writeSnapshot(self, w);
         }
 
-        /// Restore the architectural state from a snapshot written by a CpuType with the
-        /// same memory size. Empties the decode cache and sets stop_pc to 0. Returns
+        /// Restore the architectural state from a snapshot of a VM with the same memory
+        /// size. Empties the decode cache and sets stop_pc to 0. Returns
         /// error.InvalidSnapshot, before changing anything, for a malformed header.
         pub fn restoreSnapshot(self: *Self, r: *std.Io.Reader) state.RestoreError!void {
             try state.restoreSnapshot(self, r);
@@ -163,11 +257,11 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
         /// instruction zero-extended to u32 when bits [1:0] != 0b11, or a full 32-bit word.
         pub fn fetch(self: *const Self) !u32 {
             if (self.pc % 2 != 0) return error.MisalignedPC;
-            if (self.pc > mem_size - 2) return error.PCOutOfBounds;
+            if (self.pc > self.memSize() - 2) return error.PCOutOfBounds;
             const addr: usize = self.pc;
             const low: u16 = std.mem.readInt(u16, self.memory[addr..][0..2], .little);
             if (instructions.isCompressed(low)) return @as(u32, low);
-            if (self.pc > mem_size - 4) return error.PCOutOfBounds;
+            if (self.pc > self.memSize() - 4) return error.PCOutOfBounds;
             return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
         }
 
@@ -175,7 +269,8 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
         /// drops an LR reservation on any word it overwrites.
         pub fn loadProgram(self: *Self, program: []const u8, offset: u32) !void {
             const off: usize = offset;
-            if (program.len > mem_size or off > mem_size - program.len) return error.AddressOutOfBounds;
+            const size: usize = self.memSize();
+            if (program.len > size or off > size - program.len) return error.AddressOutOfBounds;
             @memcpy(self.memory[off..][0..program.len], program);
             self.invalidateReservationRange(off, program.len);
         }
@@ -191,44 +286,44 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
         // INVARIANT: all multi-byte access uses explicit .little endianness — never .native
 
         pub fn readByte(self: *const Self, addr: u32) !u8 {
-            if (addr >= mem_size) return error.AddressOutOfBounds;
+            if (addr >= self.memSize()) return error.AddressOutOfBounds;
             return self.memory[addr];
         }
 
         pub fn readHalfword(self: *const Self, addr: u32) !u16 {
             if (addr % 2 != 0) return error.MisalignedAccess;
-            if (addr > mem_size - 2) return error.AddressOutOfBounds;
+            if (addr > self.memSize() - 2) return error.AddressOutOfBounds;
             return std.mem.readInt(u16, self.memory[addr..][0..2], .little);
         }
 
         pub fn readWord(self: *const Self, addr: u32) !u32 {
-            try checkWordAccess(addr);
+            try self.checkWordAccess(addr);
             return std.mem.readInt(u32, self.memory[addr..][0..4], .little);
         }
 
         pub fn writeByte(self: *Self, addr: u32, value: u8) !void {
-            if (addr >= mem_size) return error.AddressOutOfBounds;
+            if (addr >= self.memSize()) return error.AddressOutOfBounds;
             self.memory[addr] = value;
             self.invalidateReservation(addr);
         }
 
         pub fn writeHalfword(self: *Self, addr: u32, value: u16) !void {
             if (addr % 2 != 0) return error.MisalignedAccess;
-            if (addr > mem_size - 2) return error.AddressOutOfBounds;
+            if (addr > self.memSize() - 2) return error.AddressOutOfBounds;
             std.mem.writeInt(u16, self.memory[addr..][0..2], value, .little);
             self.invalidateReservation(addr);
         }
 
         pub fn writeWord(self: *Self, addr: u32, value: u32) !void {
-            try checkWordAccess(addr);
+            try self.checkWordAccess(addr);
             std.mem.writeInt(u32, self.memory[addr..][0..4], value, .little);
             self.invalidateReservation(addr);
         }
 
         /// Alignment, then bounds: the checks every word access makes before touching memory.
-        fn checkWordAccess(addr: u32) error{ MisalignedAccess, AddressOutOfBounds }!void {
+        fn checkWordAccess(self: *const Self, addr: u32) error{ MisalignedAccess, AddressOutOfBounds }!void {
             if (addr % 4 != 0) return error.MisalignedAccess;
-            if (addr > mem_size - 4) return error.AddressOutOfBounds;
+            if (addr > self.memSize() - 4) return error.AddressOutOfBounds;
         }
 
         /// Invalidate reservation if write overlaps reserved word.
@@ -371,7 +466,7 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
                     // out-of-bounds address whether or not it would succeed, and the
                     // fault leaves the reservation unchanged. (Spec: no SC.W retires
                     // unless it passes memory permission checks.)
-                    try checkWordAccess(addr);
+                    try self.checkWordAccess(addr);
                     // reservation is guaranteed word-aligned (LR.W's readWord rejects
                     // misalignment), so direct equality suffices — no mask needed here.
                     if (self.reservation == addr) {
@@ -428,14 +523,16 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type {
     };
 }
 
-/// Default memory size — follows the `-Dmemory_size` build option (default: 64 KB).
-pub const default_memory_size: u32 = build_options.memory_size;
+/// The default memory size: `Cpu`'s, and the CLI's without --memory.
+pub const default_memory_size: u32 = 64 * 1024;
 
-/// Default Cpu — memory size follows `-Dmemory_size`.
+/// A VM with the default 64 KiB of memory inside it.
 pub const Cpu = CpuType(default_memory_size, .{});
 
-/// CPU for the unit tests: always 64 KiB of memory, so the tests behave the same
-/// at every `-Dmemory_size`.
+/// A VM with a host buffer of any valid size as its memory.
+pub const RuntimeCpu = RuntimeCpuType(.{});
+
+/// CPU for the unit tests: always 64 KiB of memory.
 pub const TestCpu = CpuType(64 * 1024, .{});
 
 test "CpuType: custom memory size" {

@@ -144,7 +144,8 @@ ECALL and EBREAK stop execution. `step()` returns `.ecall` or `.ebreak`, and `ru
 
 ## Memory
 
-- **Layout.** One flat, zero-initialized region of `mem_size` bytes at address 0, with no protection: code is writable and data is executable.
+- **Layout.** One flat, zero-initialized region of `memSize()` bytes at address 0, with no protection: code is writable and data is executable.
+- **Size.** The host chooses it: at compile time (`CpuType`, the memory inside the VM) or at run time (`RuntimeCpuType`, a host buffer). It is at least 4 bytes, a multiple of 4, and at most 2^32 − 4. A VM behaves the same with either kind; the size is part of the state (see below).
 - **Endianness.** Little-endian on every host.
 - **Self-modifying code.** Stores to code take effect for the next instruction fetched, because every fetch reads memory. The decode cache only skips re-decoding identical instruction bits, so it is invisible to the guest.
 - **Nothing else.** There is no MMIO, no memory-mapped timer and no device.
@@ -158,9 +159,10 @@ The architectural state is: `pc`, the 32 registers, the memory image, `cycle_cou
 Take the same initial state and the same sequence of host actions (state changes between steps, and the number of steps or the `run()` limits). The VM then reaches the same architectural state, so the same `stateDigest()`:
 - on every host OS and CPU architecture, either endianness;
 - in every build mode;
-- with any decode cache size.
+- with any decode cache size;
+- with the memory inside the VM or in a host buffer.
 
-CI checks this on every change: Linux and macOS, `debug` and `fast` builds, a big-endian s390x target, and the decode cache on and off, all against `tests/digests.txt`.
+CI checks this on every change: Linux and macOS, `debug` and `fast` builds, a big-endian s390x target, the decode cache on and off, and both kinds of memory, all against `tests/digests.txt`.
 
 Outside the guarantee:
 - how long execution takes;

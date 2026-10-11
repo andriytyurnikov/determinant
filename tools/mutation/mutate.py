@@ -42,8 +42,8 @@ DEFAULT_CATALOGUE = os.path.join(HERE, "mutants.py")
 # against their module prefixes (see suite_of_test) to catch a reordered build.zig.
 RUN_TESTS = {"test": ("unit", "cli"), "test-all": ("unit", "cli", "compliance")}
 # The corpus digest check runs twice under test-digests: decode cache on, then off.
-DIGEST_RUNS = ("digests", "digests_nocache")
-SUITES = ("unit", "cli", "compliance", "digests", "digests_nocache")
+DIGEST_RUNS = ("digests", "digests_nocache", "digests_runtime")
+SUITES = ("unit", "cli", "compliance", "digests", "digests_nocache", "digests_runtime")
 
 CACHE_SUBDIRS = ("o", "h", "z", "tmp")
 IN_PROGRESS = ".mutation-in-progress.json"  # in the tree: original bytes of a mutated file
@@ -336,9 +336,10 @@ def analyse(step, rc, out, timed_out, secs):
         if step == "test-all":
             for name, text in zip(DIGEST_RUNS, digest_runs):
                 suites[name] = step_state(text)
-            # Cross-check with the failed commands: the cache-off run has the flag.
+            # Cross-check with the failed commands: the other runs have their flag.
             for cmd in DIGEST_CMD_RE.findall(out):
-                name = "digests_nocache" if "--no-decode-cache" in cmd else "digests"
+                name = ("digests_nocache" if "--no-decode-cache" in cmd else
+                        "digests_runtime" if "--runtime-memory" in cmd else "digests")
                 if suites.get(name) != "FAIL":
                     res["warnings"].append(f"failed command for {name}, but its step is {suites.get(name)}")
                     suites[name] = "FAIL"

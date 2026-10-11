@@ -1,18 +1,8 @@
 const std = @import("std");
 
-const default_memory_size: u32 = 64 * 1024;
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    const memory_size: u32 = b.option(u32, "memory_size", "VM memory size in bytes (default: 65536, must be >= 4 and divisible by 4)") orelse default_memory_size;
-    if (memory_size < 4 or memory_size % 4 != 0) {
-        std.log.err("invalid -Dmemory_size={d}: it must be at least 4 and a multiple of 4", .{memory_size});
-        b.invalid_user_input = true;
-    }
-    const options = b.addOptions();
-    options.addOption(u32, "memory_size", memory_size);
 
     // Library module
     const mod = b.addModule("determinant", .{
@@ -20,7 +10,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    mod.addOptions("build_options", options);
 
     // CLI executable
     const exe = b.addExecutable(.{
@@ -84,11 +73,11 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    const check_digests_step = b.step("test-digests", "Run the corpus (decode cache on and off) and check its final-state digests against tests/digests.txt");
-    for ([_]bool{ true, false }) |decode_cache| {
+    const check_digests_step = b.step("test-digests", "Run the corpus (decode cache on and off, runtime memory) and check its final-state digests against tests/digests.txt");
+    for ([_][]const u8{ "", "--no-decode-cache", "--runtime-memory" }) |flag| {
         const check_digests = b.addRunArtifact(digests_exe);
         addCorpusArgs(b, check_digests);
-        if (!decode_cache) check_digests.addArg("--no-decode-cache");
+        if (flag.len != 0) check_digests.addArg(flag);
         check_digests.addArg("--check");
         check_digests.addFileArg(b.path("tests/digests.txt"));
         check_digests.has_side_effects = true;
@@ -129,7 +118,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .fast,
     });
-    release_mod.addOptions("build_options", options);
 
     // The decoder against its specification (decoders/registry.zig) on all 2^30
     // 32-bit encodings.

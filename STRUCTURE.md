@@ -7,7 +7,8 @@ src/
   root.zig                — library root: re-exports cpu, instructions, decoders, hostcall, loader, decode() and the common types
   main.zig, main/         — the CLI, which imports the library as @import("determinant"): args.zig parses the
                             arguments, load.zig loads the program, report.zig, disasm.zig and dump.zig print; its tests
-  cpu.zig, cpu/           — CpuType: state, step/run, memory, reservations, decode cache; exec_i.zig executes RV32I,
+  cpu.zig, cpu/           — CpuType and RuntimeCpuType (memory inside or a host buffer): state, step/run, memory,
+                            reservations, decode cache; exec_i.zig executes RV32I,
                             state.zig is the canonical state encoding (stateDigest, snapshots)
   instructions.zig, instructions/
                           — the Opcode tagged union and Instruction; one module per extension (rv32i, with rv32c
@@ -40,7 +41,7 @@ Every non-test source file starts with a `//!` comment that says what it is. A m
 All edges point downward. There are no cycles, and none should be introduced.
 
 ```
-main.zig ─→ root.zig ─→ hostcall.zig, loader.zig (generic over CpuType: no imports of cpu.zig)
+main.zig ─→ root.zig ─→ hostcall.zig, loader.zig (generic over both kinds of VM: no imports of cpu.zig)
                 │
 main.zig ─→ root.zig ─→ cpu.zig ─→ instructions.zig ─→ [extensions] ─→ format.zig
                 │          ↓

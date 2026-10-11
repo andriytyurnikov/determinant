@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const Io = std.Io;
+const det = @import("determinant");
 const dump = @import("dump.zig");
 const units = @import("units.zig");
 
@@ -22,6 +23,8 @@ pub const Input = union(enum) { stdin, file: []const u8 };
 /// not given.
 pub const Config = struct {
     program: Program,
+    /// VM memory in bytes; det.validMemorySize() accepts it.
+    memory: u32 = det.default_memory_size,
     disassemble: bool = false,
     max_cycles: ?u64 = null,
     input: ?Input = null,
@@ -44,13 +47,14 @@ pub const Command = union(enum) {
 /// A usage error; its message is already written.
 pub const Error = error{Usage} || Io.Writer.Error;
 
-pub const Opt = enum { max_cycles, input, load_addr, dump_memory, dump_range, digest, trace, disassemble, quiet, demo, help, version };
+pub const Opt = enum { memory, max_cycles, input, load_addr, dump_memory, dump_range, digest, trace, disassemble, quiet, demo, help, version };
 
 pub const Value = enum { none, required, optional };
 
 pub const Spec = struct { name: []const u8, short: ?[]const u8 = null, opt: Opt, value: Value = .none };
 
 pub const specs = [_]Spec{
+    .{ .name = "--memory", .opt = .memory, .value = .required },
     .{ .name = "--max-cycles", .opt = .max_cycles, .value = .required },
     .{ .name = "--input", .opt = .input, .value = .required },
     .{ .name = "--load-addr", .opt = .load_addr, .value = .required },
@@ -79,9 +83,9 @@ fn isOption(arg: []const u8) bool {
     return arg.len > 1 and arg[0] == '-';
 }
 
-/// Parse the arguments (args[0] is the program name) for a VM with `mem_size` bytes of
-/// memory. A usage error is reported on `diag` ("Error: ...") and returns error.Usage.
-pub fn parse(args: []const [:0]const u8, mem_size: u32, diag: *Io.Writer) Error!Command {
+/// Parse the arguments (args[0] is the program name). A usage error is reported on
+/// `diag` ("Error: ...") and returns error.Usage.
+pub fn parse(args: []const [:0]const u8, diag: *Io.Writer) Error!Command {
     if (args.len <= 1) return .usage;
 
     // --help and --version win wherever they are, even after an invalid option.
@@ -99,6 +103,10 @@ pub fn parse(args: []const [:0]const u8, mem_size: u32, diag: *Io.Writer) Error!
     var demo = false;
     var config: Config = .{ .program = .demo };
     var options_ended = false;
+    // For the checks against the memory size, after all the options: --memory may come
+    // later.
+    var load_addr_text: []const u8 = "";
+    var dump_range_text: []const u8 = "";
 
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
@@ -131,12 +139,14 @@ pub fn parse(args: []const [:0]const u8, mem_size: u32, diag: *Io.Writer) Error!
         };
 
         switch (spec.opt) {
+            .memory => config.memory = try memorySize(value.?, diag),
             .max_cycles => config.max_cycles = try number(u64, value.?, spec.name, diag),
             .input => config.input = if (std.mem.eql(u8, value.?, "-")) .stdin else .{ .file = value.? },
             .load_addr => {
                 const addr = try number(u32, value.?, spec.name, diag);
-                if (addr % 2 != 0 or addr >= mem_size) return fail(diag, "--load-addr '{s}' must be even and inside the {f} of VM memory", .{ value.?, units.MemSize{ .bytes = mem_size } });
+                if (addr % 2 != 0) return fail(diag, "--load-addr '{s}' must be even", .{value.?});
                 config.load_addr = addr;
+                load_addr_text = value.?;
             },
             .dump_memory => {
                 const format: dump.Format = if (value) |v| std.meta.stringToEnum(dump.Format, v) orelse
@@ -148,8 +158,9 @@ pub fn parse(args: []const [:0]const u8, mem_size: u32, diag: *Io.Writer) Error!
             },
             .dump_range => {
                 var d = config.dump orelse Dump{};
-                d.range = try parseRange(value.?, mem_size, diag);
+                d.range = try parseRange(value.?, diag);
                 config.dump = d;
+                dump_range_text = value.?;
             },
             .digest => config.digest = true,
             .trace => config.trace = true,
@@ -159,6 +170,12 @@ pub fn parse(args: []const [:0]const u8, mem_size: u32, diag: *Io.Writer) Error!
             .help, .version => unreachable, // handled above
         }
     }
+
+    const memory: units.MemSize = .{ .bytes = config.memory };
+    if (config.load_addr) |addr| if (addr >= config.memory)
+        return fail(diag, "--load-addr '{s}' is not inside the {f} of VM memory", .{ load_addr_text, memory });
+    if (config.dump) |d| if (d.range) |r| if (@as(u64, r.start) + r.len > config.memory)
+        return fail(diag, "--dump-range '{s}' is not inside the {f} of VM memory", .{ dump_range_text, memory });
 
     if (demo) {
         if (program) |p| return fail(diag, "--demo runs the built-in program, so it takes no program file ('{s}')", .{p});
@@ -198,7 +215,30 @@ fn number(comptime T: type, text: []const u8, option: []const u8, diag: *Io.Writ
     };
 }
 
-fn parseRange(text: []const u8, mem_size: u32, diag: *Io.Writer) Error!Range {
+/// A memory size: bytes, or a number with a KiB, MiB or GiB suffix ("1MiB", "64 KiB"),
+/// that det.validMemorySize() accepts.
+fn memorySize(text: []const u8, diag: *Io.Writer) Error!u32 {
+    const suffixes = [_]struct { []const u8, u64 }{ .{ "KiB", 1 << 10 }, .{ "MiB", 1 << 20 }, .{ "GiB", 1 << 30 } };
+    var digits = text;
+    var scale: u64 = 1;
+    for (suffixes) |suffix| {
+        if (std.mem.endsWith(u8, text, suffix[0])) {
+            digits = std.mem.trimEnd(u8, text[0 .. text.len - suffix[0].len], " ");
+            scale = suffix[1];
+        }
+    }
+    if (std.mem.startsWith(u8, digits, "-")) return fail(diag, "--memory '{s}' is not a size (bytes, or a number with KiB, MiB or GiB)", .{text});
+    const n = std.fmt.parseInt(u64, digits, 0) catch |err| switch (err) {
+        error.Overflow => return fail(diag, "--memory '{s}' is too large: it must be less than 4 GiB", .{text}),
+        error.InvalidCharacter => return fail(diag, "--memory '{s}' is not a size (bytes, or a number with KiB, MiB or GiB)", .{text}),
+    };
+    const bytes = std.math.mul(u64, n, scale) catch return fail(diag, "--memory '{s}' is too large: it must be less than 4 GiB", .{text});
+    if (bytes > std.math.maxInt(u32)) return fail(diag, "--memory '{s}' is too large: it must be less than 4 GiB", .{text});
+    if (!det.validMemorySize(bytes)) return fail(diag, "--memory '{s}' must be a positive multiple of 4 bytes", .{text});
+    return @intCast(bytes);
+}
+
+fn parseRange(text: []const u8, diag: *Io.Writer) Error!Range {
     const start_text, const len_text = std.mem.cutScalar(u8, text, ':') orelse
         return fail(diag, "--dump-range '{s}' is not ADDR:LEN", .{text});
     const range: Range = .{
@@ -206,7 +246,6 @@ fn parseRange(text: []const u8, mem_size: u32, diag: *Io.Writer) Error!Range {
         .len = try number(u32, len_text, "--dump-range length", diag),
     };
     if (range.len == 0) return fail(diag, "--dump-range '{s}' is empty", .{text});
-    if (@as(u64, range.start) + range.len > mem_size) return fail(diag, "--dump-range '{s}' is not inside the {f} of VM memory", .{ text, units.MemSize{ .bytes = mem_size } });
     return range;
 }
 
@@ -216,8 +255,8 @@ pub const usage_text =
     \\
 ;
 
-/// The --help text. `initial_sp` is where programs start their stack.
-pub fn printHelp(w: *Io.Writer, mem_size: u32, initial_sp: u32) Io.Writer.Error!void {
+/// The --help text.
+pub fn printHelp(w: *Io.Writer) Io.Writer.Error!void {
     try w.writeAll(usage_text);
     try w.writeAll(
         \\
@@ -225,6 +264,7 @@ pub fn printHelp(w: *Io.Writer, mem_size: u32, initial_sp: u32) Io.Writer.Error!
         \\stopped. The program's output goes to stdout, the report to stderr.
         \\
         \\Options:
+        \\  --memory SIZE          VM memory: bytes, or with KiB, MiB or GiB. Default: 64 KiB
         \\  --max-cycles N         Stop after N cycles (retired instructions). Default: no limit
         \\  --input FILE           The bytes the program's read() returns; - reads stdin
         \\  --load-addr ADDR       Where a flat binary is loaded and starts. Default: 0
@@ -243,13 +283,10 @@ pub fn printHelp(w: *Io.Writer, mem_size: u32, initial_sp: u32) Io.Writer.Error!
         \\
         \\
     );
-    try w.print(
-        \\VM memory: {f} (build option -Dmemory_size). Programs start with every
-        \\register 0 except sp = 0x{X:0>8}.
-        \\
-        \\
-    , .{ units.MemSize{ .bytes = mem_size }, initial_sp });
     try w.writeAll(
+        \\Programs start with every register 0 except sp, the top of memory rounded down
+        \\to 16 bytes.
+        \\
         \\Exit status:
         \\  0  the program stopped at ECALL or EBREAK
         \\  1  usage or I/O error

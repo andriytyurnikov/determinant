@@ -6,10 +6,7 @@ const Io = std.Io;
 const det = @import("determinant");
 const main_mod = @import("../main.zig");
 const load = main_mod.load;
-const units = main_mod.units;
 const h = @import("test_helpers.zig");
-
-const mem_size: units.MemSize = .{ .bytes = det.Cpu.mem_size };
 
 /// Run the CLI and check that it fails with a usage or I/O error whose message is
 /// exactly `want` (a template for h.expand(), with `path` for {path}).
@@ -34,28 +31,22 @@ test "a missing file, a directory and an empty file are I/O errors" {
 test "a flat binary larger than the memory above its load address" {
     var fx: h.Fixture = .init();
     defer fx.deinit();
-    // One byte more than the VM memory holds. setLength makes a sparse file, so this
-    // stays cheap at any -Dmemory_size.
+    // One byte more than the default 64 KiB. setLength makes a sparse file.
     const f = try fx.tmp.dir.createFile(h.io, "big.bin", .{});
-    try f.setLength(h.io, @as(u64, det.Cpu.mem_size) + 1);
+    try f.setLength(h.io, 64 * 1024 + 1);
     f.close(h.io);
     const big = try fx.path("big.bin");
-    const want = try h.alloc.print("Error: '{s}' is too large: {d} bytes, and {d} fit at 0x00000000 in the {f} of VM memory (build option -Dmemory_size)\n", .{ big, @as(u64, det.Cpu.mem_size) + 1, det.Cpu.mem_size, mem_size });
-    defer h.alloc.free(want);
-    try std.testing.expectEqual(h.status(.usage_or_io), try fx.run(&.{big}));
-    try std.testing.expectEqualStrings(want, fx.stderr());
+    try expectError(&fx, &.{big}, big, "'{path}' is too large: 65537 bytes, and 65536 fit at 0x00000000 in the 64 KiB of VM memory (see --memory)");
+    // With more memory it loads (and runs into the zero halfword, a reserved encoding).
+    try std.testing.expectEqual(h.status(.vm_fault), try fx.run(&.{ big, "--memory", "128KiB", "-q" }));
+    try h.expectContains(fx.stderr(), "(IllegalInstruction)");
 
     // A file that fits at 0 does not fit higher up.
-    try h.needMemory(8);
     const prog = try fx.file("prog.bin", &(h.ebreak ++ h.ebreak));
-    const top = try h.alloc.printSentinel("{d}", .{det.Cpu.mem_size - 4}, 0);
-    defer h.alloc.free(top);
-    try std.testing.expectEqual(h.status(.usage_or_io), try fx.run(&.{ prog, "--load-addr", top }));
-    try h.expectContains(fx.stderr(), "is too large: 8 bytes, and 4 fit at 0x");
+    try expectError(&fx, &.{ prog, "--memory", "4096", "--load-addr", "4092" }, prog, "'{path}' is too large: 8 bytes, and 4 fit at 0x00000FFC in the 4 KiB of VM memory (see --memory)");
 }
 
 test "--load-addr: a flat binary is loaded and started at the address" {
-    try h.needMemory(0x108);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("prog.bin", &h.le(&.{ 0x02A00093, 0x00100073 })); // ADDI ra, zero, 42; EBREAK
@@ -66,20 +57,27 @@ test "--load-addr: a flat binary is loaded and started at the address" {
 }
 
 test "initial sp: programs start with sp at the 16-byte-aligned top of memory" {
-    try h.needMemory(8);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("sp.bin", &h.le(&.{ 0x00010593, 0x00100073 })); // ADDI a1, sp, 0; EBREAK
-    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{prog}));
-    const want = try h.alloc.print("  x11  a1   0x{X:0>8}", .{main_mod.initial_sp});
-    defer h.alloc.free(want);
-    try h.expectContains(fx.stderr(), want);
-    try std.testing.expectEqual(@as(u32, 0), main_mod.initial_sp % 16);
-    try std.testing.expect(det.Cpu.mem_size - main_mod.initial_sp < 16); // the top, not below it
+    const cases = [_]struct { [:0]const u8, u32 }{
+        .{ "16", 0x10 },
+        .{ "28", 0x10 }, // rounded down
+        .{ "4100", 0x1000 },
+        .{ "64KiB", 0x10000 },
+        .{ "1MiB", 0x100000 },
+    };
+    for (cases) |c| {
+        try std.testing.expectEqual(h.status(.ok), try fx.run(&.{ prog, "--memory", c[0] }));
+        const want = try h.alloc.print("  x11  a1   0x{X:0>8}", .{c[1]});
+        defer h.alloc.free(want);
+        try h.expectContains(fx.stderr(), want);
+    }
+    try std.testing.expectEqual(@as(u32, 0x10), main_mod.initialSp(0x1C));
+    try std.testing.expectEqual(@as(u32, 0xFFFF_FFF0), main_mod.initialSp(0xFFFF_FFFC));
 }
 
 test "ELF: the CLI detects an ELF file, loads its segments and starts at its entry" {
-    try h.needMemory(0x50);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const elf = h.tinyElf(&h.le(&.{ 0x02A00093, 0x00100073 }), 0x40, 5); // ADDI ra, zero, 42; EBREAK
@@ -98,16 +96,32 @@ test "ELF: a malformed file, a segment outside memory and --load-addr are errors
     const x86 = try fx.file("x86.elf", &elf);
     try expectError(&fx, &.{x86}, x86, "'{path}' is not a RISC-V ELF32 little-endian executable");
 
-    const far = try fx.file("far.elf", &h.tinyElf(&h.ebreak, det.Cpu.mem_size - 2, 5));
-    try expectError(&fx, &.{far}, far, "'{path}' has a segment that is not inside the {mem} of VM memory (build option -Dmemory_size)");
+    const far = try fx.file("far.elf", &h.tinyElf(&h.ebreak, 0xFFFE, 5));
+    try expectError(&fx, &.{far}, far, "'{path}' has a segment that is not inside the 64 KiB of VM memory (see --memory)");
+    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{ far, "--memory", "128KiB", "-q" }));
 
     const ok = try fx.file("ok.elf", &h.tinyElf(&h.ebreak, 0, 5));
     try expectError(&fx, &.{ ok, "--load-addr", "0" }, ok, "--load-addr is for flat binaries, and '{path}' is an ELF executable, which says where it goes");
 }
 
-test "ELF: a toolchain-built executable (crc32) loads and computes the native result" {
-    // tests/programs/elf/crc32.elf is built by `zig build programs`; its stack needs
-    // 256 KiB, so it runs on its own VM through the library loader.
+test "ELF: a toolchain-built executable (crc32) computes the native result, with --memory" {
+    // tests/programs/elf/crc32.elf is built by `zig build programs`; its crt0 puts the
+    // stack at the top of 256 KiB, so with less it faults there.
+    const expected = try Io.Dir.cwd().readFileAlloc(h.io, "tests/programs/expected/crc32.txt", h.alloc, .limited(4096));
+    defer h.alloc.free(expected);
+    const a0 = try std.fmt.parseInt(u32, expected["a0=".len..][0..8], 16);
+    const want = try h.alloc.print("  x10  a0   0x{X:0>8}", .{a0});
+    defer h.alloc.free(want);
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{ "tests/programs/elf/crc32.elf", "--memory", "256KiB" }));
+    try h.expectContains(fx.stderr(), "Stopped at EBREAK");
+    try h.expectContains(fx.stderr(), want);
+    try std.testing.expectEqual(h.status(.vm_fault), try fx.run(&.{"tests/programs/elf/crc32.elf"}));
+    try h.expectContains(fx.stderr(), "  data address 0x0003FFFC, not inside the 64 KiB of VM memory (see --memory)\n");
+}
+
+test "ELF: a toolchain-built executable (crc32) loads on a CpuType through the library" {
     const Vm = det.CpuType(256 * 1024, .{});
     const image = try Io.Dir.cwd().readFileAlloc(h.io, "tests/programs/elf/crc32.elf", h.alloc, .limited(1 << 20));
     defer h.alloc.free(image);
@@ -124,19 +138,15 @@ test "ELF: a toolchain-built executable (crc32) loads and computes the native re
 }
 
 test "the demo: a memory too small for it fails cleanly" {
-    if (det.Cpu.mem_size >= load.demo_min_memory) return error.SkipZigTest;
     var fx: h.Fixture = .init();
     defer fx.deinit();
-    const got = try fx.run(&.{"--demo"});
-    if (det.Cpu.mem_size < load.demo_program.len) {
-        // The program itself does not fit: a configuration (usage) error
-        try std.testing.expectEqual(h.status(.usage_or_io), got);
-        try h.expectContains(fx.stderr(), "the demo program needs 20 bytes of VM memory");
-    } else {
-        // The program loads, but its store to address 100 faults
-        try std.testing.expectEqual(h.status(.vm_fault), got);
-        try h.expectContains(fx.stderr(), "(AddressOutOfBounds)");
-    }
+    // The program itself does not fit: a configuration (usage) error
+    try expectError(&fx, &.{ "--demo", "--memory", "16" }, "", "the demo program needs 20 bytes of VM memory, and there are 16 bytes (see --memory)");
+    // The program loads, but its store to address 100 faults
+    try std.testing.expectEqual(h.status(.vm_fault), try fx.run(&.{ "--demo", "--memory", "100" }));
+    try h.expectContains(fx.stderr(), "(AddressOutOfBounds)");
+    try std.testing.expectEqual(h.status(.ok), try fx.run(&.{ "--demo", "--memory", "104" }));
+    try std.testing.expectEqual(@as(u32, 104), load.demo_min_memory);
 }
 
 test "demo_program: every instruction decodes as its comment says" {

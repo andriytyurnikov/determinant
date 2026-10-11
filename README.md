@@ -29,7 +29,6 @@ Traditional VMs introduce non-determinism through timing, memory layout randomiz
 
 ```sh
 zig build
-zig build -Dmemory_size=1048576  # use 1 MiB VM memory instead of default 64 KiB
 ```
 
 ## Run
@@ -44,6 +43,9 @@ zig build run -- program.bin --load-addr 0x1000
 
 # With a cycle limit, and bytes for the program's read() calls (- for stdin)
 zig build run -- program.elf --max-cycles 1000000 --input data.txt
+
+# With 1 MiB of VM memory instead of the default 64 KiB
+zig build run -- program.elf --memory 1MiB
 
 # Only the program's output and exit status, then the final state's digest
 zig build run -- program.elf -q --digest
@@ -63,7 +65,7 @@ The CLI runs a RISC-V program:
   - A flat binary is loaded at `--load-addr` (default 0) and starts there.
 
   Every register is zero except `sp`, which starts at the top of memory, 16-byte aligned.
-- **Memory.** One flat region of `-Dmemory_size` bytes (default 64 KiB), zero-filled.
+- **Memory.** One flat region, zero-filled: 64 KiB, or `--memory SIZE` (bytes, or with `KiB`, `MiB` or `GiB`; a multiple of 4 below 4 GiB).
 - **Host calls.** The program does I/O with ECALL, using the Linux RISC-V numbers in `a7`:
   - `read(0, buf, len)` (63) returns the bytes of `--input`;
   - `write(1 or 2, buf, len)` (64) prints to the CLI's stdout or stderr;
@@ -101,7 +103,7 @@ Before a release, three more checks run against independent references. They nee
 
 ### Performance
 
-`zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.17.0 (`-Doptimize=fast`) the VM executes about 275–285 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.4× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 200. Compare numbers only from the same machine.
+`zig build bench` runs the C program corpus. On an Apple M2 with Zig 0.17.0 (`-Doptimize=fast`) the VM executes about 275–290 million RISC-V instructions per second (geometric mean over the 20 corpus programs). About 1.4× of that comes from the per-PC decode cache; with `decode_cache_entries = 0` the figure is about 200. The bench runs both kinds of memory: a `RuntimeCpuType`, whose memory size is chosen at run time (as in the CLI), is about 4% slower than a `CpuType`. Compare numbers only from the same machine.
 
 ### Cross-platform determinism
 
@@ -119,9 +121,10 @@ Library core in `src/` with per-extension modules. See [STRUCTURE.md](STRUCTURE.
 
 The library is available via `@import("determinant")`. Execution semantics are specified in [SEMANTICS.md](SEMANTICS.md).
 
-- **`Cpu`** — VM state (memory size follows the `-Dmemory_size` build option)
+- **`Cpu`** — a VM with 64 KiB of memory inside it: `CpuType(default_memory_size, .{})`
   - `init()` — return a zeroed VM by value (small memories only: the memory lives inside the struct)
   - `reset()` — zero a VM in place; use it on a heap-allocated VM for large memories
+  - `memSize() → u32` — the memory size in bytes (`mem_size` is the same as a constant)
   - `readReg(u5) → u32` / `writeReg(u5, u32)` — register access (x0 hardwired to zero)
   - `fetch() → u32` — read instruction word at PC
   - `loadProgram([]const u8, u32)` — load bytes into memory at offset (drops an LR reservation on any word it overwrites)
@@ -129,13 +132,22 @@ The library is available via `@import("determinant")`. Execution semantics are s
   - `step() → StepError!StepResult` — fetch, decode and execute one instruction. A fault returns a `StepError` (`IllegalInstruction`, `MisalignedPC`, `PCOutOfBounds`, `MisalignedAccess`, `AddressOutOfBounds`) and leaves the state unchanged
   - `describeFault(StepError) → Fault` — after a fault: the instruction's address and bits and the faulting address
   - `stateDigest() → [32]u8` — SHA-256 of the full VM state in a canonical little-endian encoding (identical on every host)
-  - `writeSnapshot(*Io.Writer)` / `restoreSnapshot(*Io.Reader)` — save and load the exact architectural state (`snapshot_size` bytes; the digest is the SHA-256 of the snapshot). A restore validates the header first and returns `error.InvalidSnapshot` on a mismatch. See [docs/design/snapshots.md](docs/design/snapshots.md)
+  - `writeSnapshot(*Io.Writer)` / `restoreSnapshot(*Io.Reader)` — save and load the exact architectural state (`snapshotSize()` bytes; the digest is the SHA-256 of the snapshot). A restore validates the header first and returns `error.InvalidSnapshot` on a mismatch. See [docs/design/snapshots.md](docs/design/snapshots.md)
   - `run(max_cycles: ?u64) → StepError!StepResult` — step until ECALL/EBREAK, a fault, or `cycle_count >= max_cycles`. The limit is absolute, not relative to this call; `null` means unlimited. Returns `.continue` when it stops at the limit. After `.ecall`/`.ebreak`, `pc` points past that instruction and `stop_pc` at it, so calling `run()` again continues
   - `runFor(steps: u64) → StepError!StepResult` — run at most `steps` more instructions
   - `pc`, `regs`, `memory`, `cycle_count` (retired instructions), `reservation`, `csrs` — the state, as public fields
   - `readByte` / `readHalfword` / `readWord` — memory reads with bounds/alignment checks
   - `writeByte` / `writeHalfword` / `writeWord` — memory writes with bounds/alignment checks
-- **`CpuType(comptime memory_size: u32, comptime options: CpuOptions)`** — generic VM constructor. `CpuOptions` fields: `decode` (decoder function, default `decode`) and `decode_cache_entries` (size of the per-PC decode cache, a power of two or 0 to disable; default 4096). The cache never changes results; it only skips re-decoding unchanged instructions
+- **`RuntimeCpu`** — a VM whose memory is a buffer the host owns, of a size chosen at run time: `RuntimeCpuType(.{})`. The same methods as `Cpu`, except:
+  - `init(memory: []u8) → InitError!RuntimeCpu` — a zeroed VM with `memory` (zeroed too) as its memory; `error.InvalidMemorySize` unless `validMemorySize(memory.len)`
+  - `initInPlace(memory)` — the same, for a VM on the heap
+  - no `mem_size` or `snapshot_size` constants: use `memSize()` and `snapshotSize()`
+  - copying the struct shares the memory; fork a VM with a snapshot instead
+
+  See [docs/design/memory-size.md](docs/design/memory-size.md).
+- **`CpuType(comptime memory_size: u32, comptime options: CpuOptions)`**, **`RuntimeCpuType(comptime options: CpuOptions)`** — generic VM constructors, with the memory inside the VM or a host buffer. `CpuOptions` fields: `decode` (decoder function, default `decode`) and `decode_cache_entries` (size of the per-PC decode cache, a power of two or 0 to disable; default 4096). The cache never changes results; it only skips re-decoding unchanged instructions
+- **`validMemorySize(usize) → bool`** — whether a VM can have this many bytes of memory: at least 4, a multiple of 4, and at most 2^32 − 4
+- **`snapshotMemorySize([]const u8) → u32`** — the memory size a snapshot holds, from its first 12 bytes, to size a `RuntimeCpu` before restoring it
 - **`DecodeFn`** — decoder function pointer type (`*const fn (u32) DecodeError!Instruction`)
 - **`Instruction`** — decoded instruction: `op`, `rd`, `rs1`, `rs2`, `imm`, `raw`, `compressed_op`
 - **`Opcode`** — tagged union of per-extension opcode enums (`i: rv32i.Opcode`, `m: rv32m.Opcode`, `a: rv32a.Opcode`, `csr: zicsr.Opcode`, `zba: zba.Opcode`, `zbb: zbb.Opcode`, `zbs: zbs.Opcode`), with `format()` and `name()` methods
@@ -148,4 +160,4 @@ The library is available via `@import("determinant")`. Execution semantics are s
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"` (still running, or stopped at the cycle limit), `ecall`, `ebreak`
 - **`StepError`**, **`Fault`** — the fault error set, and `describeFault()`'s report
-- **`default_memory_size`** — configured VM memory size in bytes (follows `-Dmemory_size` build option, default: 65536)
+- **`default_memory_size`** — 65536: `Cpu`'s memory size, and the CLI's without `--memory`

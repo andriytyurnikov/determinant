@@ -31,8 +31,6 @@ pub const demo_min_memory: u32 = demo_store_addr + 4;
 /// Largest ELF file accepted (flat binaries are limited by the VM memory instead).
 const max_elf = 1 << 30;
 
-const mem_size: units.MemSize = .{ .bytes = det.Cpu.mem_size };
-
 /// A program in the VM.
 pub const Loaded = struct {
     source: Source,
@@ -61,15 +59,16 @@ pub const Loaded = struct {
     }
 };
 
-/// Load the program `config` names into `vm`, a reset VM. Usage and I/O errors are
-/// reported on `diag` and return error.UserError.
-pub fn load(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: *det.Cpu, config: args.Config) !Loaded {
+/// Load the program `config` names into `vm`, a reset VM (a CpuType or a
+/// RuntimeCpuType). Usage and I/O errors are reported on `diag` and return
+/// error.UserError.
+pub fn load(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: anytype, config: args.Config) !Loaded {
     switch (config.program) {
         .demo => {
             vm.loadProgram(&demo_program, 0) catch return report.userError(
                 diag,
-                "the demo program needs {d} bytes of VM memory, and there are {f} (build option -Dmemory_size)",
-                .{ demo_program.len, mem_size },
+                "the demo program needs {d} bytes of VM memory, and there are {f}{s}",
+                .{ demo_program.len, units.MemSize{ .bytes = vm.memSize() }, report.memory_hint },
             );
             return .{ .source = .demo, .entry = 0, .code = try gpa.dupe(args.Range, &.{.{ .start = 0, .len = demo_program.len }}) };
         },
@@ -77,7 +76,8 @@ pub fn load(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: *det.Cpu, conf
     }
 }
 
-fn loadFile(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: *det.Cpu, path: []const u8, load_addr: ?u32) !Loaded {
+fn loadFile(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: anytype, path: []const u8, load_addr: ?u32) !Loaded {
+    const mem_size: units.MemSize = .{ .bytes = vm.memSize() };
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err|
         return report.userError(diag, "cannot open '{s}': {s}", .{ path, report.ioText(err) });
     defer file.close(io);
@@ -97,7 +97,7 @@ fn loadFile(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: *det.Cpu, path
         try readExactly(io, diag, file, path, image);
         const entry = det.loader.loadElf(vm, image) catch |err| switch (err) {
             error.InvalidElf => return report.userError(diag, "'{s}' is not a RISC-V ELF32 little-endian executable", .{path}),
-            error.AddressOutOfBounds => return report.userError(diag, "'{s}' has a segment that is not inside the {f} of VM memory (build option -Dmemory_size)", .{ path, mem_size }),
+            error.AddressOutOfBounds => return report.userError(diag, "'{s}' has a segment that is not inside the {f} of VM memory{s}", .{ path, mem_size, report.memory_hint }),
         };
 
         var code: std.ArrayList(args.Range) = .empty;
@@ -110,11 +110,11 @@ fn loadFile(io: Io, gpa: std.mem.Allocator, diag: *Io.Writer, vm: *det.Cpu, path
     }
 
     const addr = load_addr orelse 0;
-    const room = det.Cpu.mem_size - addr;
+    const room = vm.memSize() - addr;
     if (stat.size > room) return report.userError(
         diag,
-        "'{s}' is too large: {d} bytes, and {d} fit at 0x{X:0>8} in the {f} of VM memory (build option -Dmemory_size)",
-        .{ path, stat.size, room, addr, mem_size },
+        "'{s}' is too large: {d} bytes, and {d} fit at 0x{X:0>8} in the {f} of VM memory{s}",
+        .{ path, stat.size, room, addr, mem_size, report.memory_hint },
     );
     const size: u32 = @intCast(stat.size);
     // Read directly into VM memory instead of going through loadProgram(), to avoid an

@@ -62,7 +62,8 @@ next run restores them before doing anything else. `--check` refuses such a tree
 2. Runs `zig build test` (unit and CLI tests). This shows whether the fast suite alone
    kills the mutant.
 3. Runs `zig build test-all` (adds the riscv-tests compliance suite and the corpus
-   digest check, which runs with the decode cache on and off). Both builds get
+   digest check, which runs with the decode cache on and off, and with runtime
+   memory). Both builds get
    `--summary all --color off --error-style verbose --multiline-errors indent
    --test-timeout 60s`, so the output the driver parses does not depend on the
    terminal or on `ZIG_BUILD_*` variables. Each runs in its own process group, which
@@ -89,7 +90,7 @@ run. `"kind": "mutant"` has:
 | `test`, `test_all` | per build: `status`, `rc`, `secs`, `suites`, `failed_tests` (first 25), `failed_test_count`, `compile_errors` (first 3); for test-all also `digest_programs` (programs whose digest or result differed) |
 
 `suites` gives `pass` or `FAIL` for `unit`, `cli`, `compliance`, `digests` (decode cache
-on) and `digests_nocache`. The three `run test` steps are identified by their position
+on), `digests_nocache` and `digests_runtime` (a `RuntimeCpuType`). The three `run test` steps are identified by their position
 in the Build Summary tree, in `build.zig` order. As a cross-check, each failing test's
 name prefix gives its suite: `compliance.` for compliance, `main.` for CLI, anything
 else for unit. A disagreement is recorded under `warnings`, so a reordered `build.zig`

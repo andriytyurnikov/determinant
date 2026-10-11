@@ -32,11 +32,12 @@ pub const ExitStatus = enum(u8) {
     _,
 };
 
-/// The stack pointer a program starts with: the top of memory, 16-byte aligned
-/// (docs/design/program-loading.md). The VM's reset() leaves it 0; this is CLI policy.
-pub const initial_sp: u32 = det.Cpu.mem_size & ~@as(u32, 15);
-
-const mem_size: units.MemSize = .{ .bytes = det.Cpu.mem_size };
+/// The stack pointer a program starts with: the top of its `memory` bytes, 16-byte
+/// aligned (docs/design/program-loading.md). The VM's reset() leaves it 0; this is CLI
+/// policy.
+pub fn initialSp(memory: u32) u32 {
+    return memory & ~@as(u32, 15);
+}
 
 /// Largest --input.
 const max_input = 1 << 30;
@@ -105,7 +106,7 @@ pub const Cli = struct {
     }
 
     fn command(cli: Cli, argv: []const [:0]const u8) !ExitStatus {
-        const cmd = args.parse(argv, det.Cpu.mem_size, cli.stderr) catch |err| switch (err) {
+        const cmd = args.parse(argv, cli.stderr) catch |err| switch (err) {
             error.Usage => {
                 try cli.stderr.writeAll("Run 'determinant --help' for usage.\n");
                 return error.UserError;
@@ -113,8 +114,8 @@ pub const Cli = struct {
             error.WriteFailed => return error.WriteFailed,
         };
         switch (cmd) {
-            .help => try args.printHelp(cli.stdout, det.Cpu.mem_size, initial_sp),
-            .version => try cli.stdout.print("determinant {s} ({f} of VM memory, {s} build)\n", .{ cli_options.version, mem_size, @tagName(builtin.mode) }),
+            .help => try args.printHelp(cli.stdout),
+            .version => try cli.stdout.print("determinant {s} ({s} build)\n", .{ cli_options.version, @tagName(builtin.mode) }),
             .usage => {
                 try cli.stderr.writeAll(args.usage_text ++ "Run 'determinant --help' for the options, or 'determinant --demo' for a demo.\n");
                 return error.UserError;
@@ -125,18 +126,21 @@ pub const Cli = struct {
     }
 
     fn runProgram(cli: Cli, config: args.Config) !ExitStatus {
-        // The VM embeds its whole memory, so it must not live on the stack: a few MiB
-        // of memory would overflow it.
-        const vm = try cli.gpa.create(det.Cpu);
+        const memory = cli.gpa.alloc(u8, config.memory) catch |err| switch (err) {
+            error.OutOfMemory => return report.userError(cli.stderr, "cannot allocate {f} of VM memory", .{units.MemSize{ .bytes = config.memory }}),
+        };
+        defer cli.gpa.free(memory);
+        // With its decode cache the VM is too large for the stack.
+        const vm = try cli.gpa.create(det.RuntimeCpu);
         defer cli.gpa.destroy(vm);
-        vm.reset();
+        vm.initInPlace(memory) catch unreachable; // args.parse() checked the size
         const loaded = try load.load(cli.io, cli.gpa, cli.stderr, vm, config);
         defer loaded.deinit(cli.gpa);
 
         if (config.disassemble) {
             for (loaded.code, 0..) |range, i| {
                 if (i > 0) try cli.stdout.writeAll("\n");
-                try disasm.printListing(cli.stdout, &vm.memory, range.start, range.start + range.len);
+                try disasm.printListing(cli.stdout, vm.memory, range.start, range.start + range.len);
             }
             return .ok;
         }
@@ -148,14 +152,14 @@ pub const Cli = struct {
         if (!config.quiet) {
             if (config.program == .demo) {
                 try out.section("Demo program:\n", .{});
-                try disasm.printListing(cli.stderr, &vm.memory, 0, load.demo_program.len);
+                try disasm.printListing(cli.stderr, vm.memory, 0, load.demo_program.len);
             }
-            try out.section("Running {f} in {f} of VM memory, {f}\n", .{ loaded, mem_size, Limit{ .max_cycles = config.max_cycles } });
+            try out.section("Running {f} in {f} of VM memory, {f}\n", .{ loaded, units.MemSize{ .bytes = vm.memSize() }, Limit{ .max_cycles = config.max_cycles } });
             try cli.stderr.flush(); // before the program's output
         }
 
         vm.pc = loaded.entry;
-        vm.writeReg(2, initial_sp);
+        vm.writeReg(2, initialSp(vm.memSize()));
         if (config.trace) out.started = true; // the trace lines come first
         var env: det.hostcall.Env = .{ .input = input, .stdout = cli.stdout, .stderr = cli.stderr };
         const status: ExitStatus = if (cli.execute(vm, config, &env)) |stop| blk: {
@@ -185,7 +189,7 @@ pub const Cli = struct {
         };
 
         if (config.dump) |d| {
-            const range = d.range orelse args.Range{ .start = 0, .len = det.Cpu.mem_size };
+            const range = d.range orelse args.Range{ .start = 0, .len = vm.memSize() };
             try out.section("", .{});
             try dump.dumpMemory(cli.stderr, vm.memory[range.start..][0..range.len], range.start, d.format);
         }
@@ -206,7 +210,7 @@ pub const Cli = struct {
     }
 
     /// Run the program, performing its host calls, until it stops.
-    fn execute(cli: Cli, vm: *det.Cpu, config: args.Config, env: *det.hostcall.Env) (det.StepError || Io.Writer.Error)!report.Stop {
+    fn execute(cli: Cli, vm: *det.RuntimeCpu, config: args.Config, env: *det.hostcall.Env) (det.StepError || Io.Writer.Error)!report.Stop {
         while (true) {
             const result = if (config.trace) try cli.traceRun(vm, config.max_cycles) else try vm.run(config.max_cycles);
             switch (result) {
@@ -232,7 +236,7 @@ pub const Cli = struct {
     /// vm.run(max_cycles), one step at a time, printing a trace line for each
     /// instruction that retires. A faulting instruction gets no line: the fault report
     /// describes it.
-    fn traceRun(cli: Cli, vm: *det.Cpu, max_cycles: ?u64) (det.StepError || Io.Writer.Error)!det.StepResult {
+    fn traceRun(cli: Cli, vm: *det.RuntimeCpu, max_cycles: ?u64) (det.StepError || Io.Writer.Error)!det.StepResult {
         while (true) {
             if (max_cycles) |limit| {
                 if (vm.cycle_count >= limit) return .@"continue";

@@ -4,11 +4,12 @@
 const std = @import("std");
 const Io = std.Io;
 
-/// Exact memory size: "64 KiB", "1 MiB" or "100 bytes".
+/// Exact memory size: "64 KiB", "1 MiB", "2 GiB" or "100 bytes".
 pub const MemSize = struct {
     bytes: u32,
 
     pub fn format(self: MemSize, w: *Io.Writer) Io.Writer.Error!void {
+        if (self.bytes != 0 and self.bytes % (1024 * 1024 * 1024) == 0) return w.print("{d} GiB", .{self.bytes / (1024 * 1024 * 1024)});
         if (self.bytes != 0 and self.bytes % (1024 * 1024) == 0) return w.print("{d} MiB", .{self.bytes / (1024 * 1024)});
         if (self.bytes != 0 and self.bytes % 1024 == 0) return w.print("{d} KiB", .{self.bytes / 1024});
         return w.print("{f}", .{count(self.bytes, "byte")});

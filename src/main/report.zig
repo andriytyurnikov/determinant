@@ -7,10 +7,8 @@ const det = @import("determinant");
 const disasm = @import("disasm.zig");
 const units = @import("units.zig");
 
-const mem_size: units.MemSize = .{ .bytes = det.Cpu.mem_size };
-
 /// Where to look when something does not fit in memory.
-const memory_hint = " (build option -Dmemory_size)";
+pub const memory_hint = " (see --memory)";
 
 /// How a run ended, unless it faulted.
 pub const Stop = union(enum) {
@@ -22,7 +20,7 @@ pub const Stop = union(enum) {
     exit: u32,
 };
 
-pub fn printStop(w: *Io.Writer, vm: *const det.Cpu, stop: Stop) Io.Writer.Error!void {
+pub fn printStop(w: *Io.Writer, vm: anytype, stop: Stop) Io.Writer.Error!void {
     const n = units.cycles(vm.cycle_count);
     switch (stop) {
         .ebreak => try w.print("Stopped at EBREAK (0x{X:0>8}) after {f}\n", .{ vm.stop_pc, n }),
@@ -33,7 +31,7 @@ pub fn printStop(w: *Io.Writer, vm: *const det.Cpu, stop: Stop) Io.Writer.Error!
 }
 
 /// pc, then the non-zero registers: number, ABI name, hex and signed decimal.
-pub fn printRegisters(w: *Io.Writer, vm: *const det.Cpu) Io.Writer.Error!void {
+pub fn printRegisters(w: *Io.Writer, vm: anytype) Io.Writer.Error!void {
     try w.print("\nRegisters:\n  pc        0x{X:0>8}\n", .{vm.pc});
     for (1..32) |i| {
         const val = vm.readReg(@intCast(i));
@@ -52,8 +50,9 @@ pub fn faultText(err: det.StepError) []const u8 {
 }
 
 /// Report a fault that just happened: the error, the instruction and the address.
-pub fn printFault(w: *Io.Writer, vm: *const det.Cpu, err: det.StepError) Io.Writer.Error!void {
+pub fn printFault(w: *Io.Writer, vm: anytype, err: det.StepError) Io.Writer.Error!void {
     const fault = vm.describeFault(err);
+    const mem_size: units.MemSize = .{ .bytes = vm.memSize() };
     try w.print("Fault after {f}: {s} ({s})\n", .{ units.cycles(vm.cycle_count), faultText(err), @errorName(err) });
     try w.print("  instruction at 0x{X:0>8}", .{fault.pc});
     const raw = fault.raw orelse {
@@ -77,7 +76,7 @@ pub fn printFault(w: *Io.Writer, vm: *const det.Cpu, err: det.StepError) Io.Writ
 
 /// One --trace line for the instruction that just retired: the cycle it retired in,
 /// its address, bits and disassembly, and the register or memory it wrote.
-pub fn printTraceLine(w: *Io.Writer, cycle: u64, pc: u32, raw: u32, vm: *const det.Cpu) Io.Writer.Error!void {
+pub fn printTraceLine(w: *Io.Writer, cycle: u64, pc: u32, raw: u32, vm: anytype) Io.Writer.Error!void {
     var line_buf: [128]u8 = undefined;
     var line: Io.Writer = .fixed(&line_buf);
     disasm.printLine(&line, pc, raw) catch {}; // longer than any line: never truncated

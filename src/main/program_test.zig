@@ -5,7 +5,6 @@ const det = @import("determinant");
 const h = @import("test_helpers.zig");
 
 test "host calls: the program reads --input, writes it out and exits with its status" {
-    try h.needMemory(0x240);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("echo.bin", &h.echo);
@@ -16,7 +15,6 @@ test "host calls: the program reads --input, writes it out and exits with its st
 }
 
 test "host calls: without --input, read returns end of input" {
-    try h.needMemory(0x240);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("echo.bin", &h.echo);
@@ -27,7 +25,6 @@ test "host calls: without --input, read returns end of input" {
 }
 
 test "host calls: --input - reads all of stdin before the run" {
-    try h.needMemory(0x240);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("echo.bin", &h.echo);
@@ -45,7 +42,6 @@ test "--input: a missing file is an I/O error, before the run" {
 }
 
 test "host calls: exit(3) is not mistaken for a VM fault (--dump-memory still runs)" {
-    try h.needMemory(16);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("exit3.bin", &h.le(&.{
@@ -60,7 +56,6 @@ test "host calls: exit(3) is not mistaken for a VM fault (--dump-memory still ru
 }
 
 test "host calls: the exit status keeps the low 8 bits, as a POSIX process's does" {
-    try h.needMemory(16);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("exit263.bin", &h.le(&.{
@@ -73,7 +68,6 @@ test "host calls: the exit status keeps the low 8 bits, as a POSIX process's doe
 }
 
 test "host calls: exit_group (94) ends the program like exit" {
-    try h.needMemory(16);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("exit_group.bin", &h.le(&.{
@@ -86,7 +80,6 @@ test "host calls: exit_group (94) ends the program like exit" {
 }
 
 test "host calls: an ECALL that is not a host call names a7 and exits 0" {
-    try h.needMemory(8);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("ecall.bin", &h.le(&.{

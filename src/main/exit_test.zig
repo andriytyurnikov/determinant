@@ -33,6 +33,15 @@ test "exit status: one row per way a run ends" {
     }
 }
 
+test "VM memory that cannot be allocated: a message and exit status 1" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    var cli = fx.cli();
+    cli.gpa = std.testing.failing_allocator;
+    try std.testing.expectEqual(h.status(.usage_or_io), cli.run(&.{ "determinant", "--demo", "--memory", "3GiB" }));
+    try std.testing.expectEqualStrings("Error: cannot allocate 3 GiB of VM memory\n", fx.stderr());
+}
+
 /// A buffered writer whose sink fails: printing succeeds into the buffer, and only
 /// the flush fails.
 fn failingBuffered(buf: []u8) Io.Writer {
@@ -53,7 +62,6 @@ test "unwritable output: stdout for --help gives exit status 1 and a message" {
 test "unwritable output: the program's output lost beats its own exit status" {
     // Before the report, stdout is flushed and fails there; with -q, and for a
     // listing, only the final flush finds out.
-    try h.needMemory(h.hello.len);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     const prog = try fx.file("hello.bin", &h.hello);
@@ -104,7 +112,6 @@ test "stdStreamWriter: output appends at the file's offset instead of overwritin
 test "the fault report comes after the program's output, even with unbuffered stderr" {
     // stdout buffered, stderr unbuffered, both into one file as with `> log 2>&1`.
     // Only the flush before the report keeps the report after what stdout printed.
-    try h.needMemory(h.hello.len + 4);
     var fx: h.Fixture = .init();
     defer fx.deinit();
     // hello, with its exit replaced by an illegal instruction
