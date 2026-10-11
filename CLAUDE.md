@@ -9,7 +9,7 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as 
 ## Build Commands
 
 - `zig build` — compile the project (output in `zig-out/`)
-- `zig build run` — build and run the CLI executable
+- `zig build run -- <args>` — build and run the CLI executable (`-- --demo` for the built-in demo; with no arguments it prints its usage and fails)
 - `zig build test` — run the unit tests (library) and CLI tests (executable)
 - `zig build test-compliance` — run the riscv-tests compliance suite
 - `zig build test-all` — run unit, CLI, compliance and digest tests (what CI runs)
@@ -19,7 +19,6 @@ Determinant — a deterministic RISC-V VM. Written in Zig 0.17.0, structured as 
 - `zig build test-compliance-rebuild -Drebuilt_compliance=DIR` — check that compliance binaries rebuilt from source (`make -C tests/riscv-tests BIN_DIR=DIR`) all pass
 - `zig build verify-decoder` — check the decoder against the opcode registry on all 2^30 32-bit encodings (always `-Doptimize=fast`, ~10 s); run it after any decoder or registry change
 - Opt-in oracles, not in CI (need local tools; see their READMEs): `zig build llvm-oracle -Dllvm_lib=/opt/homebrew/opt/llvm/lib/libLLVM.dylib -- c32 4` (decoder vs LLVM's disassembler), `python3 -I tools/spike_diff/{directed,fuzz,encsweep}.py --work DIR` (execution vs Spike). Run both before a release, with the mutation harness in `tools/mutation`
-- `zig build run -- <args>` — pass arguments to the executable
 - `-Dmemory_size=N` — VM memory size in bytes for the CLI and the `Cpu` alias (default: `65536`). Must be >= 4 and divisible by 4; build.zig rejects other values. Unit tests use the fixed 64 KiB `TestCpu` and compliance tests a fixed 256 KiB CPU, so only the CLI tests depend on it (they skip explicitly when a program does not fit). Example: `zig build run -Dmemory_size=1048576`
 - `zig fmt src build.zig tools` — format all Zig sources (run after editing; CI runs `zig fmt --check` on the same paths)
 
@@ -73,7 +72,7 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 - `decode()` identifies the opcode; `expand()` validates constraints and builds the `Expanded` — keep identification and validation separate
 - Immediate extraction helpers live in `rv32c/imm.zig` — pure stateless functions with no dependencies
 - Some compressed instructions encode reserved values (e.g., C.ADDI4SPN with nzuimm=0, C.LUI with imm=0) that must be rejected as `IllegalInstruction` in `expand()`
-- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoders/branch.zig, cpu.zig, and main.zig
+- `instructions.isCompressed(raw)` is the single source of truth for 16-bit vs 32-bit detection — used by decoders/branch.zig, cpu.zig, and the CLI's main/disasm.zig
 
 ### Decoder
 
@@ -98,15 +97,22 @@ See [STRUCTURE.md](STRUCTURE.md) for the layout, the module dependency rules and
 - LR_W/SC_W orchestration stays in cpu.zig (needs reservation state + memory access); AMO computation is in `rv32a.zig`
 - SC_W checks alignment and bounds (`checkWordAccess`) BEFORE it looks at the reservation: a misaligned or out-of-bounds SC.W faults even when it would have failed, and the fault leaves the reservation unchanged (spec: no SC.W retires unless it passes memory permission checks; Spike and Sail agree)
 - Reservation state is `reservation: ?u32` (null = no reservation) — Option type eliminates impossible states that a separate bool+address pair would allow
-- Memory write methods (`writeByte`, `writeHalfword`, `writeWord`) auto-call `invalidateReservation()` — store sites don't need to invalidate manually. `loadProgram()` drops a reservation on any word it overwrites (`invalidateReservationRange()`). If new write methods are added, they MUST do the same. Hosts that write `memory` directly must call `clearReservation()` afterwards (the CLI's `runFile` does).
+- Memory write methods (`writeByte`, `writeHalfword`, `writeWord`) auto-call `invalidateReservation()` — store sites don't need to invalidate manually. `loadProgram()` drops a reservation on any word it overwrites (`invalidateReservationRange()`). If new write methods are added, they MUST do the same. Hosts that write `memory` directly must call `clearReservation()` afterwards (the CLI's `main/load.zig` does).
 - `invalidateReservation()` checks word-aligned overlap (addr & 0xFFFFFFFC), not exact byte match
 
 ### Host calls and program loading
 
 - The VM core only stops at ECALL; `src/hostcall.zig` is the standard host-side handler (read/write/exit, Linux RISC-V numbers). It must stay deterministic: its effects may depend only on the VM state and `Env.input`. Guest memory it writes goes through `loadProgram()` (reservations)
 - `src/loader.zig` loads ELF32 executables. It reads every header field with `std.mem.readInt(.little)` from the byte image — never a struct `@ptrCast` — and validates everything before writing anything
-- The initial stack pointer and load address are CLI policy (`main.zig`), not VM state: `reset()` leaves every register 0, so `tests/digests.txt` does not depend on them
+- The initial stack pointer and load address are CLI policy (`main.zig`, `main/load.zig`), not VM state: `reset()` leaves every register 0, so `tests/digests.txt` does not depend on them
 - Design notes for these features live in `docs/design/`
+
+### CLI
+
+- `src/main.zig` runs a `Cli` (io, allocator, stdin, stdout, stderr), so tests drive it with fixed input and captured output (`main/test_helpers.zig` `Fixture`). `main/args.zig` `parse()` is a pure function of the arguments; `main/load.zig` loads; `main/report.zig`, `disasm.zig` and `dump.zig` print. [docs/design/cli.md](docs/design/cli.md) is the contract
+- **stdout carries only the program's fd 1**; everything the CLI says when it runs a program (the report, `--trace`, dumps, `--digest`) goes to stderr. Keep the order: flush the other stream before a guest write switches streams (`execute()`), and stdout before each report section (`Report.section`)
+- The report's exact text is fixed by the whole-run goldens in `main/report_test.zig` (templates with `{path}`, `{mem}` and `{sp}` for build-dependent values): a change to the report changes a golden there, and docs/design/cli.md if the format changes
+- A new option gets a row in `args.specs`, rows in `args_test.zig`, and a line in `printHelp` (a test checks every spec is in the help)
 
 ### CSR Implementation
 
@@ -186,6 +192,17 @@ RISC-V spec requires JALR to clear the LSB of the computed target address:
 next_pc.* = (rs1_val +% imm_u) & 0xFFFFFFFE;
 ```
 
+### Assignments That Read Their Own Target
+Zig builds a struct or optional literal directly in its destination, so a right-hand side that reads the destination can see it half-written. It surfaced only in `-Doptimize=fast`:
+```zig
+// WRONG — reads config.dump while the new value is being written into it:
+config.dump = .{ .format = format, .range = if (config.dump) |d| d.range else null };
+// RIGHT — through a copy:
+var d = config.dump orelse Dump{};
+d.format = format;
+config.dump = d;
+```
+
 ### Cycle Limits
 `run(max_cycles)` stops when `cycle_count >= max_cycles` — the limit is **absolute**, compared with the VM's running `cycle_count`, not a budget for this call (a second `run(1000)` on a VM already at 1000 cycles returns `.continue` at once). `run(null)` means unlimited cycles (runs until ECALL/EBREAK) and is the default for both the library and CLI. `run(0)` executes zero steps (returns `.continue` immediately). Use `--max-cycles N` to set a finite limit. Tests should pass a finite limit so a runaway program fails instead of hanging the suite.
 ```zig
@@ -206,6 +223,6 @@ const result = try vm.run(0);
 5. Add decode dispatch in `decoders/branch.zig` (`decodeR()`/`decodeIAlu()`/...)
 6. Add opcode entries to `decoders/registry.zig` — one `Entry` per opcode with its identifying fields (opcode7, f3, f7, and optional rs2_eq/f5/f12/rd_eq/rs1_eq). The registry is the decoder's specification: `zig build test` and `zig build verify-decoder` must pass
 7. Add `executeNewext()` method in `cpu.zig` and dispatch case in `step()`
-8. Add disassembly case in `main.zig` `printInstruction()`
+8. Add disassembly case in `main/disasm.zig` `printInstruction()`
 9. Ensure all arithmetic uses wrapping operators, all memory access uses `.little`
 10. Update [STRUCTURE.md](STRUCTURE.md) if a module or directory was added, renamed or moved, or a dependency rule or convention changed (it does not list individual files)

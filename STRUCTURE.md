@@ -5,7 +5,8 @@
 ```
 src/
   root.zig                — library root: re-exports cpu, instructions, decoders, hostcall, loader, decode() and the common types
-  main.zig, main/         — the CLI, which imports the library as @import("determinant"), and its tests
+  main.zig, main/         — the CLI, which imports the library as @import("determinant"): args.zig parses the
+                            arguments, load.zig loads the program, report.zig, disasm.zig and dump.zig print; its tests
   cpu.zig, cpu/           — CpuType: state, step/run, memory, reservations, decode cache; exec_i.zig executes RV32I,
                             state.zig is the canonical state encoding (stateDigest, snapshots)
   instructions.zig, instructions/
@@ -27,7 +28,7 @@ tests/
   digests.txt             — golden final-state digests of the corpus
   programs/               — C program corpus: sources, checked-in binaries, native results (README)
   riscv-tests/            — rebuilds the compliance binaries from source: submodule, test environment, Makefile (README)
-docs/design/              — design notes: host calls, snapshots, program loading, memory protection
+docs/design/              — design notes: host calls, snapshots, program loading, the CLI, memory protection
 ```
 
 At the top level: README.md (overview, CLI, API), SEMANTICS.md (the execution contract), CHANGELOG.md, THIRD_PARTY_NOTICES.md, CLAUDE.md (guidance for working on the code), build.zig and build.zig.zon.

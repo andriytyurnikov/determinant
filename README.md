@@ -35,16 +35,25 @@ zig build -Dmemory_size=1048576  # use 1 MiB VM memory instead of default 64 KiB
 ## Run
 
 ```sh
-# Run built-in demo program
-zig build run
+# Run the built-in demo program
+zig build run -- --demo
 
 # Load and execute an ELF executable or a flat binary
 zig build run -- program.elf
 zig build run -- program.bin --load-addr 0x1000
 
-# With a cycle limit, and bytes for the program's read() calls
+# With a cycle limit, and bytes for the program's read() calls (- for stdin)
 zig build run -- program.elf --max-cycles 1000000 --input data.txt
+
+# Only the program's output and exit status, then the final state's digest
+zig build run -- program.elf -q --digest
+
+# Trace every instruction, or list the program without running it
+zig build run -- program.elf --trace --max-cycles 100
+zig build run -- program.elf --disassemble
 ```
+
+`determinant --help` lists every option. [docs/design/cli.md](docs/design/cli.md) describes the CLI in full.
 
 ### Program contract
 
@@ -61,13 +70,14 @@ The CLI runs a RISC-V program:
   - `exit(status)` (93, or 94 for `exit_group`) ends the program.
 
   See [docs/design/host-calls.md](docs/design/host-calls.md).
-- **Stopping.** The program stops when it calls `exit`, at EBREAK, at an ECALL that is not a host call, or when `--max-cycles` is reached. The CLI then prints the stop reason, `pc` and the non-zero registers. Add `--dump-memory` (hexdump) or `--dump-memory raw` (hex digits) to also print the memory.
-- **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), it prints to stderr the error, `pc`, the instruction (with its disassembly), the faulting address and the registers.
+- **Output.** stdout carries only what the program writes to fd 1. The CLI's report goes to stderr, with what the program writes to fd 2, in the order it happened. `-q` leaves out the report except for faults.
+- **Stopping.** The program stops when it calls `exit`, at EBREAK, at an ECALL that is not a host call, or when `--max-cycles` is reached. The report then gives the stop reason, `pc` and the non-zero registers (with their ABI names). `--dump-memory[=raw]` and `--dump-range ADDR:LEN` add the memory, and `--digest` the SHA-256 of the final VM state (`stateDigest()`).
+- **Faults.** On a fault (illegal instruction, misaligned or out-of-bounds access), the report gives the error, the instruction (with its disassembly), the faulting address and the registers.
 
 The CLI's exit status tells how the run ended:
-- If the program called `exit(status)`, the CLI exits with `status & 0xFF` and prints `Program exited with status N`.
-- `0`: the program stopped at EBREAK, or at an ECALL that is not a host call.
-- `1`: a usage or I/O error, including output that could not be written.
+- If the program called `exit(status)`, the CLI exits with `status & 0xFF` and reports `Program exited with status N`.
+- `0`: the program stopped at EBREAK, or at an ECALL that is not a host call (and `--help`, `--version` and `--disassemble` succeeded).
+- `1`: a usage or I/O error, including output that could not be written. With no arguments, the CLI prints its usage and exits 1.
 - `2`: the `--max-cycles` limit was reached.
 - `3`: the VM raised a fault (illegal instruction, misaligned or out-of-bounds access).
 
@@ -133,7 +143,7 @@ The library is available via `@import("determinant")`. Execution semantics are s
 - **`instructions.isCompressed(u32)`** — returns true if the raw bits represent a 16-bit compressed (RV32C) instruction
 - **`decode(u32)`** — decode a 32-bit word or a zero-extended 16-bit RV32C halfword, returns `Instruction` or `DecodeError`
 - **`hostcall`** — the host-call ABI: `hostcall.handle(vm, &env)` performs the read/write/exit call that stopped `run()` with `.ecall` and returns `.resumed`, `.exit` or `.unknown` ([docs/design/host-calls.md](docs/design/host-calls.md))
-- **`loader`** — `loader.loadElf(vm, image)` loads a RISC-V ELF32 executable and returns its entry point; `loader.isElf()` ([docs/design/program-loading.md](docs/design/program-loading.md))
+- **`loader`** — `loader.loadElf(vm, image)` loads a RISC-V ELF32 executable and returns its entry point; `loader.isElf()`; `loader.segments(image)` iterates over its `PT_LOAD` segments, with their flags (`PF_X` marks code) ([docs/design/program-loading.md](docs/design/program-loading.md))
 - **`decoders`** — the decoder's parts: `branch` (the decoder), `expand` (RV32C expansion), `registry` (the specification of every 32-bit encoding, with `lookup()`), `bitfields`
 - **`DecodeError`** — error set for decode failures
 - **`StepResult`** — enum: `@"continue"` (still running, or stopped at the cycle limit), `ecall`, `ebreak`

@@ -26,6 +26,9 @@
 #   operand rule) as RG03 and RG04 in registry.instruction(); D13 and D26 (LUT table
 #   generation) have no counterpart.
 #
+# The CLI mutants (MN, HA05, CL, AR, SO, RP, TR, DS, DM, UN) were re-anchored or written
+# for the CLI rewrite (docs/design/cli.md), and LD14 for loader.segments().
+#
 # NEW: mutants for code added since 39df644 (decode cache, state encoding, registry as
 # specification, checkWordAccess, SC.W ordering, loadProgram and the reservation,
 # reserved encodings, regs[0] zeroing, CLI exit statuses, host API), and since c907c18
@@ -47,6 +50,12 @@ IMM = "src/instructions/rv32i/rv32c/imm.zig"
 EXP = "src/instructions/rv32i/rv32c/expand.zig"
 RVC = "src/instructions/rv32i/rv32c.zig"
 MAIN = "src/main.zig"
+ARGS = "src/main/args.zig"
+LOADC = "src/main/load.zig"
+REPORT = "src/main/report.zig"
+DISASM = "src/main/disasm.zig"
+DUMP = "src/main/dump.zig"
+UNITS = "src/main/units.zig"
 HC = "src/hostcall.zig"
 LD = "src/loader.zig"
 
@@ -313,18 +322,18 @@ NEW = [
     dict(id="X03", file=CPU, desc="step() zeroes regs[0] after reading the operands", edits=[("self.regs[0] = 0;\n            const rs1_val = self.regs[inst.rs1];\n            const rs2_val = self.regs[inst.rs2];", "const rs1_val = self.regs[inst.rs1];\n            const rs2_val = self.regs[inst.rs2];\n            self.regs[0] = 0;")]),
 
     # ---------------- CLI (main.zig): exit statuses and output failures ----------------
-    dict(id="MN01", file=MAIN, desc="EBREAK stop maps to the cycle-limit exit status", edits=[(".ecall, .ebreak => .ok,", ".ecall => .ok,\n        .ebreak => .cycle_limit,")]),
-    dict(id="MN02", file=MAIN, desc="cycle-limit stop maps to exit status 0", edits=[(".@\"continue\" => .cycle_limit,", ".@\"continue\" => .ok,")]),
-    dict(id="MN03", file=MAIN, desc="a VM fault exits with the usage/I-O status", edits=[("return .{ .status = .vm_fault, .faulted = true };", "return .{ .status = .usage_or_io, .faulted = true };")]),
-    dict(id="MN04", file=MAIN, desc="a failed final stdout flush is ignored", edits=[("stdout.flush() catch return outputFailed(stderr);", "stdout.flush() catch {};")]),
-    dict(id="MN05", file=MAIN, desc="WriteFailed from mainInner reported as a generic error", edits=[("        error.WriteFailed => return outputFailed(stderr),\n", "")]),
+    dict(id="MN01", file=MAIN, desc="EBREAK stop maps to the cycle-limit exit status", edits=[(".ebreak, .ecall => .ok,", ".ecall => .ok,\n                .ebreak => .cycle_limit,")]),
+    dict(id="MN02", file=MAIN, desc="cycle-limit stop maps to exit status 0", edits=[(".cycle_limit => .cycle_limit,", ".cycle_limit => .ok,")]),
+    dict(id="MN03", file=MAIN, desc="a VM fault exits with the usage/I-O status", edits=[("break :blk .vm_fault;", "break :blk .usage_or_io;")]),
+    dict(id="MN04", file=MAIN, desc="a failed final stdout flush is ignored", edits=[("cli.stdout.flush() catch return cli.outputFailed();", "cli.stdout.flush() catch {};")]),
+    dict(id="MN05", file=MAIN, desc="WriteFailed from command() reported as a generic error", edits=[("            error.WriteFailed => return cli.outputFailed(),\n", "")]),
 
     # ---------------- host API (describeFault, runFor, stop_pc) ----------------
     dict(id="HA01", file=CPU, desc="runFor wraps the limit instead of saturating", edits=[("return self.run(self.cycle_count +| steps);", "return self.run(self.cycle_count +% steps);")]),
     dict(id="HA02", file=CPU, desc="stop_pc recorded only for ECALL", edits=[("if (result != .@\"continue\") self.stop_pc = self.pc;", "if (result == .ecall) self.stop_pc = self.pc;")]),
     dict(id="HA03", file=CPU, desc="describeFault: load/store address ignores the immediate", edits=[(".LB, .LH, .LW, .LBU, .LHU, .SB, .SH, .SW => fault.addr = rs1_val +% inst.immUnsigned(),", ".LB, .LH, .LW, .LBU, .LHU, .SB, .SH, .SW => fault.addr = rs1_val,")]),
     dict(id="HA04", file=CPU, desc="describeFault: no address for AMO/LR/SC faults", edits=[(".a => fault.addr = rs1_val,\n", "")]),
-    dict(id="HA05", file=MAIN, desc="the fault report is printed without flushing stdout first", edits=[("try stdout.flush(); // what stdout has so far comes before the fault report\n            try printFault(stderr, vm, fault);", "try printFault(stderr, vm, fault);")]),
+    dict(id="HA05", file=MAIN, desc="a report section is printed without flushing stdout first", edits=[("        try self.cli.stdout.flush();\n        if (self.started)", "        if (self.started)")]),
 
     # ---------------- host calls (hostcall.zig) ----------------
     dict(id="HC01", file=HC, desc="exit_group is not a host call", edits=[(".exit, .exit_group => return .{ .exit = a0 },", ".exit => return .{ .exit = a0 },\n        .exit_group => return .{ .unknown = number },")]),
@@ -348,7 +357,7 @@ NEW = [
     dict(id="LD06", file=LD, desc="segment file range not checked", edits=[("        if (@as(u64, s.offset) + s.filesz > image.len) return error.InvalidElf;\n", "")]),
     dict(id="LD07", file=LD, desc="p_filesz > p_memsz accepted", edits=[("        if (s.filesz > s.memsz) return error.InvalidElf;\n", "")]),
     dict(id="LD08", file=LD, desc="a segment that ends at the top of memory is rejected", edits=[("if (@as(u64, s.vaddr) + s.memsz > mem_size)", "if (@as(u64, s.vaddr) + s.memsz >= mem_size)")]),
-    dict(id="LD09", file=LD, desc="memory bounds checked while writing, so a rejected image is partly loaded", edits=[("        if (@as(u64, s.vaddr) + s.memsz > mem_size) return error.AddressOutOfBounds;\n", ""), ("vm.loadProgram(image[s.offset..][0..s.filesz], s.vaddr) catch unreachable; // validated above", "try vm.loadProgram(image[s.offset..][0..s.filesz], s.vaddr);\n        if (@as(u64, s.vaddr) + s.memsz > mem_size) return error.AddressOutOfBounds;")]),
+    dict(id="LD09", file=LD, desc="memory bounds checked while writing, so a rejected image is partly loaded", edits=[("    var check = elf.segments;\n    while (check.next()) |s| {\n        if (@as(u64, s.vaddr) + s.memsz > mem_size) return error.AddressOutOfBounds;\n    }\n", ""), ("vm.loadProgram(image[s.offset..][0..s.filesz], s.vaddr) catch unreachable; // validated above", "try vm.loadProgram(image[s.offset..][0..s.filesz], s.vaddr);\n        if (@as(u64, s.vaddr) + s.memsz > mem_size) return error.AddressOutOfBounds;")]),
     dict(id="LD10", file=LD, desc="segments of every type are loaded, not only PT_LOAD", edits=[("if (u32At(image, ph) != PT_LOAD) return null;\n", "")]),
     dict(id="LD11", file=LD, desc=".bss not zero-filled", edits=[("@memset(vm.memory[bss_start..bss_end], 0);", "{}")]),
     dict(id="LD12", file=LD, desc="zero-filling .bss keeps the LR reservation", edits=[("vm.clearReservation(); // a direct memory write", "{}")]),
@@ -369,14 +378,49 @@ NEW = [
     dict(id="SN12", file=CPU, desc="restoreSnapshot keeps stop_pc", edits=[("try state.restoreSnapshot(self, r);\n            @memset(&self.decode_cache, empty_slot);\n            self.stop_pc = 0;", "try state.restoreSnapshot(self, r);\n            @memset(&self.decode_cache, empty_slot);")]),
     dict(id="SN13", file=STATE, desc="the reservation's valid flag is not encoded (a reservation is lost on restore)", edits=[("std.mem.writeInt(u32, buf[152..156], @intFromBool(cpu.reservation != null), .little);", "std.mem.writeInt(u32, buf[152..156], 0, .little);")]),
 
-    # ---------------- CLI loading and exit (main.zig) ----------------
+    # ---------------- CLI loading and exit (main.zig, main/load.zig) ----------------
     dict(id="CL01", file=MAIN, desc="initial sp 16 bytes below the top of memory", edits=[("pub const initial_sp: u32 = det.Cpu.mem_size & ~@as(u32, 15);", "pub const initial_sp: u32 = (det.Cpu.mem_size & ~@as(u32, 15)) -% 16;")]),
-    dict(id="CL02", file=MAIN, desc="an odd --load-addr accepted", edits=[("if (opts.load_addr % 2 != 0 or opts.load_addr >= det.Cpu.mem_size)", "if (opts.load_addr >= det.Cpu.mem_size)")]),
-    dict(id="CL03", file=MAIN, desc="a flat binary starts at 0 instead of its load address", edits=[("entry = opts.load_addr;", "entry = 0;")]),
-    dict(id="CL04", file=MAIN, desc="--input ignored", edits=[("opts.input = input;", "{}")]),
-    dict(id="CL05", file=MAIN, desc="exit status saturates at 255 instead of keeping the low 8 bits", edits=[("return .{ .status = @fromBackingInt(@as(u8, @truncate(status))) };", "return .{ .status = @fromBackingInt(@as(u8, @intCast(@min(status, 255)))) };")]),
-    dict(id="CL06", file=MAIN, desc="exit(3) taken for a VM fault in runFile (status compared, not the faulted flag)", edits=[("if (report.faulted) return report.status;\n\n    if (opts.dump_format) |fmt| {", "if (report.status == .vm_fault) return report.status;\n\n    if (opts.dump_format) |fmt| {")]),
-    dict(id="CL07", file=MAIN, desc="ELF detection checks the magic one byte late, so ELF files load as flat binaries", edits=[("if (det.loader.isElf(magic[0..magic_len])) {", "if (det.loader.isElf(magic[1..magic_len])) {")]),
+    dict(id="CL02", file=ARGS, desc="an odd --load-addr accepted", edits=[("if (addr % 2 != 0 or addr >= mem_size)", "if (addr >= mem_size)")]),
+    dict(id="CL03", file=LOADC, desc="a flat binary starts at 0 instead of its load address", edits=[("        .entry = addr,\n", "        .entry = 0,\n")]),
+    dict(id="CL04", file=MAIN, desc="--input ignored", edits=[(".{ .input = input, .stdout = cli.stdout", ".{ .input = &.{}, .stdout = cli.stdout")]),
+    dict(id="CL05", file=MAIN, desc="exit status saturates at 255 instead of keeping the low 8 bits", edits=[(".exit => |s| @fromBackingInt(@as(u8, @truncate(s))),", ".exit => |s| @fromBackingInt(@as(u8, @intCast(@min(s, 255)))),")]),
+    dict(id="CL06", file=MAIN, desc="a fault skips --dump-memory and --digest", edits=[("        if (config.dump) |d| {", "        if (status == .vm_fault) return status;\n        if (config.dump) |d| {")]),
+    dict(id="CL07", file=LOADC, desc="ELF detection checks the magic one byte late, so ELF files load as flat binaries", edits=[("if (det.loader.isElf(magic[0..magic_len])) {", "if (det.loader.isElf(magic[1..magic_len])) {")]),
+    dict(id="CL08", file=LOADC, desc="--load-addr accepted with an ELF file (and ignored)", edits=[("        if (load_addr != null) return report.userError(diag, \"--load-addr is for flat binaries", "        if (false) return report.userError(diag, \"--load-addr is for flat binaries")]),
+    dict(id="CL09", file=LOADC, desc="an empty file is run instead of rejected", edits=[("    if (stat.size == 0) return report.userError(diag, \"'{s}' is empty\", .{path});\n", "")]),
+
+    # ---------------- CLI arguments (main/args.zig) ----------------
+    dict(id="AR01", file=ARGS, desc="'--' does not end the options", edits=[("            options_ended = true;\n", "            options_ended = options_ended;\n")]),
+    dict(id="AR02", file=ARGS, desc="the value after '=' is dropped (the next argument is taken instead)", edits=[("            inline_value = cut[1];", "            inline_value = null;")]),
+    dict(id="AR03", file=ARGS, desc="the --help/--version scan does not stop at '--'", edits=[("        if (std.mem.eql(u8, arg, \"--\")) break;\n", "")]),
+    dict(id="AR04", file=ARGS, desc="a second program argument replaces the first", edits=[("            if (program) |first| return fail(diag, \"unexpected argument '{s}' after the program '{s}' (programs take no arguments)\", .{ arg, first });\n", "")]),
+    dict(id="AR05", file=ARGS, desc="a negative number is not reported as negative", edits=[("    if (std.mem.startsWith(u8, text, \"-\")) return fail(diag, \"{s} '{s}' is negative\", .{ option, text });\n", "")]),
+    dict(id="AR06", file=ARGS, desc="a --dump-range that ends at the top of memory is rejected", edits=[("if (@as(u64, range.start) + range.len > mem_size)", "if (@as(u64, range.start) + range.len >= mem_size)")]),
+    dict(id="AR07", file=ARGS, desc="the --dump-range end wraps around 2^32", edits=[("if (@as(u64, range.start) + range.len > mem_size)", "if (range.start +% range.len > mem_size)")]),
+    dict(id="AR08", file=ARGS, desc="--disassemble accepts the options that only apply to a run", edits=[("            if (o[1]) return fail(diag, \"{s} does not apply to --disassemble", "            if (false and o[1]) return fail(diag, \"{s} does not apply to --disassemble")]),
+    dict(id="AR09", file=ARGS, desc="--load-addr accepted with --demo", edits=[("        if (config.load_addr != null) return fail(diag, \"--load-addr does not apply to --demo\", .{});\n", "")]),
+    dict(id="AR10", file=ARGS, desc="--input - names a file '-' instead of stdin", edits=[(".input => config.input = if (std.mem.eql(u8, value.?, \"-\")) .stdin else .{ .file = value.? },", ".input => config.input = .{ .file = value.? },")]),
+    dict(id="AR11", file=ARGS, desc="--dump-range resets the format to hexdump", edits=[("                var d = config.dump orelse Dump{};\n                d.range", "                var d: Dump = .{};\n                d.range")]),
+
+    # ---------------- CLI streams, report, trace and listing ----------------
+    dict(id="SO01", file=MAIN, desc="a guest write to stderr does not flush stdout first", edits=[("                2 => try cli.stdout.flush(),", "                2 => {},")]),
+    dict(id="SO02", file=MAIN, desc="a guest write to stdout does not flush stderr first", edits=[("                1 => try cli.stderr.flush(),", "                1 => {},")]),
+    dict(id="SO03", file=MAIN, desc="the preamble is not flushed before the program runs", edits=[("            try cli.stderr.flush(); // before the program's output\n", "")]),
+    dict(id="SO04", file=MAIN, desc="-q does not drop the result report", edits=[("        const status: ExitStatus = if (cli.execute(vm, config, &env)) |stop| blk: {\n            if (!config.quiet) {", "        const status: ExitStatus = if (cli.execute(vm, config, &env)) |stop| blk: {\n            if (true) {")]),
+    dict(id="RP01", file=REPORT, desc="the register table leaves out x31", edits=[("    for (1..32) |i| {", "    for (1..31) |i| {")]),
+    dict(id="RP02", file=REPORT, desc="an EBREAK stop shows pc (past it) instead of its own address", edits=[("after {f}\\n\", .{ vm.stop_pc, n }),\n        .ecall", "after {f}\\n\", .{ vm.pc, n }),\n        .ecall")]),
+    dict(id="RP03", file=REPORT, desc="an exit status is printed unsigned", edits=[(".{ @as(i32, @bitCast(status)), n }", ".{ status, n }")]),
+    dict(id="RP04", file=REPORT, desc="no memory hint for a data address outside memory", edits=[("if (err == error.AddressOutOfBounds) try w.print", "if (false) try w.print")]),
+    dict(id="RP05", file=REPORT, desc="the trace shows a byte store with 8 digits", edits=[(".SB => try w.print(\"0x{X:0>2}\\n\", .{@as(u8, @truncate(val))}),", ".SB => try w.print(\"0x{X:0>8}\\n\", .{val}),")]),
+    dict(id="TR01", file=MAIN, desc="--trace runs one instruction past the cycle limit", edits=[("                if (vm.cycle_count >= limit) return .@\"continue\";\n            }\n            const cycle", "                if (vm.cycle_count > limit) return .@\"continue\";\n            }\n            const cycle")]),
+    dict(id="TR02", file=MAIN, desc="--trace fetches the bits after step(), so a self-overwriting instruction shows its new bits", edits=[("            const raw = try vm.fetch(); // before step(): the instruction may overwrite itself\n            const result = try vm.step();", "            const result = try vm.step();\n            const raw = vm.memory[pc] | @as(u32, vm.memory[pc + 1]) << 8 | @as(u32, vm.memory[pc + 2]) << 16 | @as(u32, vm.memory[pc + 3]) << 24;")]),
+    dict(id="DS01", file=LOADC, desc="--disassemble lists every ELF segment, not only the executable ones", edits=[("if (s.flags & det.loader.PF_X != 0) try code.append", "if (s.flags != 0xFFFF_FFFF) try code.append")]),
+    dict(id="DS02", file=DISASM, desc="the listing steps 4 bytes over a 16-bit instruction", edits=[("addr += if (det.instructions.isCompressed(raw)) 2 else 4;", "addr += 4;")]),
+    dict(id="DS03", file=DISASM, desc="a branch target is relative to the next instruction, not to its own address", edits=[("return w.print(\"0x{X:0>8}\", .{pc +% @as(u32, @bitCast(self.offset))});", "return w.print(\"0x{X:0>8}\", .{pc +% 4 +% @as(u32, @bitCast(self.offset))});")]),
+    dict(id="DM01", file=DUMP, desc="hexdump addresses ignore the base address", edits=[("try w.print(\"{X:0>8}  \", .{base + offset});", "try w.print(\"{X:0>8}  \", .{offset});")]),
+    dict(id="DM02", file=MAIN, desc="--dump-range dumps all of memory", edits=[("const range = d.range orelse args.Range{ .start = 0, .len = det.Cpu.mem_size };", "const range = args.Range{ .start = 0, .len = det.Cpu.mem_size };")]),
+    dict(id="UN01", file=UNITS, desc="0 is counted as singular (\"0 cycle\")", edits=[("if (self.n == 1) \"\" else \"s\"", "if (self.n <= 1) \"\" else \"s\"")]),
+    dict(id="LD14", file=LD, desc="segments() returns an iterator that the checks already ran to the end", edits=[("return .{ .entry = entry, .segments = all };", "return .{ .entry = entry, .segments = it };")]),
 ]
 
 MUTANTS = PORTED + NEW
@@ -395,4 +439,5 @@ EQUIVALENT = {
     "Z04": "write()'s switch rejects every CSR but mscratch anyway; the read-only check only guards writable CSRs added later",
     "D20": "no two registry entries overlap (registry_test), so the order in which decodeR asks the extensions cannot change its result",
     "D22": "no two registry entries overlap (registry_test), so the order in which decodeR asks the extensions cannot change its result",
+    "SO03": "every guest write to stdout flushes stderr first, and everything else on stderr follows the preamble in the same buffer, so the order is the same; the flush only shows the line before a long run starts, which no test can see",
 }

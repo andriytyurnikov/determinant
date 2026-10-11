@@ -53,8 +53,8 @@ while (true) {
 ## CLI
 
 - **`--input FILE`** sets the bytes that `read` returns.
-- **Output.** Guest stdout and stderr go to the CLI's stdout and stderr, between the "executing" line and the result report.
-- **Exit status.** When the program calls `exit`, the CLI prints `Program exited with status N` and exits with `N & 0xFF`. Otherwise the D6 statuses apply: 0 for an ECALL/EBREAK stop, 1 for a usage or I/O error, 2 at the cycle limit and 3 on a VM fault. A program exit of 1, 2 or 3 is told apart from those by the printed line.
+- **Output.** Guest stdout and stderr go to the CLI's stdout and stderr. stdout carries nothing else; the CLI's report shares stderr, in order ([cli.md](cli.md)).
+- **Exit status.** When the program calls `exit`, the CLI reports `Program exited with status N` and exits with `N & 0xFF`. Otherwise the D6 statuses apply: 0 for an ECALL/EBREAK stop, 1 for a usage or I/O error, 2 at the cycle limit and 3 on a VM fault. A program exit of 1, 2 or 3 is told apart from those by the reported line.
 
 ## Alternatives considered
 

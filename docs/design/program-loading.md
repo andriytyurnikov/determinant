@@ -26,6 +26,8 @@ The load is refused with `error.InvalidElf` in these cases:
 
 It is refused with `error.AddressOutOfBounds` if a segment's memory range does not fit inside the VM's memory.
 
+`loader.segments(image)` iterates over the `PT_LOAD` segments (`Segment`: offset, vaddr, filesz, memsz and flags) after the same checks on the file, but not the memory check, which needs a VM. The CLI's `--disassemble` uses it to list the segments with `PF_X`.
+
 All fields are read with explicit little-endian integer reads from the byte image. There are no struct casts, which keeps the endianness invariant. Bytes go into memory through `loadProgram()`, so LR reservations are respected.
 
 ### Flat binaries

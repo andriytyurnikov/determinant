@@ -2,12 +2,41 @@
 
 ## Unreleased
 
+The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encoding version 1) is the same, and so is every compliance digest in `tests/digests.txt` (the C corpus lines changed only because its binaries were rebuilt): 0.2.0 and this version compute identical results for the same program. The CLI's output and some of its arguments change; [docs/design/cli.md](docs/design/cli.md) describes the new CLI.
+
+### CLI (breaking)
+
+- **stdout carries only the program's output.** The report (the "Running" line, the result, the registers, faults, dumps) moves to stderr, where it keeps its order with the program's own stderr. `determinant prog > out.txt` now captures exactly what the program wrote. Scripts that read the report from stdout need `2>&1`.
+- **No arguments print the usage** and exit with status 1. The demo runs with `--demo` (`zig build run -- --demo`).
+- **The report is reworded.** `Stopped at EBREAK (0x...) after N cycles`; an ECALL stop names `a7`; `pc` heads the register table; registers show their ABI names, hex and signed decimal; counts are singular for 1 ("1 cycle"); an exit status prints signed. Faults give the error in words and by name, the instruction with its disassembly, and the data address; an address outside memory names the memory size and `-Dmemory_size`.
+- **Disassembly** uses ABI register names, CSR names, and absolute branch and jump targets when the address is known (a signed offset otherwise).
+- **Errors** are in words (`no such file`, `is a directory`) and name the file. Usage errors point to `--help`.
+- **Stricter arguments.** A second file argument is an error (it was ignored with a warning). `--load-addr` with an ELF file or `--demo` is an error (it was ignored). `--dump-memory` takes its format only after `=` (`--dump-memory=raw`), so `--dump-memory raw` runs a file named `raw`.
+
+### CLI (additions)
+
+- **Argument syntax.** `--opt=value`; `--` ends the options; numbers are decimal, `0x`, `0o` or `0b`, with `_` separators, for every option (`--max-cycles` took decimal only).
+- **`-q`, `--quiet`**: only the program's output, faults and errors.
+- **`--input -`** reads the program's input from stdin, all of it before the run.
+- **`--dump-range ADDR:LEN`** dumps part of memory; a dump now also follows a fault.
+- **`--digest`** prints the SHA-256 of the final VM state, as in `tests/digests.txt`.
+- **`--trace`** prints every instruction as it retires, with the register or memory it wrote.
+- **`--disassemble`** lists a flat binary, or an ELF file's executable segments, without running it.
+- **`--version`.**
+
+### Library API (additions)
+
+- **`loader.segments(image)`** iterates over an ELF file's `PT_LOAD` segments as `loader.Segment` values, with their flags (`loader.PF_X` marks code).
+
 ### Build, tests and tooling
 
-- **Zig 0.17.0.** The project now needs Zig 0.17.0 (`minimum_zig_version`, `.mise.toml`, and so CI). Zig 0.16.0 can no longer build it. The VM's behavior is unchanged: every compliance digest in `tests/digests.txt` is the same.
+- **Zig 0.17.0.** The project now needs Zig 0.17.0 (`minimum_zig_version`, `.mise.toml`, and so CI). Zig 0.16.0 can no longer build it. Every compliance digest in `tests/digests.txt` is the same.
 - **C corpus rebuilt.** Zig 0.17.0's C compiler generates different code, so the 20 corpus binaries and `elf/crc32.elf` are rebuilt, and the 20 `programs/` lines of `tests/digests.txt` are regenerated. The programs' results (`expected/`) are unchanged. `crc32.elf` gains a read-only segment, because LLVM now turns the table-building bit loop into a constant table.
 - **Build mode names.** CI and the docs use Zig 0.17's `-Doptimize` names: `debug`, `safe`, `fast` and `small`. Zig accepts the old names (`Debug`, `ReleaseFast`, ...) until 0.18. `tools/spike_diff` builds its runner with `-Doptimize=safe`.
 - **Speed.** On an Apple M2, `zig build bench` gives about 282 MIPS, against about 293 when Zig 0.16.0 builds the VM, on the same corpus binaries. Without the decode cache it rises from about 158 to about 200 MIPS.
+- **CLI tests rewritten.** Argument parsing is one table (`main/args_test.zig`), and whole runs are compared with their exact output (`main/report_test.zig`) at every memory size CI builds. The tests share a fixture with a fixed stdin and captured stdout and stderr (`main/test_helpers.zig`).
+- **CI's CLI smoke runs** read the report from stderr.
+- **Mutation catalogue.** The CLI mutants are re-anchored to the new code, with 30 new ones for the arguments, streams, report, trace and listing, and one (LD14) for `loader.segments()`.
 
 ## 0.2.0 — 2026-10-09
 

@@ -1,197 +1,131 @@
+//! Exit statuses, and output that cannot be written.
+
 const std = @import("std");
 const Io = std.Io;
-const main_mod = @import("../main.zig");
 const det = @import("determinant");
+const main_mod = @import("../main.zig");
+const h = @import("test_helpers.zig");
 
-const io = std.testing.io;
-const alloc = std.testing.allocator;
-
-const Args = []const [:0]const u8;
-const ExitStatus = main_mod.ExitStatus;
-
-fn expectContains(haystack: []const u8, needle: []const u8) !void {
-    if (std.mem.find(u8, haystack, needle) == null) {
-        std.debug.print("\nExpected output to contain: \"{s}\"\nActual output:\n{s}\n", .{ needle, haystack });
-        return error.TestExpectedEqual;
+test "exit status: one row per way a run ends" {
+    const Case = struct { program: ?[]const u8, args: []const [:0]const u8 = &.{}, want: h.ExitStatus };
+    const cases = [_]Case{
+        .{ .program = &h.ebreak, .want = .ok },
+        .{ .program = &h.ecall, .want = .ok },
+        .{ .program = &h.loop, .args = &.{ "--max-cycles", "100" }, .want = .cycle_limit },
+        .{ .program = &h.loop, .args = &.{ "--max-cycles", "0" }, .want = .cycle_limit },
+        .{ .program = &h.illegal, .want = .vm_fault },
+        .{ .program = &h.ebreak, .args = &.{"--bogus"}, .want = .usage_or_io },
+        .{ .program = null, .args = &.{"/nonexistent/determinant_test.bin"}, .want = .usage_or_io },
+        .{ .program = null, .args = &.{}, .want = .usage_or_io },
+        .{ .program = null, .args = &.{"--help"}, .want = .ok },
+        .{ .program = null, .args = &.{"--version"}, .want = .ok },
+        .{ .program = &h.ebreak, .args = &.{"--disassemble"}, .want = .ok },
+    };
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    for (cases) |c| {
+        var argv: std.ArrayList([:0]const u8) = .empty;
+        defer argv.deinit(h.alloc);
+        if (c.program) |p| try argv.append(h.alloc, try fx.file("prog.bin", p));
+        try argv.appendSlice(h.alloc, c.args);
+        errdefer std.debug.print("\nargs: {any}\nstderr: {s}\n", .{ c.args, fx.stderr() });
+        try std.testing.expectEqual(h.status(c.want), try fx.run(argv.items));
     }
 }
 
-const Output = struct {
-    stdout: Io.Writer.Allocating,
-    stderr: Io.Writer.Allocating,
-
-    fn init() Output {
-        return .{ .stdout = .init(alloc), .stderr = .init(alloc) };
-    }
-
-    fn deinit(self: *Output) void {
-        self.stdout.deinit();
-        self.stderr.deinit();
-    }
-};
-
-/// Write `program` to a temporary file and run the CLI on it, followed by `extra` args.
-fn runProgram(program: []const u8, extra: []const [:0]const u8, out: *Output) !u8 {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const f = try tmp.dir.createFile(io, "prog.bin", .{});
-    try f.writeStreamingAll(io, program);
-    f.close(io);
-    const path = try alloc.printSentinel(".zig-cache/tmp/{s}/prog.bin", .{&tmp.sub_path}, 0);
-    defer alloc.free(path);
-
-    var args: std.ArrayList([:0]const u8) = .empty;
-    defer args.deinit(alloc);
-    try args.append(alloc, "determinant");
-    try args.append(alloc, path);
-    try args.appendSlice(alloc, extra);
-    return main_mod.run(io, &out.stdout.writer, &out.stderr.writer, args.items);
-}
-
-test "run: program stopping at EBREAK exits 0" {
-    var out: Output = .init();
-    defer out.deinit();
-    const ebreak = [_]u8{ 0x73, 0x00, 0x10, 0x00 };
-    try std.testing.expectEqual(@backingInt(ExitStatus.ok), try runProgram(&ebreak, &.{}, &out));
-    try expectContains(out.stdout.written(), "ebreak after 1 cycles");
-}
-
-test "run: demo stopping at ECALL exits 0" {
-    if (det.Cpu.mem_size < main_mod.demo_min_memory) return error.SkipZigTest;
-    var out: Output = .init();
-    defer out.deinit();
-    const args: Args = &.{"determinant"};
-    try std.testing.expectEqual(@backingInt(ExitStatus.ok), main_mod.run(io, &out.stdout.writer, &out.stderr.writer, args));
-}
-
-test "run: --help exits 0 and documents the exit statuses" {
-    var out: Output = .init();
-    defer out.deinit();
-    const args: Args = &.{ "determinant", "--help" };
-    try std.testing.expectEqual(@backingInt(ExitStatus.ok), main_mod.run(io, &out.stdout.writer, &out.stderr.writer, args));
-    try expectContains(out.stdout.written(), "Exit status:");
-}
-
-test "run: usage error exits 1" {
-    var out: Output = .init();
-    defer out.deinit();
-    const args: Args = &.{ "determinant", "--bogus" };
-    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), main_mod.run(io, &out.stdout.writer, &out.stderr.writer, args));
-    try expectContains(out.stderr.written(), "unknown option");
-}
-
-test "run: missing file exits 1" {
-    var out: Output = .init();
-    defer out.deinit();
-    const args: Args = &.{ "determinant", "/nonexistent/determinant_test.bin" };
-    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), main_mod.run(io, &out.stdout.writer, &out.stderr.writer, args));
-    try expectContains(out.stderr.written(), "cannot open");
-}
-
-test "run: cycle limit exits 2" {
-    var out: Output = .init();
-    defer out.deinit();
-    const loop = [_]u8{ 0x6F, 0x00, 0x00, 0x00 }; // JAL x0, 0 — loops forever
-    try std.testing.expectEqual(@backingInt(ExitStatus.cycle_limit), try runProgram(&loop, &.{ "--max-cycles", "100" }, &out));
-    try expectContains(out.stdout.written(), "Cycle limit reached after 100 cycles");
-}
-
-test "run: VM fault exits 3" {
-    var out: Output = .init();
-    defer out.deinit();
-    const illegal = [_]u8{ 0xFF, 0xFF, 0xFF, 0xFF };
-    try std.testing.expectEqual(@backingInt(ExitStatus.vm_fault), try runProgram(&illegal, &.{}, &out));
-    try expectContains(out.stderr.written(), "IllegalInstruction");
-}
-
-test "run: stdout that cannot be written exits 1 with a message" {
-    var failing: Io.Writer = .failing;
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-    const args: Args = &.{ "determinant", "--help" };
-    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), main_mod.run(io, &failing, &stderr_aw.writer, args));
-    try expectContains(stderr_aw.written(), "cannot write output");
-}
-
-test "run: unwritable output beats the program's own status" {
-    // The program stops at EBREAK (status 0), but its output is lost: exit 1.
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const f = try tmp.dir.createFile(io, "prog.bin", .{});
-    try f.writeStreamingAll(io, &[_]u8{ 0x73, 0x00, 0x10, 0x00 });
-    f.close(io);
-    const path = try alloc.printSentinel(".zig-cache/tmp/{s}/prog.bin", .{&tmp.sub_path}, 0);
-    defer alloc.free(path);
-
-    // A buffered writer whose sink fails: printing succeeds into the buffer, and only
-    // the final flush fails, which must still turn into a non-zero status.
-    var buf: [64 * 1024]u8 = undefined;
+/// A buffered writer whose sink fails: printing succeeds into the buffer, and only
+/// the flush fails.
+fn failingBuffered(buf: []u8) Io.Writer {
     const sink: Io.Writer = .failing;
-    var buffered: Io.Writer = .{ .vtable = sink.vtable, .buffer = &buf };
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-    const args: Args = &.{ "determinant", path };
-    try std.testing.expectEqual(@backingInt(ExitStatus.usage_or_io), main_mod.run(io, &buffered, &stderr_aw.writer, args));
-    try expectContains(stderr_aw.written(), "cannot write output");
+    return .{ .vtable = sink.vtable, .buffer = buf };
 }
 
-test "run: a fault reports the instruction and the faulting address" {
-    var out: Output = .init();
-    defer out.deinit();
-    if (det.Cpu.mem_size < 8) return error.SkipZigTest;
-    // LUI x1, 0x80000 (x1 = 0x80000000); LW x2, 4(x1) — far out of bounds
-    const program = [_]u8{ 0xB7, 0x00, 0x00, 0x80, 0x03, 0xA1, 0x40, 0x00 };
-    try std.testing.expectEqual(@backingInt(ExitStatus.vm_fault), try runProgram(&program, &.{}, &out));
-    try expectContains(out.stderr.written(), "AddressOutOfBounds");
-    try expectContains(out.stderr.written(), "PC = 0x00000004");
-    try expectContains(out.stderr.written(), "instruction: 0x0040A103 LW x2, 4(x1)");
-    try expectContains(out.stderr.written(), "address: 0x80000004");
+test "unwritable output: stdout for --help gives exit status 1 and a message" {
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    var failing: Io.Writer = .failing;
+    var cli = fx.cli();
+    cli.stdout = &failing;
+    try std.testing.expectEqual(h.status(.usage_or_io), cli.run(&.{ "determinant", "--help" }));
+    try std.testing.expectEqualStrings("Error: cannot write output\n", fx.stderr());
+}
+
+test "unwritable output: the program's output lost beats its own exit status" {
+    // Before the report, stdout is flushed and fails there; with -q, and for a
+    // listing, only the final flush finds out.
+    try h.needMemory(h.hello.len);
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    const prog = try fx.file("hello.bin", &h.hello);
+    const runs = [_][]const [:0]const u8{ &.{ "determinant", prog }, &.{ "determinant", prog, "-q" }, &.{ "determinant", prog, "--disassemble" } };
+    for (runs) |argv| {
+        var buf: [64 * 1024]u8 = undefined;
+        var stdout = failingBuffered(&buf);
+        fx.err.clearRetainingCapacity();
+        var cli = fx.cli();
+        cli.stdout = &stdout;
+        try std.testing.expectEqual(h.status(.usage_or_io), cli.run(argv));
+        try h.expectContains(fx.stderr(), "Error: cannot write output\n");
+    }
+}
+
+test "unwritable output: a report that cannot be written gives exit status 1" {
+    // The program stops at EBREAK (status 0) and writes nothing, but its report is lost.
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    const prog = try fx.file("stop.bin", &h.ebreak);
+    var buf: [64 * 1024]u8 = undefined;
+    var stderr = failingBuffered(&buf);
+    var cli = fx.cli();
+    cli.stderr = &stderr;
+    try std.testing.expectEqual(h.status(.usage_or_io), cli.run(&.{ "determinant", prog }));
 }
 
 test "stdStreamWriter: output appends at the file's offset instead of overwriting" {
     // Like `determinant --help >> log.txt`: the file already holds data and its offset
     // is at the end. A positional writer would overwrite "EXISTING" from offset 0.
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const f = try tmp.dir.createFile(io, "log.txt", .{ .read = true });
-    defer f.close(io);
-    try f.writeStreamingAll(io, "EXISTING\n");
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    const f = try fx.tmp.dir.createFile(h.io, "log.txt", .{ .read = true });
+    defer f.close(h.io);
+    try f.writeStreamingAll(h.io, "EXISTING\n");
 
     var buf: [256]u8 = undefined;
-    var fw = main_mod.stdStreamWriter(f, io, &buf);
-    const args: Args = &.{ "determinant", "--help" };
-    var stderr_aw: Io.Writer.Allocating = .init(alloc);
-    defer stderr_aw.deinit();
-    try std.testing.expectEqual(@backingInt(ExitStatus.ok), main_mod.run(io, &fw.interface, &stderr_aw.writer, args));
+    var fw = main_mod.stdStreamWriter(f, h.io, &buf);
+    var cli = fx.cli();
+    cli.stdout = &fw.interface;
+    try std.testing.expectEqual(h.status(.ok), cli.run(&.{ "determinant", "--help" }));
 
     var content: [64]u8 = undefined;
-    const n = try f.readPositionalAll(io, &content, 0);
+    const n = try f.readPositionalAll(h.io, &content, 0);
     try std.testing.expectStringStartsWith(content[0..n], "EXISTING\nUsage: determinant");
 }
 
-test "run: the fault report comes after the program's output, even with unbuffered stderr" {
+test "the fault report comes after the program's output, even with unbuffered stderr" {
     // stdout buffered, stderr unbuffered, both into one file as with `> log 2>&1`.
     // Only the flush before the report keeps the report after what stdout printed.
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const prog = try tmp.dir.createFile(io, "prog.bin", .{});
-    try prog.writeStreamingAll(io, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }); // illegal
-    prog.close(io);
-    const path = try alloc.printSentinel(".zig-cache/tmp/{s}/prog.bin", .{&tmp.sub_path}, 0);
-    defer alloc.free(path);
+    try h.needMemory(h.hello.len + 4);
+    var fx: h.Fixture = .init();
+    defer fx.deinit();
+    // hello, with its exit replaced by an illegal instruction
+    var program = h.hello;
+    program[24..28].* = h.illegal;
+    const prog = try fx.file("prog.bin", &program);
 
-    const log = try tmp.dir.createFile(io, "log.txt", .{ .read = true });
-    defer log.close(io);
+    const log = try fx.tmp.dir.createFile(h.io, "log.txt", .{ .read = true });
+    defer log.close(h.io);
     var out_buf: [4096]u8 = undefined;
     var no_buf: [0]u8 = undefined;
-    var out_fw = main_mod.stdStreamWriter(log, io, &out_buf);
-    var err_fw = main_mod.stdStreamWriter(log, io, &no_buf);
-    const args: Args = &.{ "determinant", path };
-    try std.testing.expectEqual(@backingInt(ExitStatus.vm_fault), main_mod.run(io, &out_fw.interface, &err_fw.interface, args));
+    var out_fw = main_mod.stdStreamWriter(log, h.io, &out_buf);
+    var err_fw = main_mod.stdStreamWriter(log, h.io, &no_buf);
+    var cli = fx.cli();
+    cli.stdout = &out_fw.interface;
+    cli.stderr = &err_fw.interface;
+    try std.testing.expectEqual(h.status(.vm_fault), cli.run(&.{ "determinant", prog }));
 
     var content: [4096]u8 = undefined;
-    const n = try log.readPositionalAll(io, &content, 0);
-    const output = std.mem.find(u8, content[0..n], "Loaded 4 bytes") orelse return error.TestExpectedEqual;
-    const report = std.mem.find(u8, content[0..n], "Execution error") orelse return error.TestExpectedEqual;
-    try std.testing.expect(output < report);
+    const text = content[0..try log.readPositionalAll(h.io, &content, 0)];
+    const output = std.mem.find(u8, text, "hello\n") orelse return error.TestExpectedEqual;
+    const fault = std.mem.find(u8, text, "Fault after") orelse return error.TestExpectedEqual;
+    try std.testing.expect(output < fault);
 }
