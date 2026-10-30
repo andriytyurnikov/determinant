@@ -5,10 +5,11 @@
 //!        spike-runner --trace BIN LOAD_HEX ENTRY_HEX MAX_STEPS
 //!
 //! MANIFEST has one job per line: BIN LOAD_HEX ENTRY_HEX DUMP_LO_HEX DUMP_HI_HEX MAX_STEPS.
-//! Each job runs on a fresh VM twice, with the decode cache on and off, and prints one
-//! line per run (fields separated by one space):
+//! Each job runs on a fresh VM three times: with the decode cache on and off, both with the
+//! memory inside the VM (CpuType), and on a RuntimeCpuType, whose memory is a host buffer
+//! of the same size. It prints one line per run (fields separated by one space):
 //!   BIN CONFIG STATUS EPC RETIRED FINAL_PC X0 RESERVATION X1,...,X31 MSCRATCH DIGEST MEM
-//! CONFIG is `cache` or `nocache`. STATUS is ebreak, ecall, limit (MAX_STEPS reached) or
+//! CONFIG is `cache`, `nocache` or `runtime`. STATUS is ebreak, ecall, limit (MAX_STEPS reached) or
 //! the name of the StepError. EPC is the address of the instruction that stopped the
 //! run: stop_pc for ECALL/EBREAK, the faulting instruction for a fault. X0 is the raw
 //! regs[0], RESERVATION a hex address or `none`, DIGEST the stateDigest() and MEM the
@@ -26,6 +27,7 @@ const det = @import("determinant");
 const mem_size: u32 = 0x50000;
 const CacheCpu = det.CpuType(mem_size, .{});
 const NoCacheCpu = det.CpuType(mem_size, .{ .decode_cache_entries = 0 });
+const RuntimeCpu = det.RuntimeCpuType(.{});
 
 const Job = struct {
     path: []const u8,
@@ -153,6 +155,11 @@ pub fn main(init: std.process.Init) !void {
     defer gpa.destroy(cache_vm);
     const nocache_vm = try gpa.create(NoCacheCpu);
     defer gpa.destroy(nocache_vm);
+    const runtime_memory = try gpa.alloc(u8, mem_size);
+    defer gpa.free(runtime_memory);
+    const runtime_vm = try gpa.create(RuntimeCpu);
+    defer gpa.destroy(runtime_vm);
+    try runtime_vm.initInPlace(runtime_memory);
 
     var lines = std.mem.tokenizeAny(u8, manifest, "\r\n");
     while (lines.next()) |line| {
@@ -161,6 +168,7 @@ pub fn main(init: std.process.Init) !void {
         defer gpa.free(bin);
         try runJob(CacheCpu, cache_vm, "cache", bin, job, out);
         try runJob(NoCacheCpu, nocache_vm, "nocache", bin, job, out);
+        try runJob(RuntimeCpu, runtime_vm, "runtime", bin, job, out);
     }
     try out.flush();
 }

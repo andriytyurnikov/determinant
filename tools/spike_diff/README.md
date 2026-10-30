@@ -82,8 +82,9 @@ Python's `__pycache__`. Run one script at a time per work directory.
   fault. All of these trap to the handler, which dumps x1 to x31, `mscratch`, `mcause`,
   `mepc`, `mtval` and `minstret` into the signature region and exits.
 - **On Determinant**, the runner loads the flat binary at 0x10000 into a 0x50000-byte
-  VM and starts at `test_start`. It runs each program twice, with the decode cache on
-  and off, for at most 200,000 steps.
+  VM and starts at `test_start`. It runs each program three times, for at most 200,000
+  steps: with the decode cache on and off, both on a `CpuType` (memory inside the VM),
+  and on a `RuntimeCpuType` with a host buffer of the same size.
 - **`compare()`** checks the outcome: Spike's `mcause` against the runner's status
   (breakpoint/EBREAK, ecall/ECALL, illegal instruction/`IllegalInstruction`,
   misaligned/`MisalignedAccess`, access fault/`AddressOutOfBounds`, instruction access
@@ -93,8 +94,8 @@ Python's `__pycache__`. Run one script at a time per work directory.
   handler 1), plus 1 for ECALL/EBREAK: Determinant retires them, while on Spike they
   trap. Last come x1 to x31 (x0 must still be 0), `mscratch` and the memory from 0x10000
   up to the dump area.
-- **`compare_configs()`** requires the decode-cache-on and -off records to be
-  identical, including the `stateDigest()` of all memory.
+- **`compare_configs()`** requires the three records to be identical, including the
+  `stateDigest()` of all memory. Spike is compared with the first (`cache`).
 - `directed.py` also checks that `pc` ends past ECALL/EBREAK (by 2 or 4) and is
   unchanged after a fault.
 
@@ -117,15 +118,16 @@ instruction categories differently.
 
 **fuzz.py** prints a progress line per batch:
 `[elapsed] mix: done/total {counters}`. The counters are `programs`, `compared`,
-`diverged`, `cache_on_off_differ`, `build_error` and `spike_error`. `long_program` counts
-programs that retired more than 4,900 instructions (see the reservation quantum below).
+`diverged`, `configs_differ` (the runner's three runs differ), `build_error` and
+`spike_error`. `long_program` counts programs that retired more than 4,900 instructions
+(see the reservation quantum below).
 At the end comes a JSON summary per mix, with `retired_min/max/mean`. Its `outcomes`
 count how the programs stopped, as `<runner status>/mcause=<Spike mcause>`, for example
 `ebreak/mcause=3` or `MisalignedAccess/mcause=6`. The last line gives the number of
 programs and how many diverged or failed. The exit status is 1 if any did.
 
 Each divergence is a JSON line in `WORK/fuzz/divergences.jsonl`. The file is appended
-to across runs. Each line has `mix`, `seed`, `kind` (`spike_vs_det`, `cache_on_off`,
+to across runs. Each line has `mix`, `seed`, `kind` (`spike_vs_det`, `configs`,
 `build_error` or `spike_error`), `detail` (the differences) and `asm`. The program is
 kept as `WORK/fuzz/<mix>/s<seed>.{s,elf,bin,sig}`; programs that pass are deleted unless
 you pass `--keep`. To find the first differing instruction, run
@@ -178,7 +180,9 @@ them.
 
 The harness was checked with bugs planted in scratch copies of the tree, using
 `--runner`. A decode cache that never re-decodes a filled slot fails 3 directed tests
-(self-modifying code) and the cache on/off comparison. SLTU computing `<=` fails the
+(self-modifying code) and the cache on/off comparison. A `RuntimeCpuType` whose
+`memSize()` is 4 bytes short fails all 114 directed tests in the comparison of the
+runner's runs (the digest covers the memory size). SLTU computing `<=` fails the
 directed comparison test and 2 of 56 random programs. Bugs that need equal operands are
 the hardest for random programs to hit, so `gen.py` reuses the first source register in
 10% of the two-operand instructions. Mutation testing of the test suites themselves is

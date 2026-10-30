@@ -5,9 +5,10 @@ setup()        checks the tools, prepares the work directory (Spike's device tre
 build()        assembles and links a program (GNU as/ld, no relaxation), makes the flat
                binary and reads its symbols
 run_spike()    runs a program on Spike and returns its signature dump
-run_runner()   runs a manifest of programs on the runner, decode cache on and off
+run_runner()   runs a manifest of programs on the runner: decode cache on and off, and on a
+               RuntimeCpuType
 compare()      Spike's final state against one runner record
-compare_configs()  the runner's two records (decode cache on and off) against each other
+compare_configs()  the runner's three records against each other
 
 Nothing is written outside the work directory.
 """
@@ -28,7 +29,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 LINK = os.path.join(HERE, "link.ld")
 DEFAULT_WORK = os.path.join(tempfile.gettempdir(), "determinant-spike-diff")
 MAX_STEPS = 200000
-CONFIGS = ("cache", "nocache")
+CONFIGS = ("cache", "nocache", "runtime")
 
 # Spike's mcause for each runner status
 CAUSES = {
@@ -282,9 +283,11 @@ def compare(sp, det):
 
 
 def compare_configs(rec):
-    """The runner's records with the decode cache on and off must be identical."""
+    """The runner's records must be identical: decode cache on and off (CpuType), and the
+    memory inside the VM (CpuType) and in a host buffer (RuntimeCpuType)."""
     missing = [c for c in CONFIGS if c not in rec]
     if missing:
         return [f"runner record missing for {', '.join(missing)}"]
-    a, b = rec["cache"], rec["nocache"]
-    return [f"decode cache on/off differ on {k}" for k in a if a[k] != b[k]]
+    a = rec["cache"]
+    return ([f"decode cache on/off differ on {k}" for k in a if a[k] != rec["nocache"][k]] +
+            [f"CpuType/RuntimeCpuType differ on {k}" for k in a if a[k] != rec["runtime"][k]])

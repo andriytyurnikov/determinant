@@ -183,8 +183,8 @@ def main():
             diffs = pipeline.compare(sp, rec["cache"])
             outcomes[f"{rec['cache']['status']}/mcause={sp['mcause']}"] += 1
             if dd:
-                st["UNKNOWN: decode cache on/off differ"] += 1
-                log.write(json.dumps(dict(seed=r["seed"], word=hex(r["word"]), kind="cache_on_off", detail=dd)) + "\n")
+                st["UNKNOWN: runner configs differ"] += 1
+                log.write(json.dumps(dict(seed=r["seed"], word=hex(r["word"]), kind="configs", detail=dd)) + "\n")
             if diffs:
                 k = known_class(r, sp, rec["cache"], diffs)
                 st["known: " + k if k else "UNKNOWN divergence"] += 1

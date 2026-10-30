@@ -5,7 +5,7 @@
                                       [--jobs J] [--keep] [--work DIR] [tool options]
 
 For every mix (gen.MIXES, all by default) and every seed in [S, S+N): generate a program
-(gen.py), build it, run it on Spike and on the runner (decode cache on and off), and
+(gen.py), build it, run it on Spike and on the runner (its three runs), and
 compare the final state: outcome (stop or fault, and where), retired instruction count,
 registers, mscratch, and the whole program image and data region. The generator only
 emits programs on which the two must agree (README.md), so every difference is a
@@ -97,9 +97,9 @@ def main():
                 bad = False
                 dd = pipeline.compare_configs(rec)
                 if dd:
-                    st["cache_on_off_differ"] += 1
+                    st["configs_differ"] += 1
                     bad = True
-                    divlog.write(json.dumps(dict(mix=mix, seed=r["seed"], kind="cache_on_off",
+                    divlog.write(json.dumps(dict(mix=mix, seed=r["seed"], kind="configs",
                                                  detail=dd, asm=r["asm"])) + "\n")
                 diffs = pipeline.compare(sp, rec["cache"])
                 if diffs:
