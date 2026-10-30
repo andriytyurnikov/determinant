@@ -1,6 +1,6 @@
 # Memory size at run time
 
-- **Status:** implemented for Determinant 0.4.0 (`src/cpu.zig`, `src/cpu/state.zig`; CLI `--memory`).
+- **Status:** implemented in Determinant 0.4.0 (`src/cpu.zig`, `src/cpu/state.zig`; CLI `--memory`).
 
 ## Problem
 

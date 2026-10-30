@@ -1,6 +1,6 @@
 # The CLI
 
-- **Status:** implemented in Determinant 0.3.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged. `--memory` follows in 0.4.0 ([memory-size.md](memory-size.md)).
+- **Status:** implemented in Determinant 0.3.0 (`src/main.zig`, `src/main/`). It changes the CLI's output and some of its arguments, not the VM: `tests/digests.txt` and SEMANTICS.md are unchanged. Determinant 0.4.0 adds `--memory` ([memory-size.md](memory-size.md)).
 
 ## Problem
 

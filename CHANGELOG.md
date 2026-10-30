@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-10-31
 
 The memory size can be chosen at run time, by the library and by the CLI's `--memory`. The VM's behavior is unchanged: SEMANTICS.md (semantics version 1, state encoding version 1) and every digest in `tests/digests.txt` are the same. [docs/design/memory-size.md](docs/design/memory-size.md) describes the design.
 
