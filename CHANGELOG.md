@@ -4,11 +4,12 @@
 
 The memory size can be chosen at run time, by the library and by the CLI's `--memory`. The VM's behavior is unchanged: SEMANTICS.md (semantics version 1, state encoding version 1) and every digest in `tests/digests.txt` are the same. [docs/design/memory-size.md](docs/design/memory-size.md) describes the design.
 
-### Library API (additions)
+### Library API
 
-- **`RuntimeCpuType(options)`** and **`RuntimeCpu`**: a VM whose memory is a buffer the host passes to `init(memory)` or `initInPlace(memory)`, of any size from 4 bytes to 4 GiB − 4 (a multiple of 4). The VM still never allocates. It behaves exactly like a `CpuType` of the same size: same results, same snapshots, same digests. Copying the struct shares the memory.
+- **`RuntimeCpuType(options)`** and **`RuntimeCpu`**: a VM whose memory is a buffer the host passes to `init(memory)` or `initInPlace(memory)`, of any size from 4 bytes to 4 GiB − 4 (a multiple of 4). Its buffer changes only through `initInPlace`. The VM still never allocates. It behaves exactly like a `CpuType` of the same size: same results, same snapshots, same digests. Copying the struct shares the memory.
 - **`memSize()`** and **`snapshotSize()`** on both kinds. `CpuType` keeps `mem_size` and `snapshot_size`, and its code is unchanged.
 - **`validMemorySize()`**, **`snapshotMemorySize()`** (the size in a snapshot's header, to size a `RuntimeCpu` before restoring) and **`InitError`**.
+- **Declarations that do not apply to a kind are compile errors** that say what to use instead: `initInPlace` on a `CpuType`, `mem_size` and `snapshot_size` on a `RuntimeCpuType`. Code that references every declaration of a VM type, such as `std.testing.refAllDecls(det.Cpu)`, no longer compiles; other code using a `CpuType` compiles unchanged.
 
 ### CLI
 

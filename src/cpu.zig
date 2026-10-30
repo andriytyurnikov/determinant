@@ -123,6 +123,9 @@ fn VmType(comptime kind: MemoryKind, comptime options: Options) type {
 
         pc: u32,
         regs: [32]u32,
+        /// A CpuType's memory is inside the VM. A RuntimeCpuType's is the host's buffer,
+        /// set by init() or initInPlace(), which check its size: the bounds checks rely
+        /// on validMemorySize(). Give the VM another buffer only through initInPlace().
         memory: switch (kind) {
             .fixed => |n| [n]u8,
             .runtime => []u8,

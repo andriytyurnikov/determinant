@@ -23,7 +23,7 @@ pub fn CpuType(comptime memory_size: u32, comptime options: Options) type  // as
 pub fn RuntimeCpuType(comptime options: Options) type                       // new
 ```
 
-- **`CpuType(N, options)`** keeps the memory inside the VM struct, as now. Every bounds check compares with a constant. Existing code compiles unchanged.
+- **`CpuType(N, options)`** keeps the memory inside the VM struct, as now. Every bounds check compares with a constant. Existing code compiles unchanged, unless it references every declaration of the type (see API).
 - **`RuntimeCpuType(options)`** borrows a buffer from the host: `memory: []u8`. The VM still never allocates; the host owns the buffer and must keep it alive.
 - **One implementation.** Both are the same generic struct, parameterized by the kind of memory. All code goes through `memSize()`: for `CpuType` it returns the constant, so the generated code is the same as now. Slicing (`memory[addr..][0..4]`) is the same for an array and a slice.
 
@@ -34,7 +34,9 @@ pub fn RuntimeCpuType(comptime options: Options) type                       // n
 - **`reset()`** zeroes the memory, as now, and keeps the buffer.
 - **Snapshots.** `restoreSnapshot` requires the snapshot's size to equal `memSize()`, as now. `snapshotMemorySize(header)` reads the size from a snapshot's header, so a host can allocate exactly that much before restoring.
 - **Copying.** Copying a `RuntimeCpuType` value copies the registers but shares the memory. A snapshot is the way to fork a VM.
-- **Generic code.** `hostcall.handle`, `loader.loadElf` and `loader.segments` take either kind (`anytype`), using `memSize()`.
+- **The buffer.** `memory` is a public field, like the rest of the state. A `RuntimeCpuType`'s changes only through `initInPlace`, which checks the size. Assigning the field directly skips that check, and the bounds checks, which compute `memSize() - 4`, then go wrong.
+- **Declarations for the other kind.** Zig has no conditional declarations, so both kinds declare everything: `initInPlace` on a `CpuType`, and `mem_size` and `snapshot_size` on a `RuntimeCpuType`, are compile errors that say what to use instead. Code that references every declaration, such as `std.testing.refAllDecls`, fails on either kind.
+- **Generic code.** `hostcall.handle` and `loader.loadElf` take either kind (`anytype`) and use `vm.memory.len`, which equals `memSize()` on both. `loader.segments` takes only the ELF image.
 
 ### CLI
 

@@ -141,7 +141,8 @@ The library is available via `@import("determinant")`. Execution semantics are s
 - **`RuntimeCpu`** — a VM whose memory is a buffer the host owns, of a size chosen at run time: `RuntimeCpuType(.{})`. The same methods as `Cpu`, except:
   - `init(memory: []u8) → InitError!RuntimeCpu` — a zeroed VM with `memory` (zeroed too) as its memory; `error.InvalidMemorySize` unless `validMemorySize(memory.len)`
   - `initInPlace(memory)` — the same, for a VM on the heap
-  - no `mem_size` or `snapshot_size` constants: use `memSize()` and `snapshotSize()`
+  - `memory` is the buffer given to `init` or `initInPlace`, which check its size; to switch buffers, call `initInPlace` again (assigning the field skips the size check the bounds checks rely on)
+  - no `mem_size` or `snapshot_size` constants (referencing them is a compile error that says so): use `memSize()` and `snapshotSize()`
   - copying the struct shares the memory; fork a VM with a snapshot instead
 
   See [docs/design/memory-size.md](docs/design/memory-size.md).
