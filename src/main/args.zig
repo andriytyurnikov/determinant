@@ -234,7 +234,7 @@ fn memorySize(text: []const u8, diag: *Io.Writer) Error!u32 {
     };
     const bytes = std.math.mul(u64, n, scale) catch return fail(diag, "--memory '{s}' is too large: it must be less than 4 GiB", .{text});
     if (bytes > std.math.maxInt(u32)) return fail(diag, "--memory '{s}' is too large: it must be less than 4 GiB", .{text});
-    if (!det.validMemorySize(bytes)) return fail(diag, "--memory '{s}' must be a positive multiple of 4 bytes", .{text});
+    if (!det.validMemorySize(@intCast(bytes))) return fail(diag, "--memory '{s}' must be a positive multiple of 4 bytes", .{text});
     return @intCast(bytes);
 }
 
