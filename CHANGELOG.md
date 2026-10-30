@@ -26,7 +26,7 @@ The memory size can be chosen at run time, by the library and by the CLI's `--me
 - **Speed.** `zig build bench` reports both kinds. On an Apple M2, `CpuType` is unchanged (about 275–290 MIPS), and `RuntimeCpuType` is about 4% slower.
 - **Mutation catalogue.** 24 mutants are re-anchored to `memSize()`, and 24 new ones cover the two kinds, `init`'s checks, the snapshot size helpers and `--memory`. The harness knows the third digest run (`digests_runtime`).
 
-## 0.3.0 — 2026-10-09
+## 0.3.0 — 2026-10-11
 
 The VM's behavior is unchanged. SEMANTICS.md (semantics version 1, state encoding version 1) is the same, and so is every compliance digest in `tests/digests.txt` (the C corpus lines changed only because its binaries were rebuilt): 0.2.0 and 0.3.0 compute identical results for the same program. The CLI's output and some of its arguments change; [docs/design/cli.md](docs/design/cli.md) describes the new CLI.
 
@@ -89,7 +89,7 @@ These checks were run for this release, in addition to CI. The decoder and Spike
   The CLI runs a compliance program on macOS and Linux, and a small program at every memory size, in `debug` and `fast` builds.
 - **Compliance from source.** All 89 compliance binaries, rebuilt with GCC 13.2 (CI), pass.
 
-## 0.2.0 — 2026-10-09
+## 0.2.0 — 2026-10-11
 
 This release follows a review of the project on 2026-10-07. [SEMANTICS.md](SEMANTICS.md) is new and is the contract from now on.
 
